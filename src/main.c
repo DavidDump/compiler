@@ -33,6 +33,22 @@ String StringFromArray(const char* arr, int size){
     return result;
 }
 
+bool StringEquals(String str1, String str2){
+    if(str1.length != str2.length) return FALSE;
+    for(int i = 0; i < str1.length; i++){
+        if(str1.str[i] != str2.str[i]) return FALSE;
+    }
+    return TRUE;
+}
+
+bool StringEqualsCstr(String str1, const char* cstr){
+    if(str1.length != strlen(cstr)) return FALSE;
+    for(int i = 0; i < str1.length; i++){
+        if(str1.str[i] != cstr[i]) return FALSE;
+    }
+    return TRUE;
+}
+
 String EntireFileRead(const char* filePath){
     FILE* f = fopen(filePath, "rb");
     
@@ -112,7 +128,7 @@ bool isSpecial(char c){
     return (c == ';');
 }
 
-void TokenArrayAddToken(TokenArray* arr, String value, String filename, int line, int collum){
+void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum){
     if(arr->size >= arr->capacity){
         size_t newCap = arr->capacity * 2;
         if(newCap == 0) newCap = 1;
@@ -122,6 +138,7 @@ void TokenArrayAddToken(TokenArray* arr, String value, String filename, int line
 
     Token tok = {};
     tok.value = value;
+    tok.type = type;
     tok.loc.filename = filename;
     tok.loc.line = line;
     tok.loc.collum = collum;
@@ -139,7 +156,12 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             while(*end && !isWhitespace(*end) && !isSpecial(*end)) end++;
             int len = end - start;
 
-            TokenArrayAddToken(&tokens, StringFromArray(start, len), tokenizer->filename, lineNum, collumNum);
+            String value = StringFromArray(start, len);
+            TokenType type = TokenType_NONE;
+            // compare keywords
+            if(StringEqualsCstr(value, "return")) type = TokenType_RETURN;
+
+            TokenArrayAddToken(&tokens, value, type, tokenizer->filename, lineNum, collumNum);
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
@@ -149,17 +171,17 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             while(*end && !isWhitespace(*end) && !isSpecial(*end) && isNumber(*end)) end++;
             int len = end - start;
 
-            TokenArrayAddToken(&tokens, StringFromArray(start, len), tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromArray(start, len), TokenType_INT_LITERAL, tokenizer->filename, lineNum, collumNum);
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
         }else if(c == ';'){
-            TokenArrayAddToken(&tokens, StringFromCstr(";"), tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
         }else if(c == '\n'){
             lineNum++;
             collumNum = 0;
         }else{
-            printf("[ERROR] unhandled char by the tokenizer: \'%c\'\n", c);
+            printf("[ERROR] unhandled char by the tokenizer: \'%c\' at %s:%i:%i\n", c, tokenizer->filename.str, lineNum, collumNum);
         }
     }
     return tokens;
