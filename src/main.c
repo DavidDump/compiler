@@ -3,11 +3,16 @@
 #include <string.h>
 #include <assert.h>
 
+#define ARENA_IMPLEMENTATION
+#include "arena.h"
+
 typedef int bool;
 #define TRUE 1
 #define FALSE 0
 
-typedef struct{
+#define ERROR(loc, msg) printf("[ERROR] %.*s:%i:%i %s\n", (loc).filename.length, (loc).filename.str, (loc).line, (loc).collum, msg)
+
+typedef struct String{
     char* str;
     int length;
     int capacity;
@@ -86,7 +91,8 @@ typedef enum TokenType{
     TokenType_NONE,
     TokenType_RETURN,
     TokenType_INT_LITERAL,
-    TokenType_SEMICOLON, // semicolon
+    TokenType_SEMICOLON,
+    TokenType_OPERATOR,
     TokenType_COUNT,
 } TokenType;
 
@@ -103,7 +109,7 @@ typedef struct TokenArray{
 } TokenArray;
 
 char TokenizerPeek(Tokenizer* tokenizer, int offset){
-    if(tokenizer->index + offset > tokenizer->source.length) return 0;
+    if(tokenizer->index + offset > tokenizer->source.length || tokenizer->index + offset < 0) return 0;
     return tokenizer->source.str[tokenizer->index + offset];
 }
 
@@ -181,10 +187,197 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             lineNum++;
             collumNum = 0;
         }else{
-            printf("[ERROR] unhandled char by the tokenizer: \'%c\' at %s:%i:%i\n", c, tokenizer->filename.str, lineNum, collumNum);
+            printf("[ERROR] unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", c, tokenizer->filename.length, tokenizer->filename.str, lineNum, collumNum);
         }
     }
     return tokens;
+}
+
+typedef struct NodeIntLit{
+    Token* value;
+} NodeIntLit;
+
+// TODO: move into separate file so forward declarations are a bit nicer
+typedef struct NodeExpresion NodeExpresion;
+
+typedef struct NodeBinExpresion{
+    Token* left;
+    NodeExpresion* right;
+    Token* operator;
+} NodeBinExpresion;
+
+typedef enum NodeExpresionType{
+    NodeExpresionType_NONE,
+    NodeExpresionType_INT_LIT,
+    NodeExpresionType_BIN_EXP,
+    NodeExpresionType_COUNT,
+} NodeExpresionType;
+
+typedef struct NodeExpresion{
+    NodeExpresionType type;
+    union{
+        Token* intLit;
+        NodeBinExpresion* binExp;
+    };
+} NodeExpresion;
+
+typedef struct NodeKeywordRet{
+    NodeExpresion* exp;
+} NodeKeywordRet;
+
+typedef enum NodeKeywordType{
+    NodeKeywordType_NONE,
+    NodeKeywordType_RET,
+    NodeKeywordType_COUNT,
+} NodeKeywordType;
+
+typedef struct NodeKeyword{
+    NodeKeywordType type;
+    union{
+        NodeKeywordRet* ret;
+    };
+} NodeKeyword;
+
+typedef enum NodeStatementType{
+    NodeStatementType_NONE,
+    NodeStatementType_KEYWORD,
+    NodeStatementType_EXPRESION,
+    NodeStatementType_COUNT,
+} NodeStatementType;
+
+typedef struct NodeStatement{
+    NodeStatementType type;
+    union{
+        NodeExpresion* exp;
+        NodeKeyword* keyword;
+    };
+} NodeStatement;
+
+typedef struct NodeRoot{
+    NodeStatement* stmts;
+    int count;
+    int capacity;
+} NodeRoot;
+
+typedef struct Parser{
+    TokenArray tokens;
+    int index;
+} Parser;
+
+Token* ParserPeek(Parser* parser, int offset){
+    if(parser->index + offset > parser->tokens.size || parser->index + offset < 0) return NULL;
+    return &parser->tokens.tokens[parser->index + offset];
+}
+
+Token* ParserConsume(Parser* parser){
+    if(parser->index + 1 > parser->tokens.size) return NULL;
+    return &parser->tokens.tokens[parser->index++];
+}
+
+// TODO: move into separate file so forward declarations are a bit nicer
+NodeExpresion* ParseExpresion(Parser* parser, Arena* mem);
+
+NodeBinExpresion* ParseBinExpresion(Parser* parser, Arena* mem){
+    Token* left = ParserPeek(parser, 0);
+    Token* operator = ParserPeek(parser, 1);
+    Token* right = ParserPeek(parser, 2);
+    if(left->type == TokenType_INT_LITERAL && operator->type == TokenType_OPERATOR && right->type == TokenType_INT_LITERAL){
+        ParserConsume(parser); // consume left
+        ParserConsume(parser); // consume operator
+        // ParserConsume(parser); // consume right
+        NodeBinExpresion* node = arena_alloc(mem, sizeof(NodeBinExpresion));
+        node->left = left;
+        node->operator = operator;
+        node->right = ParseExpresion(parser, mem);
+        return node;
+    }else{
+        // printf("[ERROR] %s:%i:%i Expresion malformed.\n", left->loc.filename.str, left->loc.line, left->loc.collum);
+        ERROR(left->loc, "Expresion malformed.");
+        exit(EXIT_FAILURE);
+        return NULL;
+    }
+}
+
+// the index is pointing to the first literal in the expresion
+NodeExpresion* ParseExpresion(Parser* parser, Arena* mem){
+    Token* t = ParserPeek(parser, 1); // look ahead to see if semicolon or operator follows
+    if(t->type == TokenType_SEMICOLON){
+        // semicolon
+        Token* int_lit = ParserConsume(parser); // consume int_lit
+        ParserConsume(parser); // consume semicolon
+        NodeExpresion* node = arena_alloc(mem, sizeof(NodeExpresion));
+        node->type = NodeExpresionType_INT_LIT;
+        node->intLit = int_lit;
+        return node;
+    }else if(t->type == TokenType_OPERATOR){
+        // binary expresion
+        // ParserConsume(parser);
+        NodeExpresion* node = arena_alloc(mem, sizeof(NodeExpresion));
+        node->type = NodeExpresionType_BIN_EXP;
+        node->binExp = ParseBinExpresion(parser, mem);
+        return node;
+    }else{
+        // printf("[ERROR] %s:%i:%i Statement needs to end with a ;.\n", t->loc.filename.str, t->loc.line, t->loc.collum);
+        ERROR(t->loc, "Statement needs to end with a ;.");
+        exit(EXIT_FAILURE);
+        return NULL;
+    }
+}
+
+NodeKeywordRet* ParseKeywordRet(Parser* parser, Arena* mem){
+    Token* t = ParserPeek(parser, 0);
+    if(t->type == TokenType_INT_LITERAL){
+        // dont consume the literal yet, the expresion parsing will consume it
+        NodeKeywordRet* node = arena_alloc(mem, sizeof(NodeKeywordRet));
+        node->exp = ParseExpresion(parser, mem);
+        return node;
+    }else{
+        // printf("[ERROR] %s:%i:%i Return keyword needs a value to return.\n", t->loc.filename.str, t->loc.line, t->loc.collum);
+        ERROR(t->loc, "Return keyword needs a value to return.");
+        exit(EXIT_FAILURE);
+        return NULL;
+    }
+}
+
+void ParserAddStmt(NodeRoot* root, Arena* mem, void* node, NodeStatementType type){
+    if(root->count >= root->capacity){
+        size_t newCap = root->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        // root->stmts = realloc(root->stmts, newCap * sizeof(NodeStatement));
+        root->stmts = arena_realloc(mem, root->stmts, root->capacity * sizeof(NodeStatement), newCap * sizeof(NodeStatement));
+        root->capacity = newCap;
+    }
+
+    switch(type){
+        case NodeStatementType_KEYWORD: {
+            root->stmts[root->count].type = NodeStatementType_KEYWORD;
+            root->stmts[root->count].keyword = (NodeKeyword*)node;
+            root->count++;
+        } break;
+        default: {
+            printf("[ERROR] Unknown statement type: %i\n", type);
+            exit(EXIT_FAILURE);
+        } break;
+    }
+}
+
+NodeRoot Parse(Parser* parser, Arena* mem){
+    NodeRoot root = {};
+    for(Token* t = ParserConsume(parser); t != NULL; t = ParserConsume(parser)){
+        switch(t->type){
+            case TokenType_RETURN: {
+                NodeKeyword* node = arena_alloc(mem, sizeof(NodeKeyword));
+                node->type = NodeKeywordType_RET;
+                node->ret = ParseKeywordRet(parser, mem);;
+ 
+                ParserAddStmt(&root, mem, node, NodeStatementType_KEYWORD);
+            } break;
+            default: {
+                printf("[ERROR] unhandled token type by the parser: \'%i\' at %.*s:%i:%i\n", t->type, t->loc.filename.length, t->loc.filename.str, t->loc.line, t->loc.collum);
+            } break;
+        }
+    }
+    return root;
 }
 
 int main(int argc, char** argv){
@@ -198,8 +391,17 @@ int main(int argc, char** argv){
 
     for(int i = 0; i < tokens.size; i++){
         Token t = tokens.tokens[i];
-        printf("%s:%i:%i \"%s\"\n", t.loc.filename.str, t.loc.line, t.loc.collum, t.value.str);
+        printf("%.*s:%i:%i \"%.*s\"\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, t.value.length, t.value.str);
     }
 
+    Arena astMemory = {};
+    Parser parser = {.tokens = tokens};
+    NodeRoot ast = Parse(&parser, &astMemory);
+
+    for(int i = 0; i < ast.count; i++){
+        printf("return value: %s\n", ast.stmts[i].keyword->ret->exp->intLit->value.str);
+    }
+
+    arena_free(&astMemory);
     exit(EXIT_SUCCESS);
 }
