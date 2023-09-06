@@ -6,6 +6,9 @@
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
+// TODO: remove debug mode
+#define COMP_DEBUG
+
 typedef int bool;
 #define TRUE 1
 #define FALSE 0
@@ -103,7 +106,7 @@ bool EntireFileWrite(const char* filePath, StringChain data){
         StringNode* current = data.first;
         while(current != NULL){
             fprintf(f, "%.*s", current->str.length, current->str.str);
-            current = current->next; // NOTE: sus compiler warning
+            current = current->next;
         }
         fclose(f);
         return TRUE;
@@ -133,6 +136,15 @@ typedef enum TokenType{
     TokenType_OPERATOR,
     TokenType_COUNT,
 } TokenType;
+
+static char* TokenTypeStr[TokenType_COUNT + 1] = {
+    [TokenType_NONE]        = "NONE",
+    [TokenType_RETURN]      = "RETURN",
+    [TokenType_INT_LITERAL] = "INT_LITERAL",
+    [TokenType_SEMICOLON]   = "SEMICOLON",
+    [TokenType_OPERATOR]    = "OPERATOR",
+    [TokenType_COUNT]       = "COUNT",
+};
 
 typedef struct Token{
     TokenType type;
@@ -224,9 +236,18 @@ TokenArray Tokenize(Tokenizer* tokenizer){
         }else if(c == '\n'){
             lineNum++;
             collumNum = 0;
-        }else{
-            printf("[ERROR] unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", c, tokenizer->filename.length, tokenizer->filename.str, lineNum, collumNum);
         }
+        #ifdef COMP_DEBUG
+        else if(c == ' '){
+            // NOTE: space is ignored but this case is needed here for debug print
+            continue;
+        }else if(c == '\r'){
+            // NOTE: carrige return is ignored but this case is needed here for debug print
+            continue;
+        }else{
+            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", c, tokenizer->filename.length, tokenizer->filename.str, lineNum, collumNum);
+        }
+        #endif
     }
     return tokens;
 }
@@ -258,6 +279,13 @@ typedef enum NodeExpresionType{
     NodeExpresionType_COUNT,
 } NodeExpresionType;
 
+static char* NodeExpresionTypeStr[NodeExpresionType_COUNT + 1] = {
+    [NodeExpresionType_NONE]    = "NONE",
+    [NodeExpresionType_INT_LIT] = "INT_LIT",
+    [NodeExpresionType_BIN_EXP] = "BIN_EXP",
+    [NodeExpresionType_COUNT]   = "COUNT",
+};
+
 typedef struct NodeExpresion{
     NodeExpresionType type;
     union{
@@ -276,6 +304,12 @@ typedef enum NodeKeywordType{
     NodeKeywordType_COUNT,
 } NodeKeywordType;
 
+static char* NodeKeywordTypeStr[NodeKeywordType_COUNT + 1] = {
+    [NodeKeywordType_NONE]  = "NONE",
+    [NodeKeywordType_RET]   = "RET",
+    [NodeKeywordType_COUNT] = "COUNT",
+};
+
 typedef struct NodeKeyword{
     NodeKeywordType type;
     union{
@@ -289,6 +323,13 @@ typedef enum NodeStatementType{
     NodeStatementType_EXPRESION,
     NodeStatementType_COUNT,
 } NodeStatementType;
+
+static char* NodeStatementTypeStr[NodeStatementType_COUNT + 1] = {
+    [NodeStatementType_NONE]      = "NONE",
+    [NodeStatementType_KEYWORD]   = "KEYWORD",
+    [NodeStatementType_EXPRESION] = "EXPRESION",
+    [NodeStatementType_COUNT]     = "COUNT",
+};
 
 typedef struct NodeStatement{
     NodeStatementType type;
@@ -401,7 +442,7 @@ void ParserAddStmt(Parser* parser, void* node, NodeStatementType type){
             parser->root.count++;
         } break;
         default: {
-            printf("[ERROR] Unknown statement type: %i\n", type);
+            printf("[ERROR] Unhandled statement case: %s\n", NodeStatementTypeStr[type]);
             exit(EXIT_FAILURE);
         } break;
     }
@@ -418,7 +459,7 @@ NodeRoot Parse(Parser* parser){
                 ParserAddStmt(parser, node, NodeStatementType_KEYWORD);
             } break;
             default: {
-                printf("[ERROR] unhandled token type by the parser: \'%i\' at %.*s:%i:%i\n", t->type, t->loc.filename.length, t->loc.filename.str, t->loc.line, t->loc.collum);
+                printf("[ERROR] Unhandled token type by the parser: %s at %.*s:%i:%i\n", TokenTypeStr[t->type], t->loc.filename.length, t->loc.filename.str, t->loc.line, t->loc.collum);
             } break;
         }
     }
@@ -469,8 +510,6 @@ StringChain Generate(Generator* gen, NodeRoot* root){
                         // generate code for expresions, move to own function later
                         NodeExpresion* expNode = node->ret->exp;
                         switch(expNode->type){
-                            case NodeExpresionType_NONE: break;
-                            case NodeExpresionType_COUNT: break;
                             case NodeExpresionType_INT_LIT: {
                                 StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rax, "));
                                 StringChainAppend(&gen->outputAsm, &gen->mem, expNode->intLit->value);
@@ -481,6 +520,9 @@ StringChain Generate(Generator* gen, NodeRoot* root){
                                 // TODO: implement
                                 assert(FALSE && "Unimplemented");
                             } break;
+                            default: {
+                                printf("[ERROR] Unhandled expresion case: %s\n", NodeExpresionTypeStr[expNode->type]);
+                            } break;
                         }
 
                         // generate code for return keyword
@@ -488,7 +530,7 @@ StringChain Generate(Generator* gen, NodeRoot* root){
                         StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    ret\n"));
                     } break;
                     default: {
-                        printf("[ERROR] Unknown keyword type: %i\n", node->type);
+                        printf("[ERROR] Unhandled keyword case: %s\n", NodeKeywordTypeStr[node->type]);
                     } break;
                 }
             } break;
@@ -498,7 +540,7 @@ StringChain Generate(Generator* gen, NodeRoot* root){
                 assert(FALSE && "Unimplemented");
             } break;
             default: {
-                printf("[ERROR] Unknown statement type: %i\n", root->stmts[i].type);
+                printf("[ERROR] Unhandled statement case: %s\n", NodeStatementTypeStr[root->stmts[i].type]);
             } break;
         }
     }
