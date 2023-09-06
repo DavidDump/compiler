@@ -1,7 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
+#include <stdio.h>  // fopen(), fseek(), ftell(), fread(), fclose(), printf(), 
+#include <stdlib.h> // calloc(), realloc(), free(), system()
+#include <string.h> // strlen(), memcpy()
+#include <assert.h> // assert()
 
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
@@ -13,28 +13,49 @@ typedef int bool;
 #define ERROR(loc, msg) printf("[ERROR] %.*s:%i:%i %s\n", (loc).filename.length, (loc).filename.str, (loc).line, (loc).collum, msg)
 
 typedef struct String{
-    char* str;
+    const char* str;
     int length;
-    int capacity;
 } String;
+
+typedef struct StringNode StringNode;
+
+typedef struct StringNode{
+    String str;
+    StringNode* next;
+    StringNode* prev;
+} StringNode;
+
+typedef struct StringChain{
+    StringNode* first;
+    StringNode* last;
+    int nodeCount; // dont know if need
+} StringChain;
+
+void StringChainAppend(StringChain* chain, Arena* mem, String str){
+    StringNode* node = arena_alloc(mem, sizeof(StringNode));
+    node->str = str;
+    node->prev = chain->last;
+    if(chain->last) chain->last->next = node;
+    chain->last = node;
+    if(!chain->first) chain->first = node;
+    chain->nodeCount++;
+}
 
 // TODO: memory allocation in arena that gets passed in
 String StringFromCstr(const char* cstr){
     String result = {};
     int len = strlen(cstr);
     result.str = calloc(len, sizeof(char));
-    memcpy(result.str, cstr, len);
+    memcpy((char*)result.str, cstr, len);
     result.length = len;
-    result.capacity = len;
     return result;
 }
 
 String StringFromArray(const char* arr, int size){
     String result = {};
     result.str = calloc(size, sizeof(char));
-    memcpy(result.str, arr, size);
+    memcpy((char*)result.str, arr, size);
     result.length = size;
-    result.capacity = size;
     return result;
 }
 
@@ -72,6 +93,23 @@ String EntireFileRead(const char* filePath){
     }else{
         printf("[ERROR] Failed to open file: %s\n", filePath);
         return (String){};
+    }
+}
+
+bool EntireFileWrite(const char* filePath, StringChain data){
+    FILE* f = fopen(filePath, "wb");
+
+    if(f){
+        StringNode* current = data.first;
+        while(current != NULL){
+            fprintf(f, "%.*s", current->str.length, current->str.str);
+            current = current->next; // NOTE: sus compiler warning
+        }
+        fclose(f);
+        return TRUE;
+    }else{
+        printf("[ERROR] Failed to open file: %s\n", filePath);
+        return FALSE;
     }
 }
 
@@ -157,7 +195,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
     int collumNum = 1;
     for(char c = TokenizerConsume(tokenizer); c != 0; c = TokenizerConsume(tokenizer), collumNum++){
         if(isLetter(c)){
-            char* start = &tokenizer->source.str[tokenizer->index - 1];
+            char* start = (char*)&tokenizer->source.str[tokenizer->index - 1];
             char* end = start;
             while(*end && !isWhitespace(*end) && !isSpecial(*end)) end++;
             int len = end - start;
@@ -172,7 +210,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             collumNum += len - 1;
             tokenizer->index += len - 1;
         }else if(isNumber(c)){
-            char* start = &tokenizer->source.str[tokenizer->index - 1];
+            char* start = (char*)&tokenizer->source.str[tokenizer->index - 1];
             char* end = start;
             while(*end && !isWhitespace(*end) && !isSpecial(*end) && isNumber(*end)) end++;
             int len = end - start;
@@ -380,6 +418,86 @@ NodeRoot Parse(Parser* parser, Arena* mem){
     return root;
 }
 
+typedef struct Generator{
+    Arena mem;
+    StringChain outputAsm;
+    int stackPointer;
+} Generator;
+
+void GeneratorPushStack(Generator* gen, const char* target){
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    push "));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(target));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+    // TODO: figure out what the stack size is to check for stack overflows
+    // if(gen->stackPointer - 1 < 0){
+    //     printf("[ERROR] Stack underflow\n");
+    //     exit(EXIT_FAILURE);
+    // }
+    gen->stackPointer++;
+}
+
+void GeneratorPopStack(Generator* gen, const char* target){
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    pop "));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(target));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+    if(gen->stackPointer - 1 < 0){
+        printf("[ERROR] Stack underflow\n");
+        exit(EXIT_FAILURE);
+    }
+    gen->stackPointer--;
+}
+
+StringChain Generate(Generator* gen, NodeRoot* root){
+    // preamble
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("global _start\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("_start:\n"));
+
+    for(int i = 0; i < root->count; i++){
+        switch(root->stmts[i].type){
+            case NodeStatementType_KEYWORD: {
+                NodeKeyword* node = root->stmts[i].keyword;
+                switch(node->type){
+                    case NodeKeywordType_RET: {
+                        // generate code for expresions, move to own function later
+                        NodeExpresion* expNode = node->ret->exp;
+                        switch(expNode->type){
+                            case NodeExpresionType_NONE: break;
+                            case NodeExpresionType_COUNT: break;
+                            case NodeExpresionType_INT_LIT: {
+                                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rax, "));
+                                StringChainAppend(&gen->outputAsm, &gen->mem, expNode->intLit->value);
+                                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+                                GeneratorPushStack(gen, "rax");
+                            } break;
+                            case NodeExpresionType_BIN_EXP: {
+                                // TODO: implement
+                                assert(FALSE && "Unimplemented");
+                            } break;
+                        }
+
+                        // generate code for return keyword
+                        StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    pop rax\n"));
+                        StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    ret\n"));
+                    } break;
+                    default: {
+                        printf("[ERROR] Unknown keyword type: %i\n", node->type);
+                    } break;
+                }
+            } break;
+            case NodeStatementType_EXPRESION: {
+                // NodeExpresion* node = root->stmts[i].exp;
+                // TODO: implement
+                assert(FALSE && "Unimplemented");
+            } break;
+            default: {
+                printf("[ERROR] Unknown statement type: %i\n", root->stmts[i].type);
+            } break;
+        }
+    }
+
+    return gen->outputAsm;
+}
+
 int main(int argc, char** argv){
     if(argc < 2){
         printf("[ERROR] File not found: %s\n", argv[1]);
@@ -389,19 +507,31 @@ int main(int argc, char** argv){
     Tokenizer tokenizer = {.source = sourceRaw, .filename = StringFromCstr(argv[1])};
     TokenArray tokens = Tokenize(&tokenizer);
 
+    #if 0 // print token list
     for(int i = 0; i < tokens.size; i++){
         Token t = tokens.tokens[i];
         printf("%.*s:%i:%i \"%.*s\"\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, t.value.length, t.value.str);
     }
+    #endif
 
-    Arena astMemory = {};
+    Arena astMem = {};
     Parser parser = {.tokens = tokens};
-    NodeRoot ast = Parse(&parser, &astMemory);
+    NodeRoot ast = Parse(&parser, &astMem);
 
-    for(int i = 0; i < ast.count; i++){
-        printf("return value: %s\n", ast.stmts[i].keyword->ret->exp->intLit->value.str);
+    Generator gen = {}; // uses memory arena
+    StringChain outputString = Generate(&gen, &ast);
+
+    bool success = EntireFileWrite("output.asm", outputString);
+    if(!success){
+        printf("[ERROR] Failed to write to file.\n");
+        exit(EXIT_FAILURE);
     }
 
-    arena_free(&astMemory);
+    // TODO: do proper CreateProcess() calls here, but this will do for now
+    system("nasm -fwin64 output.asm");
+    system("ld output.obj");
+
+    arena_free(&astMem);
+    arena_free(&gen.mem);
     exit(EXIT_SUCCESS);
 }
