@@ -6,6 +6,9 @@
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
+
 // TODO: remove debug mode
 #define COMP_DEBUG
 
@@ -13,6 +16,7 @@ typedef int bool;
 #define TRUE 1
 #define FALSE 0
 
+#define UNUSED(x) (void)(x)
 #define ERROR(loc, msg) printf("[ERROR] %.*s:%i:%i %s\n", (loc).filename.length, (loc).filename.str, (loc).line, (loc).collum, msg)
 
 typedef struct String{
@@ -134,6 +138,9 @@ typedef enum TokenType{
     TokenType_INT_LITERAL,
     TokenType_SEMICOLON,
     TokenType_OPERATOR,
+    TokenType_VAR,
+    TokenType_IDENTIFIER,
+    TokenType_EQUALS,
     TokenType_COUNT,
 } TokenType;
 
@@ -143,6 +150,9 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_INT_LITERAL] = "INT_LITERAL",
     [TokenType_SEMICOLON]   = "SEMICOLON",
     [TokenType_OPERATOR]    = "OPERATOR",
+    [TokenType_VAR]         = "VAR",
+    [TokenType_IDENTIFIER]  = "IDENTIFIER",
+    [TokenType_EQUALS]      = "EQUALS",
     [TokenType_COUNT]       = "COUNT",
 };
 
@@ -184,6 +194,10 @@ bool isSpecial(char c){
     return (c == ';');
 }
 
+bool isOperator(char c){
+    return (c == '+' || c == '-' || c == '*' || c == '/');
+}
+
 void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum){
     if(arr->size >= arr->capacity){
         size_t newCap = arr->capacity * 2;
@@ -216,6 +230,8 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             TokenType type = TokenType_NONE;
             // compare keywords
             if(StringEqualsCstr(value, "return")) type = TokenType_RETURN;
+            else if(StringEqualsCstr(value, "var")) type = TokenType_VAR;
+            else type = TokenType_IDENTIFIER;
 
             TokenArrayAddToken(&tokens, value, type, tokenizer->filename, lineNum, collumNum);
 
@@ -231,8 +247,13 @@ TokenArray Tokenize(Tokenizer* tokenizer){
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
+        }else if(isOperator(c)){
+            char* curr = (char*)&tokenizer->source.str[tokenizer->index - 1];
+            TokenArrayAddToken(&tokens, StringFromArray(curr, 1), TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
         }else if(c == ';'){
             TokenArrayAddToken(&tokens, StringFromCstr(";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
+        }else if(c == '='){
+            TokenArrayAddToken(&tokens, StringFromCstr("="), TokenType_EQUALS, tokenizer->filename, lineNum, collumNum);
         }else if(c == '\n'){
             lineNum++;
             collumNum = 0;
@@ -259,17 +280,13 @@ void TokensPrint(TokenArray* tokens){
     }
 }
 
-typedef struct NodeIntLit{
-    Token* value;
-} NodeIntLit;
-
 // TODO: move into separate file so forward declarations are a bit nicer
 typedef struct NodeExpresion NodeExpresion;
 
 typedef struct NodeBinExpresion{
     Token* left;
-    NodeExpresion* right;
     Token* operator;
+    NodeExpresion* right;
 } NodeBinExpresion;
 
 typedef enum NodeExpresionType{
@@ -298,15 +315,44 @@ typedef struct NodeKeywordRet{
     NodeExpresion* exp;
 } NodeKeywordRet;
 
+typedef struct NodeKeywordVarDefAssignment{
+    Token* identifier;
+    NodeExpresion* exp;
+} NodeKeywordVarDefAssignment;
+
+typedef enum NodeKeywordVarType{
+    NodeKeywordVarType_NONE,
+    NodeKeywordVarType_DEF_ONLY,
+    NodeKeywordVarType_DEF_ASSIGNMENT,
+    NodeKeywordVarType_COUNT,
+} NodeKeywordVarType;
+
+static char* NodeKeywordVarTypeStr[NodeKeywordVarType_COUNT + 1] = {
+    [NodeKeywordVarType_NONE]           = "NONE",
+    [NodeKeywordVarType_DEF_ONLY]       = "DEF_ONLY",
+    [NodeKeywordVarType_DEF_ASSIGNMENT] = "DEF_ASSIGNMENT",
+    [NodeKeywordVarType_COUNT]          = "COUNT",
+};
+
+typedef struct NodeKeywordVar{
+    NodeKeywordVarType type;
+    union{
+        Token* defIdentifier;
+        NodeKeywordVarDefAssignment* assignment;
+    };
+} NodeKeywordVar;
+
 typedef enum NodeKeywordType{
     NodeKeywordType_NONE,
     NodeKeywordType_RET,
+    NodeKeywordType_VAR,
     NodeKeywordType_COUNT,
 } NodeKeywordType;
 
 static char* NodeKeywordTypeStr[NodeKeywordType_COUNT + 1] = {
     [NodeKeywordType_NONE]  = "NONE",
     [NodeKeywordType_RET]   = "RET",
+    [NodeKeywordType_VAR]   = "VAR",
     [NodeKeywordType_COUNT] = "COUNT",
 };
 
@@ -314,6 +360,7 @@ typedef struct NodeKeyword{
     NodeKeywordType type;
     union{
         NodeKeywordRet* ret;
+        NodeKeywordVar* var;
     };
 } NodeKeyword;
 
@@ -325,10 +372,10 @@ typedef enum NodeStatementType{
 } NodeStatementType;
 
 static char* NodeStatementTypeStr[NodeStatementType_COUNT + 1] = {
-    [NodeStatementType_NONE]      = "NONE",
-    [NodeStatementType_KEYWORD]   = "KEYWORD",
-    [NodeStatementType_EXPRESION] = "EXPRESION",
-    [NodeStatementType_COUNT]     = "COUNT",
+    [NodeStatementType_NONE]        = "NONE",
+    [NodeStatementType_KEYWORD]     = "KEYWORD",
+    [NodeStatementType_EXPRESION]   = "EXPRESION",
+    [NodeStatementType_COUNT]       = "COUNT",
 };
 
 typedef struct NodeStatement{
@@ -379,7 +426,6 @@ NodeBinExpresion* ParseBinExpresion(Parser* parser){
         node->right = ParseExpresion(parser);
         return node;
     }else{
-        // printf("[ERROR] %s:%i:%i Expresion malformed.\n", left->loc.filename.str, left->loc.line, left->loc.collum);
         ERROR(left->loc, "Expresion malformed.");
         exit(EXIT_FAILURE);
         return NULL;
@@ -405,8 +451,10 @@ NodeExpresion* ParseExpresion(Parser* parser){
         node->binExp = ParseBinExpresion(parser);
         return node;
     }else{
-        // printf("[ERROR] %s:%i:%i Statement needs to end with a ;.\n", t->loc.filename.str, t->loc.line, t->loc.collum);
-        ERROR(t->loc, "Statement needs to end with a ;.");
+        Token* current = ParserPeek(parser, 0);
+        Location loc = current->loc;
+        loc.collum += current->value.length; // ; pos should be at the end of the current token, not begining
+        ERROR(loc, "Statement needs to end with a ;.");
         exit(EXIT_FAILURE);
         return NULL;
     }
@@ -420,8 +468,42 @@ NodeKeywordRet* ParseKeywordRet(Parser* parser){
         node->exp = ParseExpresion(parser);
         return node;
     }else{
-        // printf("[ERROR] %s:%i:%i Return keyword needs a value to return.\n", t->loc.filename.str, t->loc.line, t->loc.collum);
-        ERROR(t->loc, "Return keyword needs a value to return.");
+        Token* prev = ParserPeek(parser, -1);
+        ERROR(prev->loc, "Return keyword needs a value to return.");
+        exit(EXIT_FAILURE);
+        return NULL;
+    }
+}
+
+NodeKeywordVar* ParseKeywordVar(Parser* parser){
+    Token* t = ParserPeek(parser, 0);
+    if(t->type == TokenType_IDENTIFIER){
+        NodeKeywordVar* node = arena_alloc(&parser->mem, sizeof(NodeKeywordVar));
+        Token* next = ParserPeek(parser, 1);
+        if(next->type == TokenType_SEMICOLON){
+            // def only
+            node->type = NodeKeywordVarType_DEF_ONLY;
+            node->defIdentifier = t;
+            return node;
+        }else if(next->type == TokenType_EQUALS){
+            // def and assign
+            NodeKeywordVarDefAssignment* assignment = arena_alloc(&parser->mem, sizeof(NodeKeywordVarDefAssignment));
+            assignment->identifier = t;
+            ParserConsume(parser); // consume the identifier
+            ParserConsume(parser); // consume the equals
+            assignment->exp = ParseExpresion(parser);
+
+            node->type = NodeKeywordVarType_DEF_ASSIGNMENT;
+            node->assignment = assignment;
+            return node;
+        }else{
+            ERROR(next->loc, "Identifier should be followed by a ; or expresion assignment.");
+            exit(EXIT_FAILURE);
+            return NULL;
+        }
+    }else{
+        Token* prev = ParserPeek(parser, -1);
+        ERROR(prev->loc, "Variable definition needs an identifier.");
         exit(EXIT_FAILURE);
         return NULL;
     }
@@ -441,8 +523,13 @@ void ParserAddStmt(Parser* parser, void* node, NodeStatementType type){
             parser->root.stmts[parser->root.count].keyword = (NodeKeyword*)node;
             parser->root.count++;
         } break;
+        case NodeStatementType_EXPRESION: {
+            parser->root.stmts[parser->root.count].type = NodeStatementType_EXPRESION;
+            parser->root.stmts[parser->root.count].exp = (NodeExpresion*)node;
+            parser->root.count++;
+        } break;
         default: {
-            printf("[ERROR] Unhandled statement case: %s\n", NodeStatementTypeStr[type]);
+            printf("[ERROR] Parser cant add statement of type %s\n", NodeStatementTypeStr[type]);
             exit(EXIT_FAILURE);
         } break;
     }
@@ -457,6 +544,19 @@ NodeRoot Parse(Parser* parser){
                 node->ret = ParseKeywordRet(parser);
  
                 ParserAddStmt(parser, node, NodeStatementType_KEYWORD);
+            } break;
+            case TokenType_VAR: {
+                NodeKeyword* node = arena_alloc(&parser->mem, sizeof(NodeKeyword));
+                node->type = NodeKeywordType_VAR;
+                node->var = ParseKeywordVar(parser);
+
+                ParserAddStmt(parser, node, NodeStatementType_KEYWORD);
+            } break;
+            case TokenType_INT_LITERAL: {
+                parser->index--; // rewind the parser to point to the first literal in the expresion
+                NodeExpresion* node = ParseExpresion(parser);
+
+                ParserAddStmt(parser, node, NodeStatementType_EXPRESION);
             } break;
             default: {
                 printf("[ERROR] Unhandled token type by the parser: %s at %.*s:%i:%i\n", TokenTypeStr[t->type], t->loc.filename.length, t->loc.filename.str, t->loc.line, t->loc.collum);
@@ -496,6 +596,83 @@ void GeneratorPopStack(Generator* gen, const char* target){
     gen->stackPointer--;
 }
 
+// pushes int literal to rax
+void GenerateExpresion(Generator* gen, NodeExpresion* node){
+    switch(node->type){
+        case NodeExpresionType_INT_LIT: {
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rax, "));
+            StringChainAppend(&gen->outputAsm, &gen->mem, node->intLit->value);
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+            GeneratorPushStack(gen, "rax"); // TODO: do you need to push here?
+        } break;
+        case NodeExpresionType_BIN_EXP: {
+            // generate subexpresion
+            // if literal will end up in rax
+            // if binary expresion result will end up in rax
+            GenerateExpresion(gen, node->binExp->right);
+
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rbx, "));
+            StringChainAppend(&gen->outputAsm, &gen->mem, node->binExp->left->value);
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+            // TODO: add other operators
+            if(StringEqualsCstr(node->binExp->operator->value, "+")){
+                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    add rax, rbx\n"));
+            }else{
+                printf("[ERROR] Operator \'%.*s\' not implemented\n", node->binExp->operator->value.length, node->binExp->operator->value.str);
+                exit(EXIT_FAILURE);
+            }
+
+            GeneratorPushStack(gen, "rax");
+        } break;
+        default: {
+            printf("[ERROR] Unhandled expresion case: %s\n", NodeExpresionTypeStr[node->type]);
+        } break;
+    }
+}
+
+void GenerateReturn(Generator* gen, NodeKeywordRet* node){
+    // NOTE: the comment only handles int literals for now
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("; return "));
+    StringChainAppend(&gen->outputAsm, &gen->mem, node->exp->intLit->value);
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+    
+    GenerateExpresion(gen, node->exp);
+    GeneratorPopStack(gen, "rax");
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    ret\n"));
+}
+
+void GenerateVar(Generator* gen, NodeKeywordVar* node){
+    switch(node->type){
+        case NodeKeywordVarType_DEF_ONLY: {
+            // node->defIdentifier;
+            
+            // increase stack pointer
+            // register identifier in symbol table
+            assert(FALSE && "Unimplemented");
+        } break;
+        case NodeKeywordVarType_DEF_ASSIGNMENT: {
+            assert(FALSE && "Unimplemented");
+        } break;
+        default: {
+            printf("[ERROR] Unhandled var case: %s\n", NodeKeywordVarTypeStr[node->type]);
+        } break;
+    }
+}
+
+void GenerateKeyword(Generator* gen, NodeKeyword* node){
+    switch(node->type){
+        case NodeKeywordType_RET: {
+            GenerateReturn(gen, node->ret);
+        } break;
+        case NodeKeywordType_VAR: {
+            GenerateVar(gen, node->var);
+        } break;
+        default: {
+            printf("[ERROR] Unhandled keyword case: %s\n", NodeKeywordTypeStr[node->type]);
+        } break;
+    }
+}
+
 StringChain Generate(Generator* gen, NodeRoot* root){
     // preamble
     StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("global _start\n"));
@@ -504,40 +681,10 @@ StringChain Generate(Generator* gen, NodeRoot* root){
     for(int i = 0; i < root->count; i++){
         switch(root->stmts[i].type){
             case NodeStatementType_KEYWORD: {
-                NodeKeyword* node = root->stmts[i].keyword;
-                switch(node->type){
-                    case NodeKeywordType_RET: {
-                        // generate code for expresions, move to own function later
-                        NodeExpresion* expNode = node->ret->exp;
-                        switch(expNode->type){
-                            case NodeExpresionType_INT_LIT: {
-                                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rax, "));
-                                StringChainAppend(&gen->outputAsm, &gen->mem, expNode->intLit->value);
-                                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
-                                GeneratorPushStack(gen, "rax");
-                            } break;
-                            case NodeExpresionType_BIN_EXP: {
-                                // TODO: implement
-                                assert(FALSE && "Unimplemented");
-                            } break;
-                            default: {
-                                printf("[ERROR] Unhandled expresion case: %s\n", NodeExpresionTypeStr[expNode->type]);
-                            } break;
-                        }
-
-                        // generate code for return keyword
-                        GeneratorPopStack(gen, "rax");
-                        StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    ret\n"));
-                    } break;
-                    default: {
-                        printf("[ERROR] Unhandled keyword case: %s\n", NodeKeywordTypeStr[node->type]);
-                    } break;
-                }
+                GenerateKeyword(gen, root->stmts[i].keyword);
             } break;
             case NodeStatementType_EXPRESION: {
-                // NodeExpresion* node = root->stmts[i].exp;
-                // TODO: implement
-                assert(FALSE && "Unimplemented");
+                GenerateExpresion(gen, root->stmts[i].exp);
             } break;
             default: {
                 printf("[ERROR] Unhandled statement case: %s\n", NodeStatementTypeStr[root->stmts[i].type]);
@@ -573,7 +720,11 @@ int main(int argc, char** argv){
 
     // TODO: do proper CreateProcess() calls here, but this will do for now
     system("nasm -fwin64 output.asm");
-    system("ld output.obj");
+    system("ld -o output.exe output.obj");
+
+    // NOTE: for using kernel functions build like this
+    // system("nasm -fwin32 output.asm");
+    // system("C:\\MinGW\\bin\\gcc.exe -m32 -o output.exe output.obj -lkernel32");
 
     arena_free(&parser.mem);
     arena_free(&gen.mem);
