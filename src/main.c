@@ -127,7 +127,7 @@ typedef struct Tokenizer{
     String source;
     String filename;
     int index;
-    Arena* mem;
+    Arena mem;
 } Tokenizer;
 
 typedef struct Location{
@@ -304,7 +304,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             if(c == '-'){
                 char next = TokenizerPeek(tokenizer, 0);
                 if(next == '>'){
-                    TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "->"), TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
+                    TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "->"), TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
                     
                     TokenizerConsume(tokenizer);
                     collumNum++;
@@ -316,52 +316,52 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             TokenArrayAddToken(&tokens, StringFromArray(curr, 1), TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
         }else if(c == ';'){
             // semicolon
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
         }else if(c == '='){
             // equals
             char next = TokenizerPeek(tokenizer, 0);
             if(next == '='){
-                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "=="), TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "=="), TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
             }else{
-                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "="), TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "="), TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
             }
         }else if(c == ':'){
             // : or :: operator
             char next = TokenizerPeek(tokenizer, 0);
             if(next == ':'){
                 // :: operator
-                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "::"), TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "::"), TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
             }else{
                 // : operator
-                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ":"), TokenType_COLON, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ":"), TokenType_COLON, tokenizer->filename, lineNum, collumNum);
             }
         }else if(c == '('){
             // left paren
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "("), TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "("), TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
         }else if(c == ')'){
             // right paren
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ")"), TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ")"), TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
         }else if(c == '{'){
             // open scope
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "{"), TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "{"), TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
         }else if(c == '}'){
             // close scope
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "}"), TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "}"), TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
         }else if(c == '['){
             // left bracket
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "["), TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "["), TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
         }else if(c == ']'){
             // right bracket
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "]"), TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "]"), TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
         }else if(c == ','){
             // comma
-            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ","), TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ","), TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
         }else if(c == '\n'){
             lineNum++;
             collumNum = 0;
@@ -849,9 +849,9 @@ int main(int argc, char** argv){
     }
     Arena globalMem = {};
     String sourceRaw = EntireFileRead(&globalMem, argv[1]);
+    
     Tokenizer tokenizer = {.source = sourceRaw, .filename = StringFromCstr(&globalMem, argv[1])}; // uses arena
     TokenArray tokens = Tokenize(&tokenizer);
-
     TokensPrint(&tokens);
 
     #if 0
@@ -876,7 +876,10 @@ int main(int argc, char** argv){
     // system("nasm -fwin32 output.asm");
     // system("C:\\MinGW\\bin\\gcc.exe -m32 -o output.exe output.obj -lkernel32");
 
+    arena_free(&tokenizer.mem);
     // arena_free(&parser.mem);
     // arena_free(&gen.mem);
+    
+    arena_free(&globalMem);
     exit(EXIT_SUCCESS);
 }
