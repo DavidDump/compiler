@@ -1,0 +1,28 @@
+// Example 01
+// Demonstrate the basic language syntax
+
+// main function has the same signature as main in C
+main :: (argc: u64, argv:: string[]) -> u8 {
+    // variable initialization uses the ":=" operator, the type is inferred
+    foo := 1;
+    // variable declaration uses the ":" operator, type cannot be inferred so it is needed
+    bar : s64;
+    // assingment to a declared variable uses the "=" operator
+    bar = 2;
+    // constant value declaration uses the "::" operator
+    baz :: 3;
+
+    // boolean comparason uses the "==" operator
+    if foo == 1 {
+        bar = add(2, bar);
+    }else{
+        bar = add(3, 3);
+    }
+
+    return 0;
+}
+
+// multiple pass compilation, symbols can be defined after use
+add :: (a: s64, b: s64) -> s64 {
+    return a + b;
+}
