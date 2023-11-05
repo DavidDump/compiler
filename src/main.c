@@ -134,25 +134,51 @@ typedef struct Location{
 
 typedef enum TokenType{
     TokenType_NONE,
+    
     TokenType_RETURN,
-    TokenType_INT_LITERAL,
+    TokenType_TYPE,
     TokenType_SEMICOLON,
+    TokenType_COLON,
+    TokenType_DOUBLECOLON,
+    TokenType_RARROW,
+    TokenType_LPAREN,
+    TokenType_RPAREN,
+    TokenType_LSCOPE,
+    TokenType_RSCOPE,
+    TokenType_LBRACKET,
+    TokenType_RBRACKET,
+    TokenType_COMMA,
     TokenType_OPERATOR,
-    TokenType_VAR,
+    TokenType_ASSIGNMENT,
+    TokenType_COMPARISON,
     TokenType_IDENTIFIER,
-    TokenType_EQUALS,
+    TokenType_INT_LITERAL,
+    
     TokenType_COUNT,
 } TokenType;
 
 static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_NONE]        = "NONE",
+    
     [TokenType_RETURN]      = "RETURN",
-    [TokenType_INT_LITERAL] = "INT_LITERAL",
+    [TokenType_TYPE]        = "TYPE",
     [TokenType_SEMICOLON]   = "SEMICOLON",
+    [TokenType_COLON]       = "COLON",
+    [TokenType_DOUBLECOLON] = "DOUBLECOLON",
+    [TokenType_RARROW]      = "RARROW",
+    [TokenType_LPAREN]      = "LPAREN",
+    [TokenType_RPAREN]      = "RPAREN",
+    [TokenType_LSCOPE]      = "LSCOPE",
+    [TokenType_RSCOPE]      = "RSCOPE",
+    [TokenType_LBRACKET]    = "LBRACKET",
+    [TokenType_RBRACKET]    = "RBRACKET",
+    [TokenType_COMMA]       = "COMMA",
     [TokenType_OPERATOR]    = "OPERATOR",
-    [TokenType_VAR]         = "VAR",
+    [TokenType_ASSIGNMENT]  = "ASSIGNMENT",
+    [TokenType_COMPARISON]  = "COMPARISON",
     [TokenType_IDENTIFIER]  = "IDENTIFIER",
-    [TokenType_EQUALS]      = "EQUALS",
+    [TokenType_INT_LITERAL] = "INT_LITERAL",
+    
     [TokenType_COUNT]       = "COUNT",
 };
 
@@ -190,9 +216,11 @@ bool isWhitespace(char c){
     return (c == ' ' || c == '\n' || c == '\t' || c == '\v' || c == '\r');
 }
 
+#if 0
 bool isSpecial(char c){
     return (c == ';');
 }
+#endif
 
 bool isOperator(char c){
     return (c == '+' || c == '-' || c == '*' || c == '/');
@@ -220,17 +248,34 @@ TokenArray Tokenize(Tokenizer* tokenizer){
     int lineNum = 1;
     int collumNum = 1;
     for(char c = TokenizerConsume(tokenizer); c != 0; c = TokenizerConsume(tokenizer), collumNum++){
+        // special case: line comment
+        if(c == '/'){
+            char next = TokenizerPeek(tokenizer, 0);
+            if(next == '/'){
+                while((c = TokenizerConsume(tokenizer)) != '\n');
+            }
+        }
+
         if(isLetter(c)){
+            // keywords and identifiers
             char* start = (char*)&tokenizer->source.str[tokenizer->index - 1];
             char* end = start;
-            while(*end && !isWhitespace(*end) && !isSpecial(*end)) end++;
+            while(*end && !isWhitespace(*end) && (isLetter(*end) || isNumber(*end))) end++;
             int len = end - start;
 
             String value = StringFromArray(start, len);
             TokenType type = TokenType_NONE;
-            // compare keywords
-            if(StringEqualsCstr(value, "return")) type = TokenType_RETURN;
-            else if(StringEqualsCstr(value, "var")) type = TokenType_VAR;
+            // compare keywords and types
+            if(StringEqualsCstr(value, "return"))   type = TokenType_RETURN;
+            else if(StringEqualsCstr(value, "u8"))  type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "u16")) type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "u32")) type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "u64")) type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "s8"))  type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "s16")) type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "s32")) type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "s64")) type = TokenType_TYPE;
+            else if(StringEqualsCstr(value, "string")) type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
 
             TokenArrayAddToken(&tokens, value, type, tokenizer->filename, lineNum, collumNum);
@@ -238,9 +283,10 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             collumNum += len - 1;
             tokenizer->index += len - 1;
         }else if(isNumber(c)){
+            // numbers
             char* start = (char*)&tokenizer->source.str[tokenizer->index - 1];
             char* end = start;
-            while(*end && !isWhitespace(*end) && !isSpecial(*end) && isNumber(*end)) end++;
+            while(*end && !isWhitespace(*end) && isNumber(*end)) end++;
             int len = end - start;
 
             TokenArrayAddToken(&tokens, StringFromArray(start, len), TokenType_INT_LITERAL, tokenizer->filename, lineNum, collumNum);
@@ -248,16 +294,75 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             collumNum += len - 1;
             tokenizer->index += len - 1;
         }else if(isOperator(c)){
+            // operators
+
+            // special case -> operator
+            if(c == '-'){
+                char next = TokenizerPeek(tokenizer, 0);
+                if(next == '>'){
+                    TokenArrayAddToken(&tokens, StringFromCstr("->"), TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
+                    
+                    TokenizerConsume(tokenizer);
+                    collumNum++;
+                    continue;
+                }
+            }
+
             char* curr = (char*)&tokenizer->source.str[tokenizer->index - 1];
             TokenArrayAddToken(&tokens, StringFromArray(curr, 1), TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
         }else if(c == ';'){
+            // semicolon
             TokenArrayAddToken(&tokens, StringFromCstr(";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
         }else if(c == '='){
-            TokenArrayAddToken(&tokens, StringFromCstr("="), TokenType_EQUALS, tokenizer->filename, lineNum, collumNum);
+            // equals
+            char next = TokenizerPeek(tokenizer, 0);
+            if(next == '='){
+                TokenArrayAddToken(&tokens, StringFromCstr("=="), TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
+                
+                TokenizerConsume(tokenizer);
+                collumNum++;
+            }else{
+                TokenArrayAddToken(&tokens, StringFromCstr("="), TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
+            }
+        }else if(c == ':'){
+            // : or :: operator
+            char next = TokenizerPeek(tokenizer, 0);
+            if(next == ':'){
+                // :: operator
+                TokenArrayAddToken(&tokens, StringFromCstr("::"), TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
+                
+                TokenizerConsume(tokenizer);
+                collumNum++;
+            }else{
+                // : operator
+                TokenArrayAddToken(&tokens, StringFromCstr(":"), TokenType_COLON, tokenizer->filename, lineNum, collumNum);
+            }
+        }else if(c == '('){
+            // left paren
+            TokenArrayAddToken(&tokens, StringFromCstr("("), TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
+        }else if(c == ')'){
+            // right paren
+            TokenArrayAddToken(&tokens, StringFromCstr(")"), TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
+        }else if(c == '{'){
+            // open scope
+            TokenArrayAddToken(&tokens, StringFromCstr("{"), TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
+        }else if(c == '}'){
+            // close scope
+            TokenArrayAddToken(&tokens, StringFromCstr("}"), TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
+        }else if(c == '['){
+            // left bracket
+            TokenArrayAddToken(&tokens, StringFromCstr("["), TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
+        }else if(c == ']'){
+            // right bracket
+            TokenArrayAddToken(&tokens, StringFromCstr("]"), TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
+        }else if(c == ','){
+            // comma
+            TokenArrayAddToken(&tokens, StringFromCstr(","), TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
         }else if(c == '\n'){
             lineNum++;
             collumNum = 0;
         }
+        
         #ifdef COMP_DEBUG
         else if(c == ' '){
             // NOTE: space is ignored but this case is needed here for debug print
@@ -268,7 +373,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
         }else{
             printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", c, tokenizer->filename.length, tokenizer->filename.str, lineNum, collumNum);
         }
-        #endif
+        #endif // COMP_DEBUG
     }
     return tokens;
 }
@@ -276,7 +381,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
 void TokensPrint(TokenArray* tokens){
     for(int i = 0; i < tokens->size; i++){
         Token t = tokens->tokens[i];
-        printf("%.*s:%i:%i \"%.*s\"\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, t.value.length, t.value.str);
+        printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
     }
 }
 
@@ -485,7 +590,7 @@ NodeKeywordVar* ParseKeywordVar(Parser* parser){
             node->type = NodeKeywordVarType_DEF_ONLY;
             node->defIdentifier = t;
             return node;
-        }else if(next->type == TokenType_EQUALS){
+        }else if(next->type == TokenType_ASSIGNMENT){
             // def and assign
             NodeKeywordVarDefAssignment* assignment = arena_alloc(&parser->mem, sizeof(NodeKeywordVarDefAssignment));
             assignment->identifier = t;
@@ -545,13 +650,13 @@ NodeRoot Parse(Parser* parser){
  
                 ParserAddStmt(parser, node, NodeStatementType_KEYWORD);
             } break;
-            case TokenType_VAR: {
-                NodeKeyword* node = arena_alloc(&parser->mem, sizeof(NodeKeyword));
-                node->type = NodeKeywordType_VAR;
-                node->var = ParseKeywordVar(parser);
+            // case TokenType_VAR: {
+            //     NodeKeyword* node = arena_alloc(&parser->mem, sizeof(NodeKeyword));
+            //     node->type = NodeKeywordType_VAR;
+            //     node->var = ParseKeywordVar(parser);
 
-                ParserAddStmt(parser, node, NodeStatementType_KEYWORD);
-            } break;
+            //     ParserAddStmt(parser, node, NodeStatementType_KEYWORD);
+            // } break;
             case TokenType_INT_LITERAL: {
                 parser->index--; // rewind the parser to point to the first literal in the expresion
                 NodeExpresion* node = ParseExpresion(parser);
@@ -704,8 +809,9 @@ int main(int argc, char** argv){
     Tokenizer tokenizer = {.source = sourceRaw, .filename = StringFromCstr(argv[1])};
     TokenArray tokens = Tokenize(&tokenizer);
 
-    // TokensPrint(&tokens);
+    TokensPrint(&tokens);
 
+    #if 0
     Parser parser = {.tokens = tokens}; // uses memory arena
     NodeRoot ast = Parse(&parser);
 
@@ -717,16 +823,17 @@ int main(int argc, char** argv){
         printf("[ERROR] Failed to write to file.\n");
         exit(EXIT_FAILURE);
     }
+    #endif
 
     // TODO: do proper CreateProcess() calls here, but this will do for now
-    system("nasm -fwin64 output.asm");
-    system("ld -o output.exe output.obj");
+    // system("nasm -fwin64 output.asm");
+    // system("ld -o output.exe output.obj");
 
     // NOTE: for using kernel functions build like this
     // system("nasm -fwin32 output.asm");
     // system("C:\\MinGW\\bin\\gcc.exe -m32 -o output.exe output.obj -lkernel32");
 
-    arena_free(&parser.mem);
-    arena_free(&gen.mem);
+    // arena_free(&parser.mem);
+    // arena_free(&gen.mem);
     exit(EXIT_SUCCESS);
 }
