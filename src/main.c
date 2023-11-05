@@ -48,11 +48,10 @@ void StringChainAppend(StringChain* chain, Arena* mem, String str){
     chain->nodeCount++;
 }
 
-// TODO: memory allocation in arena that gets passed in
-String StringFromCstr(const char* cstr){
+String StringFromCstr(Arena* mem, const char* cstr){
     String result = {};
     int len = strlen(cstr);
-    result.str = calloc(len, sizeof(char));
+    result.str = arena_alloc(mem, len * sizeof(char));
     memcpy((char*)result.str, cstr, len);
     result.length = len;
     return result;
@@ -82,7 +81,7 @@ bool StringEqualsCstr(String str1, const char* cstr){
     return TRUE;
 }
 
-String EntireFileRead(const char* filePath){
+String EntireFileRead(Arena* mem, const char* filePath){
     FILE* f = fopen(filePath, "rb");
     
     if(f){
@@ -94,7 +93,7 @@ String EntireFileRead(const char* filePath){
         fread(tmpFileBuffer, sizeof(char), fileSize, f);
         fclose(f);
 
-        String str = StringFromCstr(tmpFileBuffer);
+        String str = StringFromCstr(mem, tmpFileBuffer);
         free(tmpFileBuffer);
         return str;
     }else{
@@ -120,10 +119,15 @@ bool EntireFileWrite(const char* filePath, StringChain data){
     }
 }
 
+// 
+// Tokenizer
+// 
+
 typedef struct Tokenizer{
     String source;
     String filename;
     int index;
+    Arena* mem;
 } Tokenizer;
 
 typedef struct Location{
@@ -300,7 +304,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             if(c == '-'){
                 char next = TokenizerPeek(tokenizer, 0);
                 if(next == '>'){
-                    TokenArrayAddToken(&tokens, StringFromCstr("->"), TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
+                    TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "->"), TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
                     
                     TokenizerConsume(tokenizer);
                     collumNum++;
@@ -312,52 +316,52 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             TokenArrayAddToken(&tokens, StringFromArray(curr, 1), TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
         }else if(c == ';'){
             // semicolon
-            TokenArrayAddToken(&tokens, StringFromCstr(";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
         }else if(c == '='){
             // equals
             char next = TokenizerPeek(tokenizer, 0);
             if(next == '='){
-                TokenArrayAddToken(&tokens, StringFromCstr("=="), TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "=="), TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
             }else{
-                TokenArrayAddToken(&tokens, StringFromCstr("="), TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "="), TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
             }
         }else if(c == ':'){
             // : or :: operator
             char next = TokenizerPeek(tokenizer, 0);
             if(next == ':'){
                 // :: operator
-                TokenArrayAddToken(&tokens, StringFromCstr("::"), TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "::"), TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
             }else{
                 // : operator
-                TokenArrayAddToken(&tokens, StringFromCstr(":"), TokenType_COLON, tokenizer->filename, lineNum, collumNum);
+                TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ":"), TokenType_COLON, tokenizer->filename, lineNum, collumNum);
             }
         }else if(c == '('){
             // left paren
-            TokenArrayAddToken(&tokens, StringFromCstr("("), TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "("), TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
         }else if(c == ')'){
             // right paren
-            TokenArrayAddToken(&tokens, StringFromCstr(")"), TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ")"), TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
         }else if(c == '{'){
             // open scope
-            TokenArrayAddToken(&tokens, StringFromCstr("{"), TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "{"), TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
         }else if(c == '}'){
             // close scope
-            TokenArrayAddToken(&tokens, StringFromCstr("}"), TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "}"), TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
         }else if(c == '['){
             // left bracket
-            TokenArrayAddToken(&tokens, StringFromCstr("["), TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "["), TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
         }else if(c == ']'){
             // right bracket
-            TokenArrayAddToken(&tokens, StringFromCstr("]"), TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, "]"), TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
         }else if(c == ','){
             // comma
-            TokenArrayAddToken(&tokens, StringFromCstr(","), TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
+            TokenArrayAddToken(&tokens, StringFromCstr(tokenizer->mem, ","), TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
         }else if(c == '\n'){
             lineNum++;
             collumNum = 0;
@@ -384,6 +388,10 @@ void TokensPrint(TokenArray* tokens){
         printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
     }
 }
+
+// 
+// Old Parser
+// 
 
 // TODO: move into separate file so forward declarations are a bit nicer
 typedef struct NodeExpresion NodeExpresion;
@@ -671,6 +679,36 @@ NodeRoot Parse(Parser* parser){
     return parser->root;
 }
 
+// 
+// New Parser
+// 
+
+typedef enum ASTNodeType{
+    ASTNodeType_NONE,
+    
+    ASTNodeType_FUNCTION_DEF,
+    ASTNodeType_VAR_DECL,
+    ASTNodeType_VAR_DECL_ASSIGN,
+    ASTNodeType_VAR_REASSIGN,
+    ASTNodeType_VAR_CONST,
+    ASTNodeType_RET,
+    
+    ASTNodeType_COUNT,
+} ASTNodeType;
+
+
+typedef struct ASTNode{
+    ASTNodeType type;
+} ASTNode;
+
+ASTNode* Parse2(){
+
+}
+
+// 
+// Code Generator
+// 
+
 typedef struct Generator{
     Arena mem;
     StringChain outputAsm;
@@ -679,9 +717,9 @@ typedef struct Generator{
 } Generator;
 
 void GeneratorPushStack(Generator* gen, const char* target){
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    push "));
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(target));
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "    push "));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, target));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "\n"));
     // TODO: figure out what the stack size is to check for stack overflows
     // if(gen->stackPointer - 1 < 0){
     //     printf("[ERROR] Stack underflow\n");
@@ -691,9 +729,9 @@ void GeneratorPushStack(Generator* gen, const char* target){
 }
 
 void GeneratorPopStack(Generator* gen, const char* target){
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    pop "));
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(target));
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "    pop "));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, target));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "\n"));
     if(gen->stackPointer - 1 < 0){
         printf("[ERROR] Stack underflow\n");
         exit(EXIT_FAILURE);
@@ -705,9 +743,9 @@ void GeneratorPopStack(Generator* gen, const char* target){
 void GenerateExpresion(Generator* gen, NodeExpresion* node){
     switch(node->type){
         case NodeExpresionType_INT_LIT: {
-            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rax, "));
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "    mov rax, "));
             StringChainAppend(&gen->outputAsm, &gen->mem, node->intLit->value);
-            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "\n"));
             GeneratorPushStack(gen, "rax"); // TODO: do you need to push here?
         } break;
         case NodeExpresionType_BIN_EXP: {
@@ -716,12 +754,12 @@ void GenerateExpresion(Generator* gen, NodeExpresion* node){
             // if binary expresion result will end up in rax
             GenerateExpresion(gen, node->binExp->right);
 
-            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    mov rbx, "));
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "    mov rbx, "));
             StringChainAppend(&gen->outputAsm, &gen->mem, node->binExp->left->value);
-            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+            StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "\n"));
             // TODO: add other operators
             if(StringEqualsCstr(node->binExp->operator->value, "+")){
-                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    add rax, rbx\n"));
+                StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "    add rax, rbx\n"));
             }else{
                 printf("[ERROR] Operator \'%.*s\' not implemented\n", node->binExp->operator->value.length, node->binExp->operator->value.str);
                 exit(EXIT_FAILURE);
@@ -737,13 +775,13 @@ void GenerateExpresion(Generator* gen, NodeExpresion* node){
 
 void GenerateReturn(Generator* gen, NodeKeywordRet* node){
     // NOTE: the comment only handles int literals for now
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("; return "));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "; return "));
     StringChainAppend(&gen->outputAsm, &gen->mem, node->exp->intLit->value);
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "\n"));
     
     GenerateExpresion(gen, node->exp);
     GeneratorPopStack(gen, "rax");
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("    ret\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "    ret\n"));
 }
 
 void GenerateVar(Generator* gen, NodeKeywordVar* node){
@@ -780,8 +818,8 @@ void GenerateKeyword(Generator* gen, NodeKeyword* node){
 
 StringChain Generate(Generator* gen, NodeRoot* root){
     // preamble
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("global _start\n"));
-    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr("_start:\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "global _start\n"));
+    StringChainAppend(&gen->outputAsm, &gen->mem, StringFromCstr(&gen->mem, "_start:\n"));
 
     for(int i = 0; i < root->count; i++){
         switch(root->stmts[i].type){
@@ -800,13 +838,18 @@ StringChain Generate(Generator* gen, NodeRoot* root){
     return gen->outputAsm;
 }
 
+// 
+// Main entry point
+// 
+
 int main(int argc, char** argv){
     if(argc < 2){
         printf("[ERROR] File not found: %s\n", argv[1]);
         exit(EXIT_FAILURE);
     }
-    String sourceRaw = EntireFileRead(argv[1]);
-    Tokenizer tokenizer = {.source = sourceRaw, .filename = StringFromCstr(argv[1])};
+    Arena globalMem = {};
+    String sourceRaw = EntireFileRead(&globalMem, argv[1]);
+    Tokenizer tokenizer = {.source = sourceRaw, .filename = StringFromCstr(&globalMem, argv[1])}; // uses arena
     TokenArray tokens = Tokenize(&tokenizer);
 
     TokensPrint(&tokens);
