@@ -69,7 +69,8 @@ TokenArray Tokenize(Tokenizer* tokenizer){
         if(*c == '/'){
             char next = TokenizerPeek(tokenizer, 0);
             if(next == '/'){
-                while(*(c = TokenizerConsume(tokenizer)) != '\n');
+                while((c = TokenizerConsume(tokenizer)) != 0 && *c != '\n');
+                if(c == 0) break;
             }
         }
 
