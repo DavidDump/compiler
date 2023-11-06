@@ -157,6 +157,13 @@ TokenArray Tokenize(Tokenizer* tokenizer){
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
+            }else if(next == '='){
+                // := operator
+                String str = {.str = c, .length = 2};
+                TokenArrayAddToken(&tokens, str, TokenType_INITIALIZER, tokenizer->filename, lineNum, collumNum);
+                
+                TokenizerConsume(tokenizer);
+                collumNum++;
             }else{
                 // : operator
                 String str = {.str = c, .length = 1};
@@ -210,9 +217,13 @@ TokenArray Tokenize(Tokenizer* tokenizer){
     return tokens;
 }
 
+void TokenPrint(Token t){
+    printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
+}
+
 void TokensPrint(TokenArray* tokens){
     for(int i = 0; i < tokens->size; i++){
         Token t = tokens->tokens[i];
-        printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
+        TokenPrint(t);
     }
 }

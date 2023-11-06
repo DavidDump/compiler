@@ -19,24 +19,25 @@ typedef struct Location{
 typedef enum TokenType{
     TokenType_NONE,
     
-    TokenType_RETURN,
-    TokenType_TYPE,
-    TokenType_SEMICOLON,
-    TokenType_COLON,
-    TokenType_DOUBLECOLON,
-    TokenType_RARROW,
-    TokenType_LPAREN,
-    TokenType_RPAREN,
-    TokenType_LSCOPE,
-    TokenType_RSCOPE,
-    TokenType_LBRACKET,
-    TokenType_RBRACKET,
-    TokenType_COMMA,
-    TokenType_OPERATOR,
-    TokenType_ASSIGNMENT,
-    TokenType_COMPARISON,
-    TokenType_IDENTIFIER,
-    TokenType_INT_LITERAL,
+    TokenType_RETURN,      // return
+    TokenType_TYPE,        // u8
+    TokenType_SEMICOLON,   // ;
+    TokenType_COLON,       // :
+    TokenType_DOUBLECOLON, // ::
+    TokenType_INITIALIZER, // :=
+    TokenType_RARROW,      // ->
+    TokenType_LPAREN,      // (
+    TokenType_RPAREN,      // )
+    TokenType_LSCOPE,      // {
+    TokenType_RSCOPE,      // }
+    TokenType_LBRACKET,    // [
+    TokenType_RBRACKET,    // ]
+    TokenType_COMMA,       // ,
+    TokenType_OPERATOR,    // +
+    TokenType_ASSIGNMENT,  // =
+    TokenType_COMPARISON,  // ==
+    TokenType_IDENTIFIER,  // foo
+    TokenType_INT_LITERAL, // 69
     
     TokenType_COUNT,
 } TokenType;
@@ -50,6 +51,7 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_SEMICOLON]   = "SEMICOLON",
     [TokenType_COLON]       = "COLON",
     [TokenType_DOUBLECOLON] = "DOUBLECOLON",
+    [TokenType_INITIALIZER] = "INITIALIZER",
     [TokenType_RARROW]      = "RARROW",
     [TokenType_LPAREN]      = "LPAREN",
     [TokenType_RPAREN]      = "RPAREN",
@@ -83,6 +85,7 @@ typedef struct TokenArray{
 
 TokenArray Tokenize(Tokenizer* tokenizer);
 void TokensPrint(TokenArray* tokens);
+void TokenPrint(Token t);
 Tokenizer TokenizerInit(String source, String filename);
 
 char TokenizerPeek(Tokenizer* tokenizer, int offset);
