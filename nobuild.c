@@ -3,8 +3,8 @@
 
 #define CXX "gcc"
 // NOTE: -w flag has an enable (-Wall) and disable (-Wno-all) version
-#define CFLAGS "-Wall"
-#define DEBUGFLAGS "-O0 -ggdb"
+#define CFLAGS "-Wall -pedantic"
+#define DEBUGFLAGS "-O0 -ggdb -DCOMP_DEBUG"
 
 #define SRCPATH "src"
 #define BUILDPATH "build"
