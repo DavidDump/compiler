@@ -1,5 +1,4 @@
 #include <stdio.h>  // fopen(), fseek(), ftell(), fread(), fclose(), printf(), 
-#include <stdlib.h> // calloc(), realloc(), free(), system()
 #include <string.h> // strlen(), memcpy()
 #include <assert.h> // assert()
 
@@ -57,9 +56,9 @@ String StringFromCstr(Arena* mem, const char* cstr){
     return result;
 }
 
-String StringFromArray(const char* arr, int size){
+String StringFromArray(Arena* mem, const char* arr, int size){
     String result = {};
-    result.str = calloc(size, sizeof(char));
+    result.str = arena_alloc(mem, size * sizeof(char));
     memcpy((char*)result.str, arr, size);
     result.length = size;
     return result;
@@ -89,12 +88,14 @@ String EntireFileRead(Arena* mem, const char* filePath){
         int fileSize = ftell(f);
         fseek(f, 0, SEEK_SET);
         
-        char* tmpFileBuffer = calloc(fileSize + 1, sizeof(char));
-        fread(tmpFileBuffer, sizeof(char), fileSize, f);
+        char* fileBuffer = arena_alloc(mem, fileSize * sizeof(char));
+        fread(fileBuffer, sizeof(char), fileSize, f);
         fclose(f);
 
-        String str = StringFromCstr(mem, tmpFileBuffer);
-        free(tmpFileBuffer);
+        String str = {
+            .str = fileBuffer,
+            .length = fileSize,
+        };
         return str;
     }else{
         printf("[ERROR] Failed to open file: %s\n", filePath);
@@ -127,7 +128,6 @@ typedef struct Tokenizer{
     String source;
     String filename;
     int index;
-    Arena mem;
 } Tokenizer;
 
 typedef struct Location{
@@ -196,16 +196,25 @@ typedef struct TokenArray{
     Token* tokens;
     int size;
     int capacity;
+    Arena mem;
 } TokenArray;
+
+Tokenizer TokenizerInit(String source, String filename){
+    Tokenizer tokenizer = {
+        .filename = filename,
+        .source = source,
+    };
+    return tokenizer;
+}
 
 char TokenizerPeek(Tokenizer* tokenizer, int offset){
     if(tokenizer->index + offset > tokenizer->source.length || tokenizer->index + offset < 0) return 0;
     return tokenizer->source.str[tokenizer->index + offset];
 }
 
-char TokenizerConsume(Tokenizer* tokenizer){
+char* TokenizerConsume(Tokenizer* tokenizer){
     if(tokenizer->index + 1 > tokenizer->source.length) return 0;
-    return tokenizer->source.str[tokenizer->index++];
+    return (char*)&tokenizer->source.str[tokenizer->index++];
 }
 
 bool isLetter(char c){
@@ -234,7 +243,7 @@ void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String fi
     if(arr->size >= arr->capacity){
         size_t newCap = arr->capacity * 2;
         if(newCap == 0) newCap = 1;
-        arr->tokens = realloc(arr->tokens, newCap * sizeof(Token));
+        arr->tokens = arena_realloc(&arr->mem, arr->tokens, arr->size * sizeof(arr->tokens[0]), newCap * sizeof(arr->tokens[0]));
         arr->capacity = newCap;
     }
 
@@ -251,23 +260,23 @@ TokenArray Tokenize(Tokenizer* tokenizer){
     TokenArray tokens = {};
     int lineNum = 1;
     int collumNum = 1;
-    for(char c = TokenizerConsume(tokenizer); c != 0; c = TokenizerConsume(tokenizer), collumNum++){
+    for(char* c = TokenizerConsume(tokenizer); c != 0; c = TokenizerConsume(tokenizer), collumNum++){
         // special case: line comment
-        if(c == '/'){
+        if(*c == '/'){
             char next = TokenizerPeek(tokenizer, 0);
             if(next == '/'){
-                while((c = TokenizerConsume(tokenizer)) != '\n');
+                while(*(c = TokenizerConsume(tokenizer)) != '\n');
             }
         }
 
-        if(isLetter(c)){
+        if(isLetter(*c)){
             // keywords and identifiers
-            char* start = (char*)&tokenizer->source.str[tokenizer->index - 1];
+            char* start = c;
             char* end = start;
             while(*end && !isWhitespace(*end) && (isLetter(*end) || isNumber(*end))) end++;
             int len = end - start;
 
-            String value = StringFromArray(start, len);
+            String value = {.str = start, .length = len};
             TokenType type = TokenType_NONE;
             // compare keywords and types
             if(StringEqualsCstr(value, "return"))   type = TokenType_RETURN;
@@ -286,25 +295,27 @@ TokenArray Tokenize(Tokenizer* tokenizer){
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
-        }else if(isNumber(c)){
+        }else if(isNumber(*c)){
             // numbers
-            char* start = (char*)&tokenizer->source.str[tokenizer->index - 1];
+            char* start = c;
             char* end = start;
             while(*end && !isWhitespace(*end) && isNumber(*end)) end++;
             int len = end - start;
 
-            TokenArrayAddToken(&tokens, StringFromArray(start, len), TokenType_INT_LITERAL, tokenizer->filename, lineNum, collumNum);
+            String str = {.str = start, .length = len};
+            TokenArrayAddToken(&tokens, str, TokenType_INT_LITERAL, tokenizer->filename, lineNum, collumNum);
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
-        }else if(isOperator(c)){
+        }else if(isOperator(*c)){
             // operators
 
             // special case -> operator
-            if(c == '-'){
+            if(*c == '-'){
                 char next = TokenizerPeek(tokenizer, 0);
                 if(next == '>'){
-                    TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "->"), TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
+                    String str = {.str = c, .length = 2};
+                    TokenArrayAddToken(&tokens, str, TokenType_RARROW, tokenizer->filename, lineNum, collumNum);
                     
                     TokenizerConsume(tokenizer);
                     collumNum++;
@@ -312,70 +323,82 @@ TokenArray Tokenize(Tokenizer* tokenizer){
                 }
             }
 
-            char* curr = (char*)&tokenizer->source.str[tokenizer->index - 1];
-            TokenArrayAddToken(&tokens, StringFromArray(curr, 1), TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
-        }else if(c == ';'){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == ';'){
             // semicolon
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ";"), TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
-        }else if(c == '='){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == '='){
             // equals
             char next = TokenizerPeek(tokenizer, 0);
             if(next == '='){
-                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "=="), TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
+                String str = {.str = c, .length = 2};
+                TokenArrayAddToken(&tokens, str, TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
             }else{
-                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "="), TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
+                String str = {.str = c, .length = 1};
+                TokenArrayAddToken(&tokens, str, TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
             }
-        }else if(c == ':'){
+        }else if(*c == ':'){
             // : or :: operator
             char next = TokenizerPeek(tokenizer, 0);
             if(next == ':'){
                 // :: operator
-                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "::"), TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
+                String str = {.str = c, .length = 2};
+                TokenArrayAddToken(&tokens, str, TokenType_DOUBLECOLON, tokenizer->filename, lineNum, collumNum);
                 
                 TokenizerConsume(tokenizer);
                 collumNum++;
             }else{
                 // : operator
-                TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ":"), TokenType_COLON, tokenizer->filename, lineNum, collumNum);
+                String str = {.str = c, .length = 1};
+                TokenArrayAddToken(&tokens, str, TokenType_COLON, tokenizer->filename, lineNum, collumNum);
             }
-        }else if(c == '('){
+        }else if(*c == '('){
             // left paren
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "("), TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
-        }else if(c == ')'){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_LPAREN, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == ')'){
             // right paren
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ")"), TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
-        }else if(c == '{'){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_RPAREN, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == '{'){
             // open scope
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "{"), TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
-        }else if(c == '}'){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_LSCOPE, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == '}'){
             // close scope
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "}"), TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
-        }else if(c == '['){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_RSCOPE, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == '['){
             // left bracket
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "["), TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
-        }else if(c == ']'){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_LBRACKET, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == ']'){
             // right bracket
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, "]"), TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
-        }else if(c == ','){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_RBRACKET, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == ','){
             // comma
-            TokenArrayAddToken(&tokens, StringFromCstr(&tokenizer->mem, ","), TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
-        }else if(c == '\n'){
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == '\n'){
             lineNum++;
             collumNum = 0;
         }
         
         #ifdef COMP_DEBUG
-        else if(c == ' '){
+        else if(*c == ' '){
             // NOTE: space is ignored but this case is needed here for debug print
             continue;
-        }else if(c == '\r'){
+        }else if(*c == '\r'){
             // NOTE: carrige return is ignored but this case is needed here for debug print
             continue;
         }else{
-            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", c, tokenizer->filename.length, tokenizer->filename.str, lineNum, collumNum);
+            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", *c, tokenizer->filename.length, tokenizer->filename.str, lineNum, collumNum);
         }
         #endif // COMP_DEBUG
     }
@@ -701,9 +724,9 @@ typedef struct ASTNode{
     ASTNodeType type;
 } ASTNode;
 
-ASTNode* Parse2(){
+// ASTNode* Parse2(){
 
-}
+// }
 
 // 
 // Code Generator
@@ -847,10 +870,12 @@ int main(int argc, char** argv){
         printf("[ERROR] File not found: %s\n", argv[1]);
         exit(EXIT_FAILURE);
     }
-    Arena globalMem = {};
-    String sourceRaw = EntireFileRead(&globalMem, argv[1]);
+    Arena readFileMem = {}; // source file is stored in here
+    String sourceRaw = EntireFileRead(&readFileMem, argv[1]);
     
-    Tokenizer tokenizer = {.source = sourceRaw, .filename = StringFromCstr(&globalMem, argv[1])}; // uses arena
+    int filenameLen = strlen(argv[1]);
+    String filename = {.str = argv[1], .length = filenameLen};
+    Tokenizer tokenizer = TokenizerInit(sourceRaw, filename);
     TokenArray tokens = Tokenize(&tokenizer);
     TokensPrint(&tokens);
 
@@ -876,10 +901,9 @@ int main(int argc, char** argv){
     // system("nasm -fwin32 output.asm");
     // system("C:\\MinGW\\bin\\gcc.exe -m32 -o output.exe output.obj -lkernel32");
 
-    arena_free(&tokenizer.mem);
     // arena_free(&parser.mem);
     // arena_free(&gen.mem);
     
-    arena_free(&globalMem);
+    arena_free(&readFileMem);
     exit(EXIT_SUCCESS);
 }
