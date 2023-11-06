@@ -101,7 +101,7 @@ int main(int argc, char** argv){
     TokenArray tokens = Tokenize(&tokenizer);
     TokensPrint(&tokens);
 
-    #if 1
+    #if 0
     Parser parser = {.tokens = tokens}; // uses memory arena
     NodeRoot ast = Parse(&parser);
 

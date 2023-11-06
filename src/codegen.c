@@ -72,6 +72,7 @@ void GenerateReturn(Generator* gen, NodeKeywordRet* node){
 }
 
 void GenerateVar(Generator* gen, NodeKeywordVar* node){
+    UNUSED(gen);
     switch(node->type){
         case NodeKeywordVarType_DEF_ONLY: {
             // node->defIdentifier;

@@ -39,7 +39,7 @@ bool StringEquals(String str1, String str2){
 }
 
 bool StringEqualsCstr(String str1, const char* cstr){
-    if(str1.length != strlen(cstr)) return FALSE;
+    if(str1.length != (int)strlen(cstr)) return FALSE;
     for(int i = 0; i < str1.length; i++){
         if(str1.str[i] != cstr[i]) return FALSE;
     }
