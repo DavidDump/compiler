@@ -477,7 +477,8 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                         exit(EXIT_FAILURE);
                     }
                 }else{
-                    // function call
+                    ERROR(next.loc, "Variable assignment needs an expresion");
+                    exit(EXIT_FAILURE);
                 }
             } break;
 
