@@ -9,7 +9,7 @@
 #define SRCPATH "src"
 #define BUILDPATH "build"
 
-#define TARGET "main.exe"
+#define TARGET "compiler.exe"
 
 void EnsureBuildDir(){
     if(PATH_EXISTS(PATH("build"))) return;
