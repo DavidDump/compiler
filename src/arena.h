@@ -82,6 +82,7 @@ Region *new_region(size_t capacity)
     // TODO: it would be nice if we could guarantee that the regions are allocated by ARENA_BACKEND_LIBC_MALLOC are page aligned
     Region *r = malloc(size_bytes);
     ARENA_ASSERT(r);
+    memset(r->data, 0, capacity); // NOTE: custom added
     r->next = NULL;
     r->count = 0;
     r->capacity = capacity;
