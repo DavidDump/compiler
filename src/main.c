@@ -456,7 +456,8 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
                             parseConsume2(ctx);
                             break;
                         }else{
-                            UNIMPLEMENTED("arg need to be followed by comma(',') or closing parenthesis(')')");
+                            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis ')'");
+                            exit(EXIT_FAILURE);
                         }
                     }
                 }else{
