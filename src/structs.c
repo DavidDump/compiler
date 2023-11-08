@@ -1,0 +1,23 @@
+#include "structs.h"
+
+void addType(TypeInformation* info, TypeDefinition def){
+    if(info->size >= info->capacity){
+        size_t newCap = info->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        info->types = arena_realloc(&info->mem, info->types, info->capacity * sizeof(info->types[0]), newCap * sizeof(info->types[0]));
+        info->capacity = newCap;
+    }
+
+    info->types[info->size++] = def;
+}
+
+void addOperator(OperatorInformation* info, OperatorDefinition def){
+    if(info->size >= info->capacity){
+        size_t newCap = info->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        info->ops = arena_realloc(&info->mem, info->ops, info->capacity * sizeof(info->ops[0]), newCap * sizeof(info->ops[0]));
+        info->capacity = newCap;
+    }
+
+    info->ops[info->size++] = def;
+}
