@@ -76,13 +76,48 @@ typedef enum ASTNodeType{
     ASTNodeType_COUNT,
 } ASTNodeType;
 
-typedef struct ASTNode{
+typedef struct _ASTNode ASTNode;
+
+typedef struct Args{
+    ASTNode** args; // the type of this node has to be VAR_DECL
+    int size;
+    int capacity;
+
+    Arena mem;
+} Args;
+
+typedef struct StmtList{
+    ASTNode** statements;
+    int size;
+    int capacity;
+
+    Arena mem;
+} StmtList;
+
+typedef struct Scope{
+    Arena mem;
+
+    String* symbolTable;
+    int symbolSize;
+    int symbolCapacity;
+
+    struct Scope* parent;
+
+    struct Scope** children;
+    int childrenSize;
+    int childrenCapacity;
+
+    StmtList stmts;
+} Scope;
+
+typedef struct _ASTNode{
     ASTNodeType type;
     union Node{
         struct FUNCTION_DEF {
             String identifier;
             String type;
-            struct ASTNode* statements;
+            Args args;
+            Scope* scope;
         } FUNCTION_DEF;
         struct VAR_DECL {
             String identifier;
@@ -91,23 +126,23 @@ typedef struct ASTNode{
         struct VAR_DECL_ASSIGN {
             String identifier;
             String type;
-            struct ASTNode* expresion;
+            ASTNode* expresion;
         } VAR_DECL_ASSIGN;
         struct VAR_REASSIGN {
             String identifier;
-            struct ASTNode* expresion;
+            ASTNode* expresion;
         } VAR_REASSIGN;
         struct VAR_CONST {
             String identifier;
             String value;
         } VAR_CONST;
         struct RET {
-            struct ASTNode* expresion;
+            ASTNode* expresion;
         } RET;
         struct EXPRESION{
             String operator;
-            struct ASTNode* rhs;
-            struct ASTNode* lhs;
+            ASTNode* rhs;
+            ASTNode* lhs;
         } EXPRESION;
         struct INT_LIT{
             String value;
@@ -116,22 +151,24 @@ typedef struct ASTNode{
 } ASTNode;
 
 typedef struct ASTRoot{
-    ASTNode* statements;
-    int size;
-    int capacity;
+    StmtList stmts;
 
-    Arena mem;
+    // Arena mem;
 } ASTRoot;
 
-void ASTRootAddStatement2(ASTRoot* root, ASTNode* node){
-    if(root->size >= root->capacity){
-        size_t newCap = root->capacity * 2;
+void parseAddStatement(StmtList* list, ASTNode* node){
+    if(list->size >= list->capacity){
+        size_t newCap = list->capacity * 2;
         if(newCap == 0) newCap = 1;
-        root->statements = arena_realloc(&root->mem, root->statements, root->capacity * sizeof(root->statements[0]), newCap * sizeof(root->statements[0]));
-        root->capacity = newCap;
+        list->statements = arena_realloc(&list->mem, list->statements, list->capacity * sizeof(list->statements[0]), newCap * sizeof(list->statements[0]));
+        list->capacity = newCap;
     }
 
-    root->statements[root->size++] = *node;
+    list->statements[list->size++] = node;
+}
+
+void ASTRootAddStatement2(ASTRoot* root, ASTNode* node){
+    parseAddStatement(&root->stmts, node);
 }
 
 typedef struct TypeDefinition{
@@ -211,11 +248,25 @@ void ASTNodePrint2(ASTNode* node, int indent){
             printf("FUNCTION DEF:\n");
             String id = node->node.FUNCTION_DEF.identifier;
             String retType = node->node.FUNCTION_DEF.type;
-            ASTNode* stmts = node->node.FUNCTION_DEF.statements;
+            Args args = node->node.FUNCTION_DEF.args;
+            StmtList stmts = node->node.FUNCTION_DEF.scope->stmts;
             printf("id: %.*s\n", id.length, id.str);
             printf("ret: %.*s\n", retType.length, retType.str);
+
+            // args
+            for(int i = 0; i < args.size; i++){
+                String argId = args.args[i]->node.VAR_DECL.identifier;
+                String argType = args.args[i]->node.VAR_DECL.type;
+                printf("id: %.*s\n", argId.length, argId.str);
+                printf("type: %.*s\n", argType.length, argType.str);
+
+            }
+            
             printf("stmts:");
-            ASTNodePrint2(stmts, indent + 1);
+            for(int i = 0; i < stmts.size; i++){
+                ASTNode* stmt = stmts.statements[i];
+                ASTNodePrint2(stmt, indent + 1);
+            }
         } break;
         case ASTNodeType_VAR_DECL: {
             printf("VAR DECL:\n");
@@ -258,9 +309,9 @@ void ASTNodePrint2(ASTNode* node, int indent){
 }
 
 void ASTPrint2(ASTRoot root){
-    for(int i = 0; i < root.size; i++){
-        printf("Statement %i\n", i);
-        ASTNodePrint2(&root.statements[i], 0);
+    for(int i = 0; i < root.stmts.size; i++){
+        printf("Statement %i\n", i + 1);
+        ASTNodePrint2(root.stmts.statements[i], 0);
     }
 }
 
@@ -336,8 +387,117 @@ ASTNode* parseExpression2(ParseContext* ctx, Arena* mem){
 	return parseExpression2_rec(ctx, mem, intLit, 5);
 }
 
-ASTRoot Parse2(ParseContext* ctx, Arena* mem){
-    ASTRoot result = {0};
+bool parseCheckSemicolon(ParseContext* ctx){
+    Token next = parsePeek2(ctx, 0);
+    if(next.type == TokenType_SEMICOLON){
+        parseConsume2(ctx);
+        // ASTRootAddStatement2(&result, node);
+        return TRUE;
+    }else{
+        ERROR(next.loc, "Statement needs to end with ;");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void parseScopeAddChild(Scope* parent, Scope* child){
+    if(parent == NULL) return;
+    if(parent->childrenSize >= parent->childrenCapacity){
+        size_t newCap = parent->childrenCapacity * 2;
+        if(newCap == 0) newCap = 1;
+        parent->children = arena_realloc(&parent->mem, parent->children, parent->childrenCapacity * sizeof(parent->children[0]), newCap * sizeof(parent->children[0]));
+        parent->childrenCapacity = newCap;
+    }
+
+    parent->children[parent->childrenSize++] = child;
+}
+
+void parseAddArg(Args* args, ASTNode* node){
+    assert(node->type == ASTNodeType_VAR_DECL);
+    if(args->size >= args->capacity){
+        size_t newCap = args->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        args->args = arena_realloc(&args->mem, args->args, args->capacity * sizeof(args->args[0]), newCap * sizeof(args->args[0]));
+        args->capacity = newCap;
+    }
+
+    args->args[args->size++] = node;
+}
+
+Scope* parseScopeInit(Arena* mem, Scope* parent){
+    Scope* result = arena_alloc(mem, sizeof(Scope));
+    result->parent = parent;
+
+    parseScopeAddChild(parent, result);
+
+    return result;
+}
+
+void parseScopeAddSymbol(Scope* scope, String symbol){
+    if(scope->symbolSize >= scope->symbolCapacity){
+        size_t newCap = scope->symbolCapacity * 2;
+        if(newCap == 0) newCap = 1;
+        scope->symbolTable = arena_realloc(&scope->mem, scope->symbolTable, scope->symbolCapacity * sizeof(scope->symbolTable[0]), newCap * sizeof(scope->symbolTable[0]));
+        scope->symbolCapacity = newCap;
+    }
+
+    scope->symbolTable[scope->symbolSize++] = symbol;
+}
+
+// the ctx needs to point at '('
+Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
+    Args result = {0};
+    
+    Token next = parseConsume2(ctx);
+    if(next.type == TokenType_LPAREN){
+        for(int i = ctx->index; i < ctx->tokens.size; i++){
+            next = parsePeek2(ctx, 0);
+            if(next.type == TokenType_IDENTIFIER){
+                parseConsume2(ctx);
+                parseScopeAddSymbol(scope, next.value);
+                Token id = next;
+
+                next = parsePeek2(ctx, 0);
+                if(next.type == TokenType_COLON){
+                    parseConsume2(ctx);
+                    next = parsePeek2(ctx, 0);
+                    if(next.type == TokenType_TYPE){
+                        parseConsume2(ctx);
+                        ASTNode* node = NodeInit2(&result.mem);
+                        node->type = ASTNodeType_VAR_DECL;
+                        node->node.VAR_DECL.identifier = id.value;
+                        node->node.VAR_DECL.type = next.value;
+
+                        parseAddArg(&result, node);
+
+                        next = parsePeek2(ctx, 0);
+                        if(next.type == TokenType_COMMA){
+                            parseConsume2(ctx);
+                            continue;
+                        }else if(next.type == TokenType_RPAREN){
+                            parseConsume2(ctx);
+                            break;
+                        }else{
+                            UNIMPLEMENTED("arg need to be followed by comma(',') or closing parenthesis(')')");
+                        }
+                    }
+                }else{
+                    UNIMPLEMENTED("identifier needs to be followed by colon");
+                }
+            }else{
+                UNIMPLEMENTED("argument needs identifier");
+            }
+        }
+    }else{
+        ERROR(next.loc, "Function arguments need to be inside parenthesis");
+        exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
+
+Scope* Parse2(ParseContext* ctx, Arena* mem){
+    Scope* globalScope = parseScopeInit(mem, NULL);
+    Scope* currentScope = globalScope;
     for(Token t = parseConsume2(ctx); t.type != TokenType_NONE; t = parseConsume2(ctx)){
         switch(t.type){
             case TokenType_COUNT:
@@ -354,14 +514,8 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                     node->node.RET.expresion = parseExpression2(ctx, mem);
                     
                     // Check for semicolon
-                    // parseConsume2(ctx);
-                    next = parsePeek2(ctx, 0);
-                    if(next.type == TokenType_SEMICOLON){
-                        parseConsume2(ctx);
-                        ASTRootAddStatement2(&result, node);
-                    }else{
-                        ERROR(next.loc, "Statement needs to end with ;");
-                        exit(EXIT_FAILURE);
+                    if(parseCheckSemicolon(ctx)){
+                        parseAddStatement(&currentScope->stmts, node);
                     }
                 }else{
                     ERROR(next.loc, "Return keyword needs a value to return.");
@@ -383,15 +537,12 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                         // node->node.VAR_DECL_ASSIGN.type = ;
                         
                         // TODO: add the variable to the symbol table
+                        parseScopeAddSymbol(currentScope, t.value);
 
                         // Check for semicolon
-                        next = parsePeek2(ctx, 0);
-                        if(next.type == TokenType_SEMICOLON){
-                            parseConsume2(ctx);
-                            ASTRootAddStatement2(&result, node);
-                        }else{
-                            ERROR(next.loc, "Statement needs to end with ;");
-                            exit(EXIT_FAILURE);
+                        if(parseCheckSemicolon(ctx)){
+                            // ASTRootAddStatement2(&result, node);
+                            parseAddStatement(&currentScope->stmts, node);
                         }
                     }else{
                         ERROR(next.loc, "Variable needs expresion to initialize");
@@ -410,15 +561,12 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                         node->node.VAR_DECL.type = next.value;
 
                         // TODO: add the variable to the symbol table
+                        parseScopeAddSymbol(currentScope, t.value);
                         
                         // Check for semicolon
-                        next = parsePeek2(ctx, 0);
-                        if(next.type == TokenType_SEMICOLON){
-                            parseConsume2(ctx);
-                            ASTRootAddStatement2(&result, node);
-                        }else{
-                            ERROR(next.loc, "Statement needs to end with ;");
-                            exit(EXIT_FAILURE);
+                        if(parseCheckSemicolon(ctx)){
+                            // ASTRootAddStatement2(&result, node);
+                            parseAddStatement(&currentScope->stmts, node);
                         }
                     }else{
                         ERROR(next.loc, "Variable declaration without initializer needs a type");
@@ -437,13 +585,9 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                         // TODO: check if the variable is in the symbol table
 
                         // Check for semicolon
-                        next = parsePeek2(ctx, 0);
-                        if(next.type == TokenType_SEMICOLON){
-                            parseConsume2(ctx);
-                            ASTRootAddStatement2(&result, node);
-                        }else{
-                            ERROR(next.loc, "Statement needs to end with ;");
-                            exit(EXIT_FAILURE);
+                        if(parseCheckSemicolon(ctx)){
+                            // ASTRootAddStatement2(&result, node);
+                            parseAddStatement(&currentScope->stmts, node);
                         }
                     }else{
                         ERROR(next.loc, "Variable assignment needs an expresion");
@@ -454,6 +598,7 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                     parseConsume2(ctx); // consume the ::
                     next = parsePeek2(ctx, 0);
                     if(next.type == TokenType_INT_LITERAL){
+                        // constant is a compile time value
                         ASTNode* node = NodeInit2(mem);
                         node->type = ASTNodeType_VAR_CONST;
                         node->node.VAR_CONST.identifier = t.value;
@@ -462,24 +607,66 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
                         node->node.VAR_CONST.value = next.value;
 
                         // TODO: add the variable to the symbol table
+                        parseScopeAddSymbol(currentScope, t.value);
 
                         // Check for semicolon
+                        if(parseCheckSemicolon(ctx)){
+                            // ASTRootAddStatement2(&result, node);
+                            parseAddStatement(&currentScope->stmts, node);
+                        }
+                    }else if(next.type == TokenType_LPAREN){
+                        Scope* scopeBackup = currentScope;
+                        // constant is a function
+                        ASTNode* node = NodeInit2(mem);
+                        node->type = ASTNodeType_FUNCTION_DEF;
+                        node->node.FUNCTION_DEF.identifier = t.value;
+
+                        // TODO: add the function to the symbol table
+                        parseScopeAddSymbol(currentScope, t.value);
+
+                        // args
+                        Scope* functionScope = parseScopeInit(mem, currentScope);
+                        node->node.FUNCTION_DEF.args = parseFunctionDeclArgs(ctx, functionScope);
+                        currentScope = functionScope;
+
+                        // ret type
                         next = parsePeek2(ctx, 0);
-                        if(next.type == TokenType_SEMICOLON){
+                        if(next.type == TokenType_RARROW){
                             parseConsume2(ctx);
-                            ASTRootAddStatement2(&result, node);
+                            next = parsePeek2(ctx, 0);
+                            if(next.type == TokenType_TYPE){
+                                parseConsume2(ctx);
+                                node->node.FUNCTION_DEF.type = next.value;
+                                next = parsePeek2(ctx, 0);
+                                if(next.type == TokenType_LSCOPE){
+                                    parseConsume2(ctx);
+
+                                    node->node.FUNCTION_DEF.scope = functionScope;
+                                    parseAddStatement(&scopeBackup->stmts, node);
+                                }else{
+                                    ERROR(next.loc, "Function needs to have a scope");
+                                    exit(EXIT_FAILURE);
+                                }
+                            }else{
+                                ERROR(next.loc, "Function needs a return type");
+                                exit(EXIT_FAILURE);
+                            }
                         }else{
-                            ERROR(next.loc, "Statement needs to end with ;");
+                            ERROR(next.loc, "Function arguments need to be followed by the return type bikeshedder \"->\"");
                             exit(EXIT_FAILURE);
                         }
                     }else{
-                        ERROR(next.loc, "Variable assignment needs an expresion");
+                        ERROR(next.loc, "Constant needs to be a value known at compile time or a function declaration");
                         exit(EXIT_FAILURE);
                     }
                 }else{
                     ERROR(next.loc, "Variable assignment needs an expresion");
                     exit(EXIT_FAILURE);
                 }
+            } break;
+            case TokenType_RSCOPE: {
+                currentScope = currentScope->parent;
+                // TODO: is this all here???
             } break;
 
             case TokenType_TYPE:
@@ -491,7 +678,6 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
             case TokenType_LPAREN:
             case TokenType_RPAREN:
             case TokenType_LSCOPE:
-            case TokenType_RSCOPE:
             case TokenType_LBRACKET:
             case TokenType_RBRACKET:
             case TokenType_COMMA:
@@ -504,7 +690,7 @@ ASTRoot Parse2(ParseContext* ctx, Arena* mem){
         }
     }
 
-    return result;
+    return globalScope;
 }
 
 // 
@@ -542,7 +728,9 @@ int main(int argc, char** argv){
     ctx.ops[3] = OperatorDefinitionInit(op4Symbol, 10, type, type, type);
     ctx.opsCount = 4;
 
-    ASTRoot ast = Parse2(&ctx, &readFileMem);
+    Scope* globalScope = Parse2(&ctx, &readFileMem);
+    ASTRoot ast = {0};
+    ast.stmts = globalScope->stmts;
     ASTPrint2(ast);
 
     #if 0
@@ -573,3 +761,5 @@ int main(int argc, char** argv){
     arena_free(&readFileMem);
     exit(EXIT_SUCCESS);
 }
+
+// TODO: invert all the if conditions in the parser so less nesting
