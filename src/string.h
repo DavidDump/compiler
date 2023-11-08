@@ -25,6 +25,7 @@ typedef struct StringChain{
 
 void StringChainAppend(StringChain* chain, Arena* mem, String str);
 String StringFromCstr(Arena* mem, const char* cstr);
+String StringFromCstrLit(const char* cstr);
 String StringFromArray(Arena* mem, const char* arr, int size);
 bool StringEquals(String str1, String str2);
 bool StringEqualsCstr(String str1, const char* cstr);

@@ -22,6 +22,14 @@ String StringFromCstr(Arena* mem, const char* cstr){
     return result;
 }
 
+String StringFromCstrLit(const char* cstr){
+    String result = {0};
+    int len = strlen(cstr);
+    result.str = cstr;
+    result.length = len;
+    return result;
+}
+
 String StringFromArray(Arena* mem, const char* arr, int size){
     String result = {0};
     result.str = arena_alloc(mem, size * sizeof(char));

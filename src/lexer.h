@@ -1,6 +1,7 @@
 #ifndef COMP_LEXER_H
 #define COMP_LEXER_H
 
+#include "structs.h"
 #include "string.h"
 #include "common.h"
 
@@ -8,6 +9,9 @@ typedef struct Tokenizer{
     String source;
     String filename;
     int index;
+
+    TypeInformation* typeInfo;
+    OperatorInformation* opsInfo;
 } Tokenizer;
 
 typedef struct Location{
@@ -86,14 +90,14 @@ typedef struct TokenArray{
 TokenArray Tokenize(Tokenizer* tokenizer);
 void TokensPrint(TokenArray* tokens);
 void TokenPrint(Token t);
-Tokenizer TokenizerInit(String source, String filename);
+Tokenizer TokenizerInit(String source, String filename, TypeInformation* typeInfo, OperatorInformation* opsInfo);
 
 char TokenizerPeek(Tokenizer* tokenizer, int offset);
 char* TokenizerConsume(Tokenizer* tokenizer);
 bool isLetter(char c);
 bool isNumber(char c);
 bool isWhitespace(char c);
-bool isOperator(char c);
+bool isOperator(Tokenizer* tokenizer, char c);
 void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum);
 
 #endif // COMP_LEXER_H

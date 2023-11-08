@@ -3,10 +3,12 @@
 
 #include <stdio.h>
 
-Tokenizer TokenizerInit(String source, String filename){
+Tokenizer TokenizerInit(String source, String filename, TypeInformation* typeInfo, OperatorInformation* opsInfo){
     Tokenizer tokenizer = {
         .filename = filename,
         .source = source,
+        .typeInfo = typeInfo,
+        .opsInfo = opsInfo,
     };
     return tokenizer;
 }
@@ -39,8 +41,14 @@ bool isSpecial(char c){
 }
 #endif
 
-bool isOperator(char c){
-    return (c == '+' || c == '-' || c == '*' || c == '/');
+// NOTE: this doesnt work for multichar operators
+bool isOperator(Tokenizer* tokenizer, char c){
+    for(int i = 0; i < tokenizer->opsInfo->size; i++){
+        if(tokenizer->opsInfo->ops[i].symbol.str[0] == c){
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum){
@@ -58,6 +66,15 @@ void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String fi
     tok.loc.line = line;
     tok.loc.collum = collum;
     arr->tokens[arr->size++] = tok;
+}
+
+bool TokenIsType(Tokenizer* tokenizer, String value){
+    for(int i = 0; i < tokenizer->typeInfo->size; i++){
+        if(StringEquals(tokenizer->typeInfo->types[i].symbol, value)){
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 TokenArray Tokenize(Tokenizer* tokenizer){
@@ -84,16 +101,8 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             String value = {.str = start, .length = len};
             TokenType type = TokenType_NONE;
             // compare keywords and types
-            if(StringEqualsCstr(value, "return"))   type = TokenType_RETURN;
-            else if(StringEqualsCstr(value, "u8"))  type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "u16")) type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "u32")) type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "u64")) type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "s8"))  type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "s16")) type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "s32")) type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "s64")) type = TokenType_TYPE;
-            else if(StringEqualsCstr(value, "string")) type = TokenType_TYPE;
+            if(StringEqualsCstr(value, "return"))  type = TokenType_RETURN;
+            else if(TokenIsType(tokenizer, value)) type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
 
             TokenArrayAddToken(&tokens, value, type, tokenizer->filename, lineNum, collumNum);
@@ -112,7 +121,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
-        }else if(isOperator(*c)){
+        }else if(isOperator(tokenizer, *c)){
             // operators
 
             // special case -> operator

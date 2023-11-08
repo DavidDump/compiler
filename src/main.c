@@ -2,6 +2,7 @@
 #include <string.h> // strlen(), memcpy()
 #include <assert.h> // assert()
 
+#include "structs.h"
 #include "codegen.h"
 #include "parser.h"
 #include "lexer.h"
@@ -161,30 +162,19 @@ void parseAddStatement(StmtList* list, ASTNode* node){
     list->statements[list->size++] = node;
 }
 
-typedef struct TypeDefinition{
-    String symbol;
-    int byteSize;
-} TypeDefinition;
-
-typedef struct OperatorDefinition{
-    String symbol;
-    int precedence;
-    TypeDefinition retType;
-    TypeDefinition rhsType;
-    TypeDefinition lhsType;
-} OperatorDefinition;
-
 typedef struct ParseContext{
     TokenArray tokens;
 	int index;
     
-    OperatorDefinition ops[4]; // TODO: later make dynamic
-    int opsCount;
+    TypeInformation* typeInfo;
+    OperatorInformation* opsInfo;
 } ParseContext;
 
-ParseContext ParseContextInit(TokenArray tokens){
+ParseContext ParseContextInit(TokenArray tokens, TypeInformation* typeInfo, OperatorInformation* opsInfo){
     ParseContext ctx = {
         .tokens = tokens,
+        .typeInfo = typeInfo,
+        .opsInfo = opsInfo,
     };
     return ctx;
 }
@@ -306,9 +296,9 @@ void ASTPrint2(Scope* root){
 }
 
 int OpGetPrecedence2(ParseContext* ctx, String op){
-    for(int i = 0; i < ctx->opsCount; i++){
-        if(StringEquals(ctx->ops[i].symbol, op)){
-            return ctx->ops[i].precedence;
+    for(int i = 0; i < ctx->opsInfo->size; i++){
+        if(StringEquals(ctx->opsInfo->ops[i].symbol, op)){
+            return ctx->opsInfo->ops[i].precedence;
         }
     }
     return -1;
@@ -684,42 +674,66 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
 
 int main(int argc, char** argv){
     if(argc < 2){
-        printf("[ERROR] File not found: %s\n", argv[1]);
+        printf("[ERROR] Source file not provided\n");
         exit(EXIT_FAILURE);
     }
+
+    // parse args
+    bool printTokens = FALSE;
+    bool printAST = FALSE;
+    char* filepath;
+    for(int i = 0; i < argc; i++){
+        if(strcmp(argv[i], "--tokens") == 0){
+            printTokens = TRUE;
+        }else if(strcmp(argv[i], "--ast") == 0){
+            printAST = TRUE;
+        }else{
+            if(argv[i][0] == '-' && argv[i][1] == '-'){
+                printf("[ERROR] Argument \"%s\" not supported, supported args:\n", argv[i]);
+                printf("[ERROR]   --tokens\n");
+                printf("[ERROR]   --ast\n");
+                exit(EXIT_FAILURE);
+            }else{
+                filepath = argv[i];
+            }
+        }
+    }
+
+    // types
+    TypeInformation typeInfo = {0};
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u8"),  1)); // NOTE: for now the [0] item is what all binaty operators operate on
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u16"), 2));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u32"), 4));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u64"), 8));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s8"),  1));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s16"), 2));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s32"), 4));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s64"), 8));
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("string"), 0)); // TODO: figure out string byteSize
+
+    // oeperators
+    OperatorInformation opInfo = {0};
+    // TODO: figure out how to group all the int-like types so biary operators can be generated easily
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("+"), 5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("-"), 5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("*"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("/"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+
     Arena readFileMem = {0}; // source file is stored in here
-    String sourceRaw = EntireFileRead(&readFileMem, argv[1]);
+    String sourceRaw = EntireFileRead(&readFileMem, filepath);
 
-    int filenameLen = strlen(argv[1]);
-    String filename = {.str = argv[1], .length = filenameLen};
-    Tokenizer tokenizer = TokenizerInit(sourceRaw, filename);
+    int filenameLen = strlen(filepath);
+    String filename = {.str = filepath, .length = filenameLen};
+    Tokenizer tokenizer = TokenizerInit(sourceRaw, filename, &typeInfo, &opInfo);
     TokenArray tokens = Tokenize(&tokenizer);
-    // TokensPrint(&tokens);
-
-    char* intType = "int";
-    String intSymbol = {.str = intType, .length = 4};
-    TypeDefinition type = TypeDefinitionInit(intSymbol, 4);
-
-    char* opsSymbol = "+-*/";
-    String op1Symbol = {.str = opsSymbol + 0, .length = 1};
-    String op2Symbol = {.str = opsSymbol + 1, .length = 1};
-    String op3Symbol = {.str = opsSymbol + 2, .length = 1};
-    String op4Symbol = {.str = opsSymbol + 3, .length = 1};
+    if(printTokens) TokensPrint(&tokens);
     
-    ParseContext ctx = ParseContextInit(tokens);
-    ctx.ops[0] = OperatorDefinitionInit(op1Symbol, 5, type, type, type);
-    ctx.ops[1] = OperatorDefinitionInit(op2Symbol, 5, type, type, type);
-    ctx.ops[2] = OperatorDefinitionInit(op3Symbol, 10, type, type, type);
-    ctx.ops[3] = OperatorDefinitionInit(op4Symbol, 10, type, type, type);
-    ctx.opsCount = 4;
+    ParseContext ctx = ParseContextInit(tokens, &typeInfo, &opInfo);
 
     Scope* globalScope = Parse2(&ctx, &readFileMem);
-    ASTPrint2(globalScope);
+    if(printAST) ASTPrint2(globalScope);
 
     #if 0
-    Parser parser = {.tokens = tokens}; // uses memory arena
-    NodeRoot ast = Parse(&parser);
-
     Generator gen = {0}; // uses memory arena
     StringChain outputString = Generate(&gen, &ast);
 
@@ -746,3 +760,4 @@ int main(int argc, char** argv){
 }
 
 // TODO: invert all the if conditions in the parser so less nesting
+// TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
