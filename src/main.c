@@ -150,12 +150,6 @@ typedef struct _ASTNode{
     } node;
 } ASTNode;
 
-typedef struct ASTRoot{
-    StmtList stmts;
-
-    // Arena mem;
-} ASTRoot;
-
 void parseAddStatement(StmtList* list, ASTNode* node){
     if(list->size >= list->capacity){
         size_t newCap = list->capacity * 2;
@@ -165,10 +159,6 @@ void parseAddStatement(StmtList* list, ASTNode* node){
     }
 
     list->statements[list->size++] = node;
-}
-
-void ASTRootAddStatement2(ASTRoot* root, ASTNode* node){
-    parseAddStatement(&root->stmts, node);
 }
 
 typedef struct TypeDefinition{
@@ -308,10 +298,10 @@ void ASTNodePrint2(ASTNode* node, int indent){
     }
 }
 
-void ASTPrint2(ASTRoot root){
-    for(int i = 0; i < root.stmts.size; i++){
+void ASTPrint2(Scope* root){
+    for(int i = 0; i < root->stmts.size; i++){
         printf("Statement %i\n", i + 1);
-        ASTNodePrint2(root.stmts.statements[i], 0);
+        ASTNodePrint2(root->stmts.statements[i], 0);
     }
 }
 
@@ -391,7 +381,6 @@ bool parseCheckSemicolon(ParseContext* ctx){
     Token next = parsePeek2(ctx, 0);
     if(next.type == TokenType_SEMICOLON){
         parseConsume2(ctx);
-        // ASTRootAddStatement2(&result, node);
         return TRUE;
     }else{
         ERROR(next.loc, "Statement needs to end with ;");
@@ -541,7 +530,6 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
 
                         // Check for semicolon
                         if(parseCheckSemicolon(ctx)){
-                            // ASTRootAddStatement2(&result, node);
                             parseAddStatement(&currentScope->stmts, node);
                         }
                     }else{
@@ -565,7 +553,6 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                         
                         // Check for semicolon
                         if(parseCheckSemicolon(ctx)){
-                            // ASTRootAddStatement2(&result, node);
                             parseAddStatement(&currentScope->stmts, node);
                         }
                     }else{
@@ -586,7 +573,6 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
 
                         // Check for semicolon
                         if(parseCheckSemicolon(ctx)){
-                            // ASTRootAddStatement2(&result, node);
                             parseAddStatement(&currentScope->stmts, node);
                         }
                     }else{
@@ -611,7 +597,6 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
 
                         // Check for semicolon
                         if(parseCheckSemicolon(ctx)){
-                            // ASTRootAddStatement2(&result, node);
                             parseAddStatement(&currentScope->stmts, node);
                         }
                     }else if(next.type == TokenType_LPAREN){
@@ -729,9 +714,7 @@ int main(int argc, char** argv){
     ctx.opsCount = 4;
 
     Scope* globalScope = Parse2(&ctx, &readFileMem);
-    ASTRoot ast = {0};
-    ast.stmts = globalScope->stmts;
-    ASTPrint2(ast);
+    ASTPrint2(globalScope);
 
     #if 0
     Parser parser = {.tokens = tokens}; // uses memory arena
