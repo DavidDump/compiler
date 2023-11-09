@@ -1,3 +1,4 @@
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <assert.h>
 #include <stdio.h>
@@ -75,7 +76,7 @@ HANDLE CreateChildProcess(char* cmd, HANDLE fdin, HANDLE fdout){
     return piProcInfo.hProcess;
 }
 
-bool WaitForPid(HANDLE pid){
+void WaitForPid(HANDLE pid){
     DWORD result = WaitForSingleObject(pid, INFINITE);
 
     if (result == WAIT_FAILED) {
@@ -112,44 +113,48 @@ int main(int argc, char** argv){
     else if(strcmp(argv[1], "run") == 0) run = TRUE;
     else printf("[ERROR] Invalid subcommand: %s\n", argv[1]);
 
-    HANDLE childStdInR = NULL;
-    HANDLE childStdInW = NULL; // use this
-    HANDLE childStdOutR = NULL; // use this
-    HANDLE childStdOutW = NULL;
-
-    SECURITY_ATTRIBUTES saAttr = {0};
-	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
-	saAttr.bInheritHandle = TRUE;
-	saAttr.lpSecurityDescriptor = NULL;
-	// Creating the pipes
-	// stdout
-	if(!CreatePipe(&childStdOutR, &childStdOutW, &saAttr, 0)){
-		printf("[ERROR] Failed creating pipe for stdout.\n");
-		exit(EXIT_FAILURE);
-	}
-	if(!SetHandleInformation(childStdOutR, HANDLE_FLAG_INHERIT, 0)){
-		printf("[ERROR] Failed setting the inherit flag for stdout.\n");
-		exit(EXIT_FAILURE);
-	}
-	// stdin
-	if(!CreatePipe(&childStdInR, &childStdInW, &saAttr, 0)){
-		printf("[ERROR] Failed creating pipe for stdout.\n");
-		exit(EXIT_FAILURE);
-	}
-	if(!SetHandleInformation(childStdInW, HANDLE_FLAG_INHERIT, 0)){
-		printf("[ERROR] Failed setting the inherit flag for stdout.\n");
-		exit(EXIT_FAILURE);
-	}
-
-    DIR *dir = opendir("./tests/");
-    if(dir){
-        // error
+    #if 0
+    char* dirPath = "./tests";
+    DIR *dir = opendir(dirPath);
+    if(!dir){
+        printf("[ERROR] could not open directory: \"%s\": %s\n", dirPath, GetLastErrorAsString());
+        exit(EXIT_FAILURE);
     }
 
     errno = 0;
     struct dirent *dp = NULL;
     while ((dp = readdir(dir))) {
         if(dp->d_name[0] == '.') continue;
+
+        HANDLE childStdInR = NULL;
+        HANDLE childStdInW = NULL; // use this
+        HANDLE childStdOutR = NULL; // use this
+        HANDLE childStdOutW = NULL;
+
+        SECURITY_ATTRIBUTES saAttr = {0};
+        saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+        saAttr.bInheritHandle = TRUE;
+        saAttr.lpSecurityDescriptor = NULL;
+        // Creating the pipes
+        // stdout
+        if(!CreatePipe(&childStdOutR, &childStdOutW, &saAttr, 0)){
+            printf("[ERROR] Failed creating pipe for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+        if(!SetHandleInformation(childStdOutR, HANDLE_FLAG_INHERIT, 0)){
+            printf("[ERROR] Failed setting the inherit flag for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+        // stdin
+        if(!CreatePipe(&childStdInR, &childStdInW, &saAttr, 0)){
+            printf("[ERROR] Failed creating pipe for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+        if(!SetHandleInformation(childStdInW, HANDLE_FLAG_INHERIT, 0)){
+            printf("[ERROR] Failed setting the inherit flag for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+
         int filenameLen = strlen(dp->d_name);
 
         char* command = "./compiler.exe --tokens ./tests/";
@@ -158,18 +163,63 @@ int main(int argc, char** argv){
         memcpy(commandFull, command, commandLen);
         memcpy(commandFull + commandLen, dp->d_name, filenameLen);
 
-        // printf("full command: %s\n", commandFull);
+        printf("full command: %s\n", commandFull);
         WaitForPid(CreateChildProcess(commandFull, childStdInR, childStdOutW));
+        printf("after wait\n");
         char* out = ReadFromPipe(childStdOutR);
+        
         free(out);
+        CloseHandle(childStdInW);
+        CloseHandle(childStdOutR);
     }
     assert(errno == 0);
 
     int err = closedir(dir);
     assert(err == 0);
+    #else
+    char* commands[3] = {
+        [0] = "./compiler.exe --tokens ./tests/func.xx",
+        [1] = "./compiler.exe --tokens ./tests/statements.xx",
+        [2] = "./compiler.exe --tokens ./tests/example.xx",
+    };
+    for(int i = 0; i < 3; i++){
+        HANDLE childStdInR = NULL;
+        HANDLE childStdInW = NULL; // use this
+        HANDLE childStdOutR = NULL; // use this
+        HANDLE childStdOutW = NULL;
 
-    CloseHandle(childStdInW);
-    CloseHandle(childStdOutR);
+        SECURITY_ATTRIBUTES saAttr = {0};
+        saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+        saAttr.bInheritHandle = TRUE;
+        saAttr.lpSecurityDescriptor = NULL;
+        // Creating the pipes
+        // stdout
+        if(!CreatePipe(&childStdOutR, &childStdOutW, &saAttr, 0)){
+            printf("[ERROR] Failed creating pipe for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+        if(!SetHandleInformation(childStdOutR, HANDLE_FLAG_INHERIT, 0)){
+            printf("[ERROR] Failed setting the inherit flag for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+        // stdin
+        if(!CreatePipe(&childStdInR, &childStdInW, &saAttr, 0)){
+            printf("[ERROR] Failed creating pipe for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+        if(!SetHandleInformation(childStdInW, HANDLE_FLAG_INHERIT, 0)){
+            printf("[ERROR] Failed setting the inherit flag for stdout.\n");
+            exit(EXIT_FAILURE);
+        }
+
+        WaitForPid(CreateChildProcess(commands[i], childStdInR, childStdOutW));
+        char* out = ReadFromPipe(childStdOutR);
+        printf("%.50s\n", out);
+        free(out);
+        CloseHandle(childStdInW);
+        CloseHandle(childStdOutR);
+    }
+    #endif
 
     return EXIT_SUCCESS;
 }
