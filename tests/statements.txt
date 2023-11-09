@@ -1,0 +1,20 @@
+stdout:1027:
+./tests/statements.xx:2:1	 { IDENTIFIER   foo      }
+./tests/statements.xx:2:5	 { INITIALIZER  :=       }
+./tests/statements.xx:2:8	 { INT_LITERAL  1        }
+./tests/statements.xx:2:9	 { SEMICOLON    ;        }
+./tests/statements.xx:3:1	 { IDENTIFIER   bar      }
+./tests/statements.xx:3:5	 { COLON        :        }
+./tests/statements.xx:3:7	 { TYPE         s64      }
+./tests/statements.xx:3:10	 { SEMICOLON    ;        }
+./tests/statements.xx:4:1	 { IDENTIFIER   bar      }
+./tests/statements.xx:4:5	 { ASSIGNMENT   =        }
+./tests/statements.xx:4:7	 { INT_LITERAL  2        }
+./tests/statements.xx:4:8	 { SEMICOLON    ;        }
+./tests/statements.xx:5:1	 { IDENTIFIER   baz      }
+./tests/statements.xx:5:5	 { DOUBLECOLON  ::       }
+./tests/statements.xx:5:8	 { INT_LITERAL  3        }
+./tests/statements.xx:5:9	 { SEMICOLON    ;        }
+./tests/statements.xx:7:1	 { RETURN       return   }
+./tests/statements.xx:7:8	 { INT_LITERAL  1        }
+./tests/statements.xx:7:9	 { SEMICOLON    ;        }

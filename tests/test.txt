@@ -1,0 +1,10 @@
+stdout:454:
+./tests/test.xx:1:1	 { IDENTIFIER   var      }
+./tests/test.xx:1:5	 { IDENTIFIER   x        }
+./tests/test.xx:1:7	 { ASSIGNMENT   =        }
+./tests/test.xx:1:9	 { INT_LITERAL  1        }
+./tests/test.xx:1:10	 { SEMICOLON    ;        }
+./tests/test.xx:2:1	 { RETURN       return   }
+./tests/test.xx:2:8	 { INT_LITERAL  11       }
+./tests/test.xx:2:10	 { SEMICOLON    ;        }
+[ERROR] ./tests/test.xx:1:5 Variable assignment needs an expresion
