@@ -1,4 +1,4 @@
-stdout:454:
+stdout:454
 ./tests/test.xx:1:1	 { IDENTIFIER   var      }
 ./tests/test.xx:1:5	 { IDENTIFIER   x        }
 ./tests/test.xx:1:7	 { ASSIGNMENT   =        }

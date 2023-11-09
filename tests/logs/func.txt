@@ -1,4 +1,4 @@
-stdout:1845:
+stdout:1845
 ./tests/func.xx:1:1	 { IDENTIFIER   blo      }
 ./tests/func.xx:1:5	 { DOUBLECOLON  ::       }
 ./tests/func.xx:1:8	 { INT_LITERAL  3        }

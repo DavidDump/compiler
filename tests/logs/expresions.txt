@@ -1,4 +1,4 @@
-stdout:657:
+stdout:657
 ./tests/expresions.xx:1:1	 { IDENTIFIER   foo      }
 ./tests/expresions.xx:1:5	 { INITIALIZER  :=       }
 ./tests/expresions.xx:1:8	 { INT_LITERAL  3        }

@@ -39,10 +39,14 @@ if __name__ == "__main__":
     if subcommand == "record":
         for entry in os.scandir(TESTS_DIR):
             if entry.is_file() and entry.path.endswith(LANG_EXT):
-                print(f"file found: {entry.name}, path: {entry.path[:-len(entry.name)]}")
                 command = "./compiler.exe --tokens ./tests/" + entry.name
                 output = subprocess.run(command, capture_output=True)
-                with open(entry.path[:-len(entry.name)] + entry.name[:-len(LANG_EXT)] + ".txt", "wb") as f:
+                
+                readPath = entry.path[:-len(entry.name)]
+                logDir = "logs/"
+                filenameNoExt = entry.name[:-len(LANG_EXT)]
+                ext = ".txt"
+                with open(readPath + logDir + filenameNoExt + ext, "wb") as f:
                     header = f"stdout:{len(output.stdout)}\n"
                     f.write(str.encode(header))
                     f.write(output.stdout)

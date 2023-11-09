@@ -1,4 +1,4 @@
-stdout:4447:
+stdout:4447
 ./tests/example.xx:5:1	 { IDENTIFIER   main     }
 ./tests/example.xx:5:6	 { DOUBLECOLON  ::       }
 ./tests/example.xx:5:9	 { LPAREN       (        }
@@ -82,4 +82,4 @@ stdout:4447:
 ./tests/example.xx:27:16	 { IDENTIFIER   b        }
 ./tests/example.xx:27:17	 { SEMICOLON    ;        }
 ./tests/example.xx:28:1	 { RSCOPE       }        }
-[ERROR] ./tests/example.xx:5:33 Function declaration needs to end with a closing parenthesis ')'
+[ERROR] ./tests/example.xx:5:33 Function declaration needs to end with a closing parenthesis ")"

@@ -1,4 +1,4 @@
-stdout:1027:
+stdout:1027
 ./tests/statements.xx:2:1	 { IDENTIFIER   foo      }
 ./tests/statements.xx:2:5	 { INITIALIZER  :=       }
 ./tests/statements.xx:2:8	 { INT_LITERAL  1        }
