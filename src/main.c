@@ -207,9 +207,7 @@ ASTNode* NodeInit2(Arena* mem){
 
 void ASTNodePrint2(ASTNode* node, int indent){
     // TODO: need to fix indentation, everytime a case has a newline it needs to be indented
-    for(int i = 0; i < indent; i++){
-        printf("  ");
-    }
+    for(int h = 0; h < indent; h++) printf("  ");
     switch(node->type){
         case ASTNodeType_COUNT: break;
         case ASTNodeType_NONE: break;
@@ -226,58 +224,73 @@ void ASTNodePrint2(ASTNode* node, int indent){
         } break;
         case ASTNodeType_FUNCTION_DEF: {
             printf("FUNCTION DEF:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.FUNCTION_DEF.identifier;
             String retType = node->node.FUNCTION_DEF.type;
             Args args = node->node.FUNCTION_DEF.args;
-            StmtList stmts = node->node.FUNCTION_DEF.scope->stmts;
+            Scope* scope = node->node.FUNCTION_DEF.scope;
             printf("id: %.*s\n", id.length, id.str);
+            for(int h = 0; h < indent; h++) printf("  ");
             printf("ret: %.*s\n", retType.length, retType.str);
+            for(int h = 0; h < indent; h++) printf("  ");
 
             // args
             for(int i = 0; i < args.size; i++){
+                printf("arg%i:\n", i + 1);
+                for(int h = 0; h < indent; h++) printf("  ");
                 String argId = args.args[i]->node.VAR_DECL.identifier;
                 String argType = args.args[i]->node.VAR_DECL.type;
-                printf("id: %.*s\n", argId.length, argId.str);
-                printf("type: %.*s\n", argType.length, argType.str);
-
+                printf(" id: %.*s\n", argId.length, argId.str);
+                for(int h = 0; h < indent; h++) printf("  ");
+                printf(" type: %.*s\n", argType.length, argType.str);
             }
             
-            printf("stmts:");
-            for(int i = 0; i < stmts.size; i++){
-                ASTNode* stmt = stmts.statements[i];
-                ASTNodePrint2(stmt, indent + 1);
+            for(int i = 0; i < scope->stmts.size; i++){
+                for(int h = 0; h < indent + 1; h++) printf("  ");
+                printf("Statement %i\n", i + 1);
+                ASTNodePrint2(scope->stmts.statements[i], indent + 1);
             }
         } break;
         case ASTNodeType_VAR_DECL: {
             printf("VAR DECL:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL.identifier;
             String type = node->node.VAR_DECL.type;
             printf("id: %.*s\n", id.length, id.str);
+            for(int h = 0; h < indent; h++) printf("  ");
             printf("type: %.*s\n", type.length, type.str);
+            for(int h = 0; h < indent; h++) printf("  ");
         } break;
         case ASTNodeType_VAR_DECL_ASSIGN: {
             printf("VAR DECL ASSIGN:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL_ASSIGN.identifier;
             String type = node->node.VAR_DECL_ASSIGN.type;
             ASTNode* expr = node->node.VAR_DECL_ASSIGN.expresion;
             printf("id: %.*s\n", id.length, id.str);
+            for(int h = 0; h < indent; h++) printf("  ");
             printf("type: %.*s\n", type.length, type.str);
+            for(int h = 0; h < indent; h++) printf("  ");
             printf("expr: \n");
             ASTNodePrint2(expr, indent + 1);
         } break;
         case ASTNodeType_VAR_REASSIGN: {
             printf("VAR REASSIGN:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_REASSIGN.identifier;
             ASTNode* expr = node->node.VAR_REASSIGN.expresion;
             printf("id: %.*s\n", id.length, id.str);
+            for(int h = 0; h < indent; h++) printf("  ");
             printf("expr: \n");
             ASTNodePrint2(expr, indent + 1);
         } break;
         case ASTNodeType_VAR_CONST: {
             printf("VAR CONST:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_CONST.identifier;
             String value = node->node.VAR_CONST.value;
             printf("id: %.*s\n", id.length, id.str);
+            for(int h = 0; h < indent; h++) printf("  ");
             printf("value: %.*s\n", value.length, value.str);
         } break;
         case ASTNodeType_RET: {
@@ -456,15 +469,22 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
                             parseConsume2(ctx);
                             break;
                         }else{
-                            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis ')'");
+                            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
                             exit(EXIT_FAILURE);
                         }
                     }
                 }else{
-                    UNIMPLEMENTED("identifier needs to be followed by colon");
+                    ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
+                    exit(EXIT_FAILURE);
+
                 }
+            }else if(next.type == TokenType_RPAREN){
+                parseConsume2(ctx);
+                break;
             }else{
-                UNIMPLEMENTED("argument needs identifier");
+                ERROR(next.loc, "Function argument needs an identifier");
+                exit(EXIT_FAILURE);
+
             }
         }
     }else{
