@@ -24,7 +24,9 @@ typedef enum TokenType{
     TokenType_NONE,
     
     TokenType_RETURN,      // return
-    TokenType_TYPE,        // u8
+    TokenType_IF,          // if
+    TokenType_ELSE,        // else
+    TokenType_TYPE,        // like u8
     TokenType_SEMICOLON,   // ;
     TokenType_COLON,       // :
     TokenType_DOUBLECOLON, // ::
@@ -40,7 +42,7 @@ typedef enum TokenType{
     TokenType_OPERATOR,    // +
     TokenType_ASSIGNMENT,  // =
     TokenType_COMPARISON,  // ==
-    TokenType_IDENTIFIER,  // foo
+    TokenType_IDENTIFIER,  // any string that is not a keyword
     TokenType_INT_LITERAL, // 69
     
     TokenType_COUNT,
@@ -51,6 +53,8 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_NONE]        = "NONE",
     
     [TokenType_RETURN]      = "RETURN",
+    [TokenType_IF]          = "IF",
+    [TokenType_ELSE]        = "ELSE",
     [TokenType_TYPE]        = "TYPE",
     [TokenType_SEMICOLON]   = "SEMICOLON",
     [TokenType_COLON]       = "COLON",
@@ -97,7 +101,7 @@ char* TokenizerConsume(Tokenizer* tokenizer);
 bool isLetter(char c);
 bool isNumber(char c);
 bool isWhitespace(char c);
-bool isOperator(Tokenizer* tokenizer, char c);
+bool isOperator(Tokenizer* tokenizer, char* c, int* len);
 void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum);
 
 #endif // COMP_LEXER_H

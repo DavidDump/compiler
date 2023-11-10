@@ -1,7 +1,8 @@
 #include "lexer.h"
 #include "common.h"
 
-#include <stdio.h>
+#include <stdio.h> // printf()
+#include <string.h> // strlen()
 
 Tokenizer TokenizerInit(String source, String filename, TypeInformation* typeInfo, OperatorInformation* opsInfo){
     Tokenizer tokenizer = {
@@ -41,10 +42,10 @@ bool isSpecial(char c){
 }
 #endif
 
-// NOTE: this doesnt work for multichar operators
-bool isOperator(Tokenizer* tokenizer, char c){
+bool isOperator(Tokenizer* tokenizer, char* c, int* len){
     for(int i = 0; i < tokenizer->opsInfo->size; i++){
-        if(tokenizer->opsInfo->ops[i].symbol.str[0] == c){
+        if(StringContains(tokenizer->opsInfo->ops[i].symbol, c)){
+            *len = tokenizer->opsInfo->ops[i].symbol.length;
             return TRUE;
         }
     }
@@ -81,6 +82,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
     TokenArray tokens = {0};
     int lineNum = 1;
     int collumNum = 1;
+    int operatorLen = 0; // used for determining the lenght on multichar operators
     for(char* c = TokenizerConsume(tokenizer); c != 0; c = TokenizerConsume(tokenizer), collumNum++){
         // special case: line comment
         if(*c == '/'){
@@ -101,8 +103,10 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             String value = {.str = start, .length = len};
             TokenType type = TokenType_NONE;
             // compare keywords and types
-            if(StringEqualsCstr(value, "return"))  type = TokenType_RETURN;
-            else if(TokenIsType(tokenizer, value)) type = TokenType_TYPE;
+            if(StringEqualsCstr(value, "return"))    type = TokenType_RETURN;
+            else if(StringEqualsCstr(value, "if"))   type = TokenType_IF;
+            else if(StringEqualsCstr(value, "else")) type = TokenType_ELSE;
+            else if(TokenIsType(tokenizer, value))   type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
 
             TokenArrayAddToken(&tokens, value, type, tokenizer->filename, lineNum, collumNum);
@@ -121,7 +125,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
 
             collumNum += len - 1;
             tokenizer->index += len - 1;
-        }else if(isOperator(tokenizer, *c)){
+        }else if(isOperator(tokenizer, c, &operatorLen)){
             // operators
 
             // special case -> operator
@@ -137,7 +141,8 @@ TokenArray Tokenize(Tokenizer* tokenizer){
                 }
             }
 
-            String str = {.str = c, .length = 1};
+            for(int i = 0; i < operatorLen - 1; i++) TokenizerConsume(tokenizer);
+            String str = {.str = c, .length = operatorLen};
             TokenArrayAddToken(&tokens, str, TokenType_OPERATOR, tokenizer->filename, lineNum, collumNum);
         }else if(*c == ';'){
             // semicolon
@@ -145,17 +150,8 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             TokenArrayAddToken(&tokens, str, TokenType_SEMICOLON, tokenizer->filename, lineNum, collumNum);
         }else if(*c == '='){
             // equals
-            char next = TokenizerPeek(tokenizer, 0);
-            if(next == '='){
-                String str = {.str = c, .length = 2};
-                TokenArrayAddToken(&tokens, str, TokenType_COMPARISON, tokenizer->filename, lineNum, collumNum);
-                
-                TokenizerConsume(tokenizer);
-                collumNum++;
-            }else{
-                String str = {.str = c, .length = 1};
-                TokenArrayAddToken(&tokens, str, TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
-            }
+            String str = {.str = c, .length = 1};
+            TokenArrayAddToken(&tokens, str, TokenType_ASSIGNMENT, tokenizer->filename, lineNum, collumNum);
         }else if(*c == ':'){
             // : or :: operator
             char next = TokenizerPeek(tokenizer, 0);
@@ -230,9 +226,47 @@ void TokenPrint(Token t){
     printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
 }
 
+void TokenPrintAsTable(Token t, int locWidth, int symbolNameWidth, int symbolWidth){
+    int printed = 0;
+    int remaining = 0;
+    
+    printed = printf("%.*s:%i:%i", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
+    remaining = locWidth - printed;
+    for(int i = 0; i < remaining + 1; i++) printf(" ");
+    printf("{  ");
+    printed = printf("%s", TokenTypeStr[t.type]);
+    remaining = symbolNameWidth - printed;
+    for(int i = 0; i < remaining + 1; i++) printf(" ");
+    printed = printf("%.*s", t.value.length, t.value.str);
+    remaining = symbolWidth - printed;
+    for(int i = 0; i < remaining + 1; i++) printf(" ");
+    printf(" }\n");
+}
+
 void TokensPrint(TokenArray* tokens){
+    // collect collum width information
+    int locWidth = 0;
+    int symbolNameWidth = 0;
+    int symbolWidth = 0;
     for(int i = 0; i < tokens->size; i++){
         Token t = tokens->tokens[i];
-        TokenPrint(t);
+        #define BUFFER_SIZE 1024
+        char buffer[BUFFER_SIZE] = {0};
+
+        int len = snprintf(buffer, BUFFER_SIZE, "%.*s:%i:%i", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
+        if(len > locWidth) locWidth = len;
+        memset(buffer, 0, len);
+
+        len = strlen(TokenTypeStr[t.type]);
+        if(len > symbolNameWidth) symbolNameWidth = len;
+
+        len = snprintf(buffer, BUFFER_SIZE, "%.*s", t.value.length, t.value.str);
+        if(len > symbolWidth) symbolWidth = len;
+    }
+
+    // print the table
+    for(int i = 0; i < tokens->size; i++){
+        Token t = tokens->tokens[i];
+        TokenPrintAsTable(t, locWidth, symbolNameWidth, symbolWidth);
     }
 }
