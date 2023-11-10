@@ -71,8 +71,11 @@ typedef enum ASTNodeType{
     ASTNodeType_VAR_REASSIGN,
     ASTNodeType_VAR_CONST,
     ASTNodeType_RET,
+    ASTNodeType_IF,
+    ASTNodeType_ELSE,
     ASTNodeType_EXPRESION,
     ASTNodeType_INT_LIT,
+    ASTNodeType_SYMBOL_RVALUE,
     
     ASTNodeType_COUNT,
 } ASTNodeType;
@@ -140,14 +143,24 @@ typedef struct _ASTNode{
         struct RET {
             ASTNode* expresion;
         } RET;
-        struct EXPRESION{
+        struct EXPRESION {
             String operator;
             ASTNode* rhs;
             ASTNode* lhs;
         } EXPRESION;
-        struct INT_LIT{
+        struct INT_LIT {
             String value;
         } INT_LIT;
+        struct IF {
+            ASTNode* expresion;
+            Scope* scope;
+        } IF;
+        struct ELSE {
+            Scope* scope;
+        } ELSE;
+        struct SYMBOL_RVALUE {
+            String identifier;
+        } SYMBOL_RVALUE;
     } node;
 } ASTNode;
 
@@ -245,6 +258,7 @@ void ASTNodePrint2(ASTNode* node, int indent){
                 printf(" type: %.*s\n", argType.length, argType.str);
             }
             
+            // statements
             for(int i = 0; i < scope->stmts.size; i++){
                 for(int h = 0; h < indent + 1; h++) printf("  ");
                 printf("Statement %i\n", i + 1);
@@ -298,6 +312,36 @@ void ASTNodePrint2(ASTNode* node, int indent){
             ASTNode* expr = node->node.RET.expresion;
             ASTNodePrint2(expr, indent + 1);
         } break;
+        case ASTNodeType_IF: {
+            printf("IF:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
+            ASTNode* expr = node->node.IF.expresion;
+            Scope* scope = node->node.IF.scope;
+            printf("expr:\n");
+            ASTNodePrint2(expr, indent + 1);
+
+            // statements
+            for(int i = 0; i < scope->stmts.size; i++){
+                for(int h = 0; h < indent + 1; h++) printf("  ");
+                printf("Statement %i\n", i + 1);
+                ASTNodePrint2(scope->stmts.statements[i], indent + 1);
+            }
+        } break;
+        case ASTNodeType_ELSE: {
+            printf("ELSE:\n");
+            Scope* scope = node->node.ELSE.scope;
+
+            // statements
+            for(int i = 0; i < scope->stmts.size; i++){
+                for(int h = 0; h < indent + 1; h++) printf("  ");
+                printf("Statement %i\n", i + 1);
+                ASTNodePrint2(scope->stmts.statements[i], indent + 1);
+            }
+        } break;
+        case ASTNodeType_SYMBOL_RVALUE: {
+            String id = node->node.SYMBOL_RVALUE.identifier;
+            printf("RVALUE: %.*s\n", id.length, id.str);
+        } break;
     }
 }
 
@@ -327,15 +371,39 @@ Token parsePeek2(ParseContext* ctx, int num){
 	return ctx->tokens.tokens[ctx->index + num];
 }
 
-ASTNode* parsePrimary2(ParseContext* ctx, Arena* mem){
+bool parseScopeContainsSymbol(Scope* scope, String symbol){
+    Scope* workingScope = scope;
+    while(workingScope){
+        for(int i = 0; i < workingScope->symbolSize; i++){
+            if(StringEquals(workingScope->symbolTable[i], symbol)){
+                return TRUE;
+            }
+        }
+        workingScope = workingScope->parent;
+    }
+    return FALSE;
+}
+
+ASTNode* parsePrimary2(ParseContext* ctx, Arena* mem, Scope* scope){
 	Token t = parseConsume2(ctx);
 	if(t.type == TokenType_INT_LITERAL){
 		ASTNode* node = NodeInit2(mem);
 		node->type = ASTNodeType_INT_LIT;
         node->node.INT_LIT.value = t.value;
 		return node;
+	}else if(t.type == TokenType_IDENTIFIER){
+		ASTNode* node = NodeInit2(mem);
+		node->type = ASTNodeType_SYMBOL_RVALUE;
+        node->node.SYMBOL_RVALUE.identifier = t.value;
+        // TODO: should look up in the symbol table if the symbol is already defined
+        if(!parseScopeContainsSymbol(scope, t.value)){
+            ERROR(t.loc, "Undefined symbol");
+            exit(EXIT_FAILURE);
+        }
+
+		return node;
 	}else{
-		printf("[ERROR] malformed expresion\n");
+        ERROR(t.loc, "Malformed expresion, exprected int literal or variable");
 		exit(EXIT_FAILURE);
 	}
 }
@@ -343,20 +411,20 @@ ASTNode* parsePrimary2(ParseContext* ctx, Arena* mem){
 // TODO: make expresion parsing not recursive
 // TODO: make parenthesis reset precedece so correct AST gets generated
 // NOTE: Implementation from: https://en.wikipedia.org/wiki/Operator-precedence_parser
-ASTNode* parseExpression2_rec(ParseContext* ctx, Arena* mem, ASTNode* lhs, int precedence){
+ASTNode* parseExpression2_rec(ParseContext* ctx, Arena* mem, Scope* scope, ASTNode* lhs, int precedence){
 	Token next = parsePeek2(ctx, 0);
 	while(next.type == TokenType_OPERATOR){
 		int tokenPrecedence = OpGetPrecedence2(ctx, next.value);
 		if(tokenPrecedence >= precedence){
 			Token op = next;
 			parseConsume2(ctx);
-			ASTNode* rhs = parsePrimary2(ctx, mem);
+			ASTNode* rhs = parsePrimary2(ctx, mem, scope);
 			next = parsePeek2(ctx, 0);
 			while(next.type == TokenType_OPERATOR){
 				int newPrecedence = OpGetPrecedence2(ctx, next.value);
 				// the associativity of the operator can be set here
 				if(newPrecedence >= tokenPrecedence){
-					rhs = parseExpression2_rec(ctx, mem, rhs, tokenPrecedence + (newPrecedence > tokenPrecedence ? 1 : 0));
+					rhs = parseExpression2_rec(ctx, mem, scope, rhs, tokenPrecedence + (newPrecedence > tokenPrecedence ? 1 : 0));
 					next = parsePeek2(ctx, 0);
 				}else{
                     break;
@@ -375,9 +443,9 @@ ASTNode* parseExpression2_rec(ParseContext* ctx, Arena* mem, ASTNode* lhs, int p
 	return lhs;
 }
 
-ASTNode* parseExpression2(ParseContext* ctx, Arena* mem){
-    ASTNode* intLit = parsePrimary2(ctx, mem);
-	return parseExpression2_rec(ctx, mem, intLit, 5);
+ASTNode* parseExpression2(ParseContext* ctx, Arena* mem, Scope* scope){
+    ASTNode* intLit = parsePrimary2(ctx, mem, scope);
+	return parseExpression2_rec(ctx, mem, scope, intLit, 0);
 }
 
 bool parseCheckSemicolon(ParseContext* ctx){
@@ -511,7 +579,7 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                 if(next.type == TokenType_INT_LITERAL){
                     ASTNode* node = NodeInit2(mem);
                     node->type = ASTNodeType_RET;
-                    node->node.RET.expresion = parseExpression2(ctx, mem);
+                    node->node.RET.expresion = parseExpression2(ctx, mem, currentScope);
                     
                     // Check for semicolon
                     if(parseCheckSemicolon(ctx)){
@@ -532,7 +600,7 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                         ASTNode* node = NodeInit2(mem);
                         node->type = ASTNodeType_VAR_DECL_ASSIGN;
                         node->node.VAR_DECL_ASSIGN.identifier = t.value;
-                        node->node.VAR_DECL_ASSIGN.expresion = parseExpression2(ctx, mem);
+                        node->node.VAR_DECL_ASSIGN.expresion = parseExpression2(ctx, mem, currentScope);
                         // TODO: add types, figure out type here
                         // node->node.VAR_DECL_ASSIGN.type = ;
                         
@@ -578,7 +646,7 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                         ASTNode* node = NodeInit2(mem);
                         node->type = ASTNodeType_VAR_REASSIGN;
                         node->node.VAR_REASSIGN.identifier = t.value;
-                        node->node.VAR_REASSIGN.expresion = parseExpression2(ctx, mem);
+                        node->node.VAR_REASSIGN.expresion = parseExpression2(ctx, mem, currentScope);
 
                         // TODO: check if the variable is in the symbol table
 
@@ -656,13 +724,56 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                         exit(EXIT_FAILURE);
                     }
                 }else{
-                    ERROR(next.loc, "Variable assignment needs an expresion");
+                    ERROR(next.loc, "Symbol creation needs to be a variable, constant or function");
                     exit(EXIT_FAILURE);
                 }
             } break;
             case TokenType_RSCOPE: {
-                currentScope = currentScope->parent;
                 // TODO: is this all here???
+                if(currentScope->parent){
+                    currentScope = currentScope->parent;
+                }else{
+                    ERROR(t.loc, "Closing parenthesis needs a pair");
+                    exit(EXIT_FAILURE);
+                }
+            } break;
+            case TokenType_IF: {
+                ASTNode* node = NodeInit2(mem);
+                node->type = ASTNodeType_IF;
+                ASTNode* expr = parseExpression2(ctx, mem, currentScope); // TODO: boolean expresions
+                node->node.IF.expresion = expr;
+                
+                Token next = parsePeek2(ctx, 0);
+                if(next.type == TokenType_LSCOPE){
+                    parseConsume2(ctx);
+                    Scope* newScope = parseScopeInit(mem, currentScope);
+                    node->node.IF.scope = newScope;
+
+                    parseAddStatement(&currentScope->stmts, node);
+                    currentScope = newScope;
+                }else{
+                    // TODO: later add if condition without curly braces when it only contains one statement
+                    ERROR(next.loc, "If condition needs a body");
+                    exit(EXIT_FAILURE);
+                }
+            } break;
+            case TokenType_ELSE: {
+                ASTNode* node = NodeInit2(mem);
+                node->type = ASTNodeType_ELSE;
+
+                Token next = parsePeek2(ctx, 0);
+                if(next.type == TokenType_LSCOPE){
+                    parseConsume2(ctx);
+                    Scope* newScope = parseScopeInit(mem, currentScope);
+                    node->node.ELSE.scope = newScope;
+
+                    parseAddStatement(&currentScope->stmts, node);
+                    currentScope = newScope;
+                }else{
+                    // TODO: later add else block without curly braces when it only contains one statement
+                    ERROR(next.loc, "Else branch needs a body");
+                    exit(EXIT_FAILURE);
+                }
             } break;
 
             case TokenType_TYPE:
@@ -731,10 +842,12 @@ int main(int argc, char** argv){
     addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s32"), 4));
     addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s64"), 8));
     addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("string"), 0)); // TODO: figure out string byteSize
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("bool"), 1));
 
     // oeperators
     OperatorInformation opInfo = {0};
     // TODO: figure out how to group all the int-like types so biary operators can be generated easily
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("=="), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
     addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("+"), 5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
     addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("-"), 5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
     addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("*"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
