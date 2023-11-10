@@ -53,3 +53,11 @@ bool StringEqualsCstr(String str1, const char* cstr){
     }
     return TRUE;
 }
+
+bool StringContains(String str1, const char* cstr){
+    if(str1.length > (int)strlen(cstr)) return FALSE;
+    for(int i = 0; i < str1.length; i++){
+        if(str1.str[i] != cstr[i]) return FALSE;
+    }
+    return TRUE;
+}

@@ -29,5 +29,6 @@ String StringFromCstrLit(const char* cstr);
 String StringFromArray(Arena* mem, const char* arr, int size);
 bool StringEquals(String str1, String str2);
 bool StringEqualsCstr(String str1, const char* cstr);
+bool StringContains(String str1, const char* cstr);
 
 #endif // COMP_STRING_H
