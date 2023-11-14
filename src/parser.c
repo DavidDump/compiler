@@ -616,8 +616,15 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                         ERROR(next.loc, "Constant needs to be a value known at compile time or a function declaration");
                         exit(EXIT_FAILURE);
                     }
+                }else if(next.type == TokenType_LPAREN){
+                    // function call
+                    ASTNode* func = parseFunctionCall(ctx, mem, currentScope);
+
+                    if(parseCheckSemicolon(ctx)){
+                        parseAddStatement(&currentScope->stmts, func);
+                    }
                 }else{
-                    ERROR(next.loc, "Symbol creation needs to be a variable, constant or function");
+                    ERROR(next.loc, "Symbol needs to be a variable/function declaration or function call");
                     exit(EXIT_FAILURE);
                 }
             } break;
