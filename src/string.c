@@ -1,7 +1,7 @@
 #include "string.h"
 #include "common.h"
 
-#include <string.h>
+#include <string.h> // strlen(), memcpy()
 
 void StringChainAppend(StringChain* chain, Arena* mem, String str){
     StringNode* node = arena_alloc(mem, sizeof(StringNode));
