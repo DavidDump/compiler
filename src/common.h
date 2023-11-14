@@ -7,8 +7,8 @@ typedef int bool;
 
 // NOTE: -pedantic does not support __FUNCTION__
 // #define UNIMPLEMENTED(x) printf("[NOT IMPLEMENTED] %s:%i in %s() %s\n", __FILE__, __LINE__, __FUNCTION__, (x))
-#define UNIMPLEMENTED(x) printf("[NOT IMPLEMENTED] %s:%i: %s\n", __FILE__, __LINE__, (x))
+#define UNIMPLEMENTED(x) printf("[NOT IMPLEMENTED] %s:%i: %s\n", __FILE__, __LINE__, (x)), exit(EXIT_FAILURE)
 #define UNUSED(x) (void)(x)
-#define ERROR(loc, msg) printf("[ERROR] %.*s:%i:%i %s\n", (loc).filename.length, (loc).filename.str, (loc).line, (loc).collum, msg)
+#define ERROR(loc, msg) printf("[ERROR] %.*s:%i:%i %s\n", (loc).filename.length, (loc).filename.str, (loc).line, (loc).collum, msg), exit(EXIT_FAILURE)
 
 #endif // COMP_COMMON_H
