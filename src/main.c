@@ -356,12 +356,12 @@ void ASTNodePrint2(ASTNode* node, int indent){
             String id = node->node.FUNCTION_CALL.identifier;
             Args args = node->node.FUNCTION_CALL.args;
             printf("id: %.*s\n", id.length, id.str);
-            for(int h = 0; h < indent + 1; h++) printf("  ");
 
             // args
             for(int i = 0; i < args.size; i++){
+                for(int h = 0; h < indent + 1; h++) printf("  ");
                 printf("arg%i:\n", i + 1);
-                ASTNodePrint2(args.args[0], indent + 1);
+                ASTNodePrint2(args.args[i], indent + 1);
             }
         } break;
     }
@@ -543,6 +543,7 @@ void parseType(ParseContext* ctx){
     UNIMPLEMENTED("parseType");
 }
 
+// NOTE: parseFunctionCall and parseExpresion should return a custom error type that stores the error if one happened.
 // ctx should point to the function id token
 ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope){
     Args args = {0};
@@ -578,7 +579,6 @@ ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope){
         next = parsePeek2(ctx, 0);
         if(next.type == TokenType_COMMA){
             parseConsume2(ctx);
-            // next = parsePeek2(ctx, 0);
             continue;
         }else if(next.type == TokenType_RPAREN){
             // break
@@ -599,56 +599,54 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     Args result = {0};
     
     Token next = parseConsume2(ctx);
-    if(next.type == TokenType_LPAREN){
-        for(int i = ctx->index; i < ctx->tokens.size; i++){
+    if(!(next.type == TokenType_LPAREN)){
+        ERROR(next.loc, "Function arguments need to be inside parenthesis");
+        exit(EXIT_FAILURE);
+    }
+    for(int i = ctx->index; i < ctx->tokens.size; i++){
+        next = parsePeek2(ctx, 0);
+        if(next.type == TokenType_IDENTIFIER){
+            parseConsume2(ctx);
+            parseScopeAddSymbol(scope, next.value);
+            Token id = next;
+
             next = parsePeek2(ctx, 0);
-            if(next.type == TokenType_IDENTIFIER){
+            if(!(next.type == TokenType_COLON)){
+                ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
+                exit(EXIT_FAILURE);
+            }
+            parseConsume2(ctx);
+            next = parsePeek2(ctx, 0);
+            if(!(next.type == TokenType_TYPE)){
+                ERROR(next.loc, "Function argument needs a type");
+                exit(EXIT_FAILURE);
+            }
+            parseConsume2(ctx);
+            ASTNode* node = NodeInit2(&result.mem);
+            node->type = ASTNodeType_VAR_DECL;
+            node->node.VAR_DECL.identifier = id.value;
+            node->node.VAR_DECL.type = next.value;
+
+            parseAddArg(&result, node);
+
+            next = parsePeek2(ctx, 0);
+            if(next.type == TokenType_COMMA){
                 parseConsume2(ctx);
-                parseScopeAddSymbol(scope, next.value);
-                Token id = next;
-
-                next = parsePeek2(ctx, 0);
-                if(next.type == TokenType_COLON){
-                    parseConsume2(ctx);
-                    next = parsePeek2(ctx, 0);
-                    if(next.type == TokenType_TYPE){
-                        parseConsume2(ctx);
-                        ASTNode* node = NodeInit2(&result.mem);
-                        node->type = ASTNodeType_VAR_DECL;
-                        node->node.VAR_DECL.identifier = id.value;
-                        node->node.VAR_DECL.type = next.value;
-
-                        parseAddArg(&result, node);
-
-                        next = parsePeek2(ctx, 0);
-                        if(next.type == TokenType_COMMA){
-                            parseConsume2(ctx);
-                            continue;
-                        }else if(next.type == TokenType_RPAREN){
-                            parseConsume2(ctx);
-                            break;
-                        }else{
-                            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
-                            exit(EXIT_FAILURE);
-                        }
-                    }
-                }else{
-                    ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
-                    exit(EXIT_FAILURE);
-
-                }
+                continue;
             }else if(next.type == TokenType_RPAREN){
                 parseConsume2(ctx);
                 break;
             }else{
-                ERROR(next.loc, "Function argument needs an identifier");
+                ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
                 exit(EXIT_FAILURE);
-
             }
+        }else if(next.type == TokenType_RPAREN){
+            parseConsume2(ctx);
+            break;
+        }else{
+            ERROR(next.loc, "Function argument needs an identifier");
+            exit(EXIT_FAILURE);
         }
-    }else{
-        ERROR(next.loc, "Function arguments need to be inside parenthesis");
-        exit(EXIT_FAILURE);
     }
 
     return result;
@@ -708,23 +706,22 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                     // decl
                     parseConsume2(ctx);
                     next = parsePeek2(ctx, 0);
-                    if(next.type == TokenType_TYPE){
-                        parseConsume2(ctx);
-                        ASTNode* node = NodeInit2(mem);
-                        node->type = ASTNodeType_VAR_DECL;
-                        node->node.VAR_DECL.identifier = t.value;
-                        node->node.VAR_DECL.type = next.value;
-
-                        // TODO: add the variable to the symbol table
-                        parseScopeAddSymbol(currentScope, t.value);
-                        
-                        // Check for semicolon
-                        if(parseCheckSemicolon(ctx)){
-                            parseAddStatement(&currentScope->stmts, node);
-                        }
-                    }else{
+                    if(!(next.type == TokenType_TYPE)){
                         ERROR(next.loc, "Variable declaration without initializer needs a type");
                         exit(EXIT_FAILURE);
+                    }
+                    parseConsume2(ctx);
+                    ASTNode* node = NodeInit2(mem);
+                    node->type = ASTNodeType_VAR_DECL;
+                    node->node.VAR_DECL.identifier = t.value;
+                    node->node.VAR_DECL.type = next.value;
+
+                    // TODO: add the variable to the symbol table
+                    parseScopeAddSymbol(currentScope, t.value);
+                    
+                    // Check for semicolon
+                    if(parseCheckSemicolon(ctx)){
+                        parseAddStatement(&currentScope->stmts, node);
                     }
                 }else if(next.type == TokenType_ASSIGNMENT){
                     // reassign
@@ -788,30 +785,27 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
 
                         // ret type
                         next = parsePeek2(ctx, 0);
-                        if(next.type == TokenType_RARROW){
-                            parseConsume2(ctx);
-                            next = parsePeek2(ctx, 0);
-                            if(next.type == TokenType_TYPE){
-                                parseConsume2(ctx);
-                                node->node.FUNCTION_DEF.type = next.value;
-                                next = parsePeek2(ctx, 0);
-                                if(next.type == TokenType_LSCOPE){
-                                    parseConsume2(ctx);
-
-                                    node->node.FUNCTION_DEF.scope = functionScope;
-                                    parseAddStatement(&scopeBackup->stmts, node);
-                                }else{
-                                    ERROR(next.loc, "Function needs to have a scope");
-                                    exit(EXIT_FAILURE);
-                                }
-                            }else{
-                                ERROR(next.loc, "Function needs a return type");
-                                exit(EXIT_FAILURE);
-                            }
-                        }else{
+                        if(!(next.type == TokenType_RARROW)){
                             ERROR(next.loc, "Function arguments need to be followed by the return type bikeshedder \"->\"");
                             exit(EXIT_FAILURE);
                         }
+                        parseConsume2(ctx);
+                        next = parsePeek2(ctx, 0);
+                        if(!(next.type == TokenType_TYPE)){
+                            ERROR(next.loc, "Function needs a return type");
+                            exit(EXIT_FAILURE);
+                        }
+                        parseConsume2(ctx);
+                        node->node.FUNCTION_DEF.type = next.value;
+                        next = parsePeek2(ctx, 0);
+                        if(!(next.type == TokenType_LSCOPE)){
+                            ERROR(next.loc, "Function needs to have a scope");
+                            exit(EXIT_FAILURE);
+                        }
+                        parseConsume2(ctx);
+
+                        node->node.FUNCTION_DEF.scope = functionScope;
+                        parseAddStatement(&scopeBackup->stmts, node);
                     }else{
                         ERROR(next.loc, "Constant needs to be a value known at compile time or a function declaration");
                         exit(EXIT_FAILURE);
@@ -823,12 +817,11 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
             } break;
             case TokenType_RSCOPE: {
                 // TODO: is this all here???
-                if(currentScope->parent){
-                    currentScope = currentScope->parent;
-                }else{
+                if(!currentScope->parent){
                     ERROR(t.loc, "Closing parenthesis needs a pair");
                     exit(EXIT_FAILURE);
                 }
+                currentScope = currentScope->parent;
             } break;
             case TokenType_IF: {
                 // if block
@@ -843,36 +836,34 @@ Scope* Parse2(ParseContext* ctx, Arena* mem){
                 node->node.IF.expresion = expr;
                 
                 Token next = parsePeek2(ctx, 0);
-                if(next.type == TokenType_LSCOPE){
-                    parseConsume2(ctx);
-                    Scope* newScope = parseScopeInit(mem, currentScope);
-                    node->node.IF.scope = newScope;
-
-                    parseAddStatement(&currentScope->stmts, node);
-                    currentScope = newScope;
-                }else{
+                if(!(next.type == TokenType_LSCOPE)){
                     // TODO: later add if condition without curly braces when it only contains one statement
                     ERROR(next.loc, "If condition needs a body");
                     exit(EXIT_FAILURE);
                 }
+                parseConsume2(ctx);
+                Scope* newScope = parseScopeInit(mem, currentScope);
+                node->node.IF.scope = newScope;
+
+                parseAddStatement(&currentScope->stmts, node);
+                currentScope = newScope;
             } break;
             case TokenType_ELSE: {
                 ASTNode* node = NodeInit2(mem);
                 node->type = ASTNodeType_ELSE;
 
                 Token next = parsePeek2(ctx, 0);
-                if(next.type == TokenType_LSCOPE){
-                    parseConsume2(ctx);
-                    Scope* newScope = parseScopeInit(mem, currentScope);
-                    node->node.ELSE.scope = newScope;
-
-                    parseAddStatement(&currentScope->stmts, node);
-                    currentScope = newScope;
-                }else{
+                if(!(next.type == TokenType_LSCOPE)){
                     // TODO: later add else block without curly braces when it only contains one statement
                     ERROR(next.loc, "Else branch needs a body");
                     exit(EXIT_FAILURE);
                 }
+                parseConsume2(ctx);
+                Scope* newScope = parseScopeInit(mem, currentScope);
+                node->node.ELSE.scope = newScope;
+
+                parseAddStatement(&currentScope->stmts, node);
+                currentScope = newScope;
             } break;
 
             case TokenType_TYPE:
@@ -992,5 +983,7 @@ int main(int argc, char** argv){
     exit(EXIT_SUCCESS);
 }
 
-// TODO: invert all the if conditions in the parser so less nesting
 // TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
+// TODO: better error messeges when failing to parse an expresion
+// TODO: instead of specifying operator left hand type and right hand type,
+//       use type properties so we dont have to add operators multiple times for different types
