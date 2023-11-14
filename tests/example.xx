@@ -12,7 +12,7 @@ main :: (argc: u64, argv: string[]) -> u8 {
     // constant value declaration uses the "::" operator
     baz :: 3;
 
-    // boolean comparason uses the "==" operator
+    // boolean comparison uses the "==" operator
     if foo == 1 {
         bar = add(2, bar);
     }else{
