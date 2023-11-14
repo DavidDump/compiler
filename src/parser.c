@@ -212,8 +212,6 @@ bool parseScopeContainsSymbol(Scope* scope, String symbol){
     return FALSE;
 }
 
-ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope);
-
 ASTNode* parsePrimary(ParseContext* ctx, Arena* mem, Scope* scope){
 	Token t = parseConsume(ctx);
 	if(t.type == TokenType_INT_LITERAL){
@@ -291,13 +289,12 @@ ASTNode* parseExpression(ParseContext* ctx, Arena* mem, Scope* scope){
 
 bool parseCheckSemicolon(ParseContext* ctx){
     Token next = parsePeek(ctx, 0);
-    if(next.type == TokenType_SEMICOLON){
-        parseConsume(ctx);
-        return TRUE;
-    }else{
+    if(next.type != TokenType_SEMICOLON){
         ERROR(next.loc, "Statement needs to end with ;");
         exit(EXIT_FAILURE);
     }
+    parseConsume(ctx);
+    return TRUE;
 }
 
 void parseScopeAddChild(Scope* parent, Scope* child){
@@ -344,9 +341,13 @@ void parseScopeAddSymbol(Scope* scope, String symbol){
     scope->symbolTable[scope->symbolSize++] = symbol;
 }
 
+// context should point to the first token of the type
 void parseType(ParseContext* ctx){
     UNUSED(ctx);
     UNIMPLEMENTED("parseType");
+
+    Token next = parseConsume(ctx);
+    // if(next.type )
 }
 
 // NOTE: parseFunctionCall and parseExpresion should return a custom error type that stores the error if one happened.
@@ -357,14 +358,14 @@ ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope){
     node->type = ASTNodeType_FUNCTION_CALL;
 
     Token next = parsePeek(ctx, 0);
-    if(!(next.type == TokenType_IDENTIFIER)){
+    if(next.type != TokenType_IDENTIFIER){
         // error
         return NULL;
     }
     node->node.FUNCTION_CALL.identifier = next.value;
     
     next = parsePeek(ctx, 1);
-    if(!(next.type == TokenType_LPAREN)){
+    if(next.type != TokenType_LPAREN){
         // error
         return NULL;
     }
@@ -396,7 +397,6 @@ ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope){
         }
     }
     node->node.FUNCTION_CALL.args = args;
-    // parseAddStatement(&scope->stmts, node);
     return node;
 }
 
@@ -405,7 +405,7 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     Args result = {0};
     
     Token next = parseConsume(ctx);
-    if(!(next.type == TokenType_LPAREN)){
+    if(next.type != TokenType_LPAREN){
         ERROR(next.loc, "Function arguments need to be inside parenthesis");
         exit(EXIT_FAILURE);
     }
@@ -417,13 +417,13 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
             Token id = next;
 
             next = parsePeek(ctx, 0);
-            if(!(next.type == TokenType_COLON)){
+            if(next.type != TokenType_COLON){
                 ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
                 exit(EXIT_FAILURE);
             }
             parseConsume(ctx);
             next = parsePeek(ctx, 0);
-            if(!(next.type == TokenType_TYPE)){
+            if(next.type != TokenType_TYPE){
                 ERROR(next.loc, "Function argument needs a type");
                 exit(EXIT_FAILURE);
             }
@@ -512,7 +512,7 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                     // decl
                     parseConsume(ctx);
                     next = parsePeek(ctx, 0);
-                    if(!(next.type == TokenType_TYPE)){
+                    if(next.type != TokenType_TYPE){
                         ERROR(next.loc, "Variable declaration without initializer needs a type");
                         exit(EXIT_FAILURE);
                     }
@@ -591,20 +591,20 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
 
                         // ret type
                         next = parsePeek(ctx, 0);
-                        if(!(next.type == TokenType_RARROW)){
+                        if(next.type != TokenType_RARROW){
                             ERROR(next.loc, "Function arguments need to be followed by the return type bikeshedder \"->\"");
                             exit(EXIT_FAILURE);
                         }
                         parseConsume(ctx);
                         next = parsePeek(ctx, 0);
-                        if(!(next.type == TokenType_TYPE)){
+                        if(next.type != TokenType_TYPE){
                             ERROR(next.loc, "Function needs a return type");
                             exit(EXIT_FAILURE);
                         }
                         parseConsume(ctx);
                         node->node.FUNCTION_DEF.type = next.value;
                         next = parsePeek(ctx, 0);
-                        if(!(next.type == TokenType_LSCOPE)){
+                        if(next.type != TokenType_LSCOPE){
                             ERROR(next.loc, "Function needs to have a scope");
                             exit(EXIT_FAILURE);
                         }
@@ -642,7 +642,7 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                 node->node.IF.expresion = expr;
                 
                 Token next = parsePeek(ctx, 0);
-                if(!(next.type == TokenType_LSCOPE)){
+                if(next.type != TokenType_LSCOPE){
                     // TODO: later add if condition without curly braces when it only contains one statement
                     ERROR(next.loc, "If condition needs a body");
                     exit(EXIT_FAILURE);
@@ -659,7 +659,7 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                 node->type = ASTNodeType_ELSE;
 
                 Token next = parsePeek(ctx, 0);
-                if(!(next.type == TokenType_LSCOPE)){
+                if(next.type != TokenType_LSCOPE){
                     // TODO: later add else block without curly braces when it only contains one statement
                     ERROR(next.loc, "Else branch needs a body");
                     exit(EXIT_FAILURE);
