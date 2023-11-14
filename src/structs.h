@@ -33,5 +33,9 @@ typedef struct OperatorInformation{
 
 void addType(TypeInformation* info, TypeDefinition def);
 void addOperator(OperatorInformation* info, OperatorDefinition def);
+TypeDefinition TypeDefinitionInit(String symbol, int byteSize);
+OperatorDefinition OperatorDefinitionInit(String symbol, int precedence, TypeDefinition ret, TypeDefinition lhs, TypeDefinition rhs);
 
 #endif // COMP_STRUCTS_H
+
+// TODO: will probably want to split this file into two later when there is enough differece between types and operators

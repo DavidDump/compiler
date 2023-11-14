@@ -21,3 +21,22 @@ void addOperator(OperatorInformation* info, OperatorDefinition def){
 
     info->ops[info->size++] = def;
 }
+
+TypeDefinition TypeDefinitionInit(String symbol, int byteSize){
+    TypeDefinition type = {
+        .symbol = symbol,
+        .byteSize = byteSize,
+    };
+    return type;
+}
+
+OperatorDefinition OperatorDefinitionInit(String symbol, int precedence, TypeDefinition ret, TypeDefinition lhs, TypeDefinition rhs){
+    OperatorDefinition op = {
+        .symbol = symbol,
+        .precedence = precedence,
+        .retType = ret,
+        .lhsType = lhs,
+        .rhsType = rhs,
+    };
+    return op;
+}

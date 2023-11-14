@@ -1,136 +1,149 @@
-#ifndef COMP_PARSER_H
-#define COMP_PARSER_H
+#ifndef COMP_PARSER_NEW_H
+#define COMP_PARSER_NEW_H
 
+#include "arena.h"
+#include "string.h"
 #include "lexer.h"
 
-typedef struct NodeExpresion NodeExpresion;
+typedef enum ASTNodeType{
+    ASTNodeType_NONE,
+    
+    ASTNodeType_FUNCTION_DEF,
+    ASTNodeType_FUNCTION_CALL,
+    ASTNodeType_VAR_DECL,
+    ASTNodeType_VAR_DECL_ASSIGN,
+    ASTNodeType_VAR_REASSIGN,
+    ASTNodeType_VAR_CONST,
+    ASTNodeType_RET,
+    ASTNodeType_IF,
+    ASTNodeType_ELSE,
+    ASTNodeType_EXPRESION,
+    ASTNodeType_INT_LIT,
+    ASTNodeType_SYMBOL_RVALUE,
+    
+    ASTNodeType_COUNT,
+} ASTNodeType;
 
-typedef struct NodeBinExpresion{
-    Token* left;
-    Token* operator;
-    NodeExpresion* right;
-} NodeBinExpresion;
+typedef struct _ASTNode ASTNode;
 
-typedef enum NodeExpresionType{
-    NodeExpresionType_NONE,
-    NodeExpresionType_INT_LIT,
-    NodeExpresionType_BIN_EXP,
-    NodeExpresionType_COUNT,
-} NodeExpresionType;
-
-typedef struct NodeExpresion{
-    NodeExpresionType type;
-    union{
-        Token* intLit;
-        NodeBinExpresion* binExp;
-    };
-} NodeExpresion;
-
-typedef struct NodeKeywordRet{
-    NodeExpresion* exp;
-} NodeKeywordRet;
-
-typedef struct NodeKeywordVarDefAssignment{
-    Token* identifier;
-    NodeExpresion* exp;
-} NodeKeywordVarDefAssignment;
-
-typedef enum NodeKeywordVarType{
-    NodeKeywordVarType_NONE,
-    NodeKeywordVarType_DEF_ONLY,
-    NodeKeywordVarType_DEF_ASSIGNMENT,
-    NodeKeywordVarType_COUNT,
-} NodeKeywordVarType;
-
-typedef struct NodeKeywordVar{
-    NodeKeywordVarType type;
-    union{
-        Token* defIdentifier;
-        NodeKeywordVarDefAssignment* assignment;
-    };
-} NodeKeywordVar;
-
-typedef enum NodeKeywordType{
-    NodeKeywordType_NONE,
-    NodeKeywordType_RET,
-    NodeKeywordType_VAR,
-    NodeKeywordType_COUNT,
-} NodeKeywordType;
-
-typedef struct NodeKeyword{
-    NodeKeywordType type;
-    union{
-        NodeKeywordRet* ret;
-        NodeKeywordVar* var;
-    };
-} NodeKeyword;
-
-typedef enum NodeStatementType{
-    NodeStatementType_NONE,
-    NodeStatementType_KEYWORD,
-    NodeStatementType_EXPRESION,
-    NodeStatementType_COUNT,
-} NodeStatementType;
-
-typedef struct NodeStatement{
-    NodeStatementType type;
-    union{
-        NodeExpresion* exp;
-        NodeKeyword* keyword;
-    };
-} NodeStatement;
-
-typedef struct NodeRoot{
-    NodeStatement* stmts;
-    int count;
+typedef struct Args{
+    // the type of this node has to be:
+    // on FUNCTION_DEF - VAR_DECL
+    // on FUNCTION_CALL - INT_LIT or EXPRESION
+    ASTNode** args;
+    int size;
     int capacity;
-} NodeRoot;
 
-typedef struct Parser{
-    TokenArray tokens;
-    int index;
     Arena mem;
-    NodeRoot root;
-} Parser;
+} Args;
 
-NodeRoot Parse(Parser* parser);
+typedef struct StmtList{
+    ASTNode** statements;
+    int size;
+    int capacity;
 
-#pragma GCC diagnostic ignored "-Wunused-variable"
-static char* NodeExpresionTypeStr[NodeExpresionType_COUNT + 1] = {
-    [NodeExpresionType_NONE]    = "NONE",
-    [NodeExpresionType_INT_LIT] = "INT_LIT",
-    [NodeExpresionType_BIN_EXP] = "BIN_EXP",
-    [NodeExpresionType_COUNT]   = "COUNT",
-};
+    Arena mem;
+} StmtList;
 
-static char* NodeKeywordVarTypeStr[NodeKeywordVarType_COUNT + 1] = {
-    [NodeKeywordVarType_NONE]           = "NONE",
-    [NodeKeywordVarType_DEF_ONLY]       = "DEF_ONLY",
-    [NodeKeywordVarType_DEF_ASSIGNMENT] = "DEF_ASSIGNMENT",
-    [NodeKeywordVarType_COUNT]          = "COUNT",
-};
+typedef struct Scope{
+    Arena mem;
 
-static char* NodeKeywordTypeStr[NodeKeywordType_COUNT + 1] = {
-    [NodeKeywordType_NONE]  = "NONE",
-    [NodeKeywordType_RET]   = "RET",
-    [NodeKeywordType_VAR]   = "VAR",
-    [NodeKeywordType_COUNT] = "COUNT",
-};
+    String* symbolTable;
+    int symbolSize;
+    int symbolCapacity;
 
-static char* NodeStatementTypeStr[NodeStatementType_COUNT + 1] = {
-    [NodeStatementType_NONE]        = "NONE",
-    [NodeStatementType_KEYWORD]     = "KEYWORD",
-    [NodeStatementType_EXPRESION]   = "EXPRESION",
-    [NodeStatementType_COUNT]       = "COUNT",
-};
-#pragma GCC diagnostic pop
+    struct Scope* parent;
 
-Token* ParserPeek(Parser* parser, int offset);
-Token* ParserConsume(Parser* parser);
-NodeBinExpresion* ParseBinExpresion(Parser* parser);
-NodeExpresion* ParseExpresion(Parser* parser);
-NodeKeywordRet* ParseKeywordRet(Parser* parser);
-NodeKeywordVar* ParseKeywordVar(Parser* parser);
-void ParserAddStmt(Parser* parser, void* node, NodeStatementType type);
+    struct Scope** children;
+    int childrenSize;
+    int childrenCapacity;
 
-#endif // COMP_PARSER_H
+    StmtList stmts;
+} Scope;
+
+typedef struct _ASTNode{
+    ASTNodeType type;
+    union Node{
+        struct FUNCTION_DEF {
+            String identifier;
+            String type;
+            Args args;
+            Scope* scope;
+        } FUNCTION_DEF;
+        struct FUNCTION_CALL {
+            String identifier;
+            Args args;
+        } FUNCTION_CALL;
+        struct VAR_DECL {
+            String identifier;
+            String type;
+        } VAR_DECL;
+        struct VAR_DECL_ASSIGN {
+            String identifier;
+            String type;
+            ASTNode* expresion;
+        } VAR_DECL_ASSIGN;
+        struct VAR_REASSIGN {
+            String identifier;
+            ASTNode* expresion;
+        } VAR_REASSIGN;
+        struct VAR_CONST {
+            String identifier;
+            String value;
+        } VAR_CONST;
+        struct RET {
+            ASTNode* expresion;
+        } RET;
+        struct EXPRESION {
+            String operator;
+            ASTNode* rhs;
+            ASTNode* lhs;
+        } EXPRESION;
+        struct INT_LIT {
+            String value;
+        } INT_LIT;
+        struct IF {
+            ASTNode* expresion;
+            Scope* scope;
+        } IF;
+        struct ELSE {
+            Scope* scope;
+        } ELSE;
+        struct SYMBOL_RVALUE {
+            String identifier;
+        } SYMBOL_RVALUE;
+    } node;
+} ASTNode;
+
+typedef struct ParseContext{
+    TokenArray tokens;
+	int index;
+    
+    TypeInformation* typeInfo;
+    OperatorInformation* opsInfo;
+} ParseContext;
+
+void parseAddStatement(StmtList* list, ASTNode* node);
+ParseContext ParseContextInit(TokenArray tokens, TypeInformation* typeInfo, OperatorInformation* opsInfo);
+ASTNode* NodeInit(Arena* mem);
+void ASTNodePrint(ASTNode* node, int indent);
+void ASTPrint(Scope* root);
+int OpGetPrecedence(ParseContext* ctx, String op);
+Token parseConsume(ParseContext* ctx);
+Token parsePeek(ParseContext* ctx, int num);
+bool parseScopeContainsSymbol(Scope* scope, String symbol);
+ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope);
+ASTNode* parsePrimary(ParseContext* ctx, Arena* mem, Scope* scope);
+ASTNode* parseExpression_rec(ParseContext* ctx, Arena* mem, Scope* scope, ASTNode* lhs, int precedence);
+ASTNode* parseExpression(ParseContext* ctx, Arena* mem, Scope* scope);
+bool parseCheckSemicolon(ParseContext* ctx);
+void parseScopeAddChild(Scope* parent, Scope* child);
+void parseAddArg(Args* args, ASTNode* node);
+Scope* parseScopeInit(Arena* mem, Scope* parent);
+void parseScopeAddSymbol(Scope* scope, String symbol);
+void parseType(ParseContext* ctx);
+ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope);
+Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope);
+Scope* Parse(ParseContext* ctx, Arena* mem);
+
+#endif // COMP_PARSER_NEW_H
