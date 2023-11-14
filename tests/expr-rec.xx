@@ -1,0 +1,6 @@
+bar := foo(1 + 1, 2, 4 + baz()) + 3;
+
+
+
+// parseExpr tries to call parseFuncCall if it returns null try parsePrimary if it returns null error
+// parseFuncCall tries to call parseExpr on each argument if it return null error?
