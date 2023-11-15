@@ -20,6 +20,7 @@ typedef enum ASTNodeType{
     ASTNodeType_EXPRESION,
     ASTNodeType_INT_LIT,
     ASTNodeType_SYMBOL_RVALUE,
+    ASTNodeType_TYPE,
     
     ASTNodeType_COUNT,
 } ASTNodeType;
@@ -66,7 +67,7 @@ typedef struct _ASTNode{
     union Node{
         struct FUNCTION_DEF {
             String identifier;
-            String type;
+            ASTNode* type;
             Args args;
             Scope* scope;
         } FUNCTION_DEF;
@@ -76,11 +77,11 @@ typedef struct _ASTNode{
         } FUNCTION_CALL;
         struct VAR_DECL {
             String identifier;
-            String type;
+            ASTNode* type;
         } VAR_DECL;
         struct VAR_DECL_ASSIGN {
             String identifier;
-            String type;
+            ASTNode* type;
             ASTNode* expresion;
         } VAR_DECL_ASSIGN;
         struct VAR_REASSIGN {
@@ -112,6 +113,10 @@ typedef struct _ASTNode{
         struct SYMBOL_RVALUE {
             String identifier;
         } SYMBOL_RVALUE;
+        struct TYPE {
+            String symbol;
+            bool array;
+        } TYPE;
     } node;
 } ASTNode;
 
@@ -141,7 +146,7 @@ void parseScopeAddChild(Scope* parent, Scope* child);
 void parseAddArg(Args* args, ASTNode* node);
 Scope* parseScopeInit(Arena* mem, Scope* parent);
 void parseScopeAddSymbol(Scope* scope, String symbol);
-void parseType(ParseContext* ctx);
+ASTNode* parseType(ParseContext* ctx, Arena* mem);
 ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope);
 Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope);
 Scope* Parse(ParseContext* ctx, Arena* mem);

@@ -53,12 +53,11 @@ void ASTNodePrint(ASTNode* node, int indent){
             printf("FUNCTION DEF:\n");
             for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.FUNCTION_DEF.identifier;
-            String retType = node->node.FUNCTION_DEF.type;
+            ASTNode* retType = node->node.FUNCTION_DEF.type;
             Args args = node->node.FUNCTION_DEF.args;
             Scope* scope = node->node.FUNCTION_DEF.scope;
             printf("id: %.*s\n", id.length, id.str);
-            for(int h = 0; h < indent; h++) printf("  ");
-            printf("ret: %.*s\n", retType.length, retType.str);
+            ASTNodePrint(retType, indent);
             for(int h = 0; h < indent; h++) printf("  ");
 
             // args
@@ -66,10 +65,10 @@ void ASTNodePrint(ASTNode* node, int indent){
                 printf("arg%i:\n", i + 1);
                 for(int h = 0; h < indent; h++) printf("  ");
                 String argId = args.args[i]->node.VAR_DECL.identifier;
-                String argType = args.args[i]->node.VAR_DECL.type;
+                ASTNode* argType = args.args[i]->node.VAR_DECL.type;
                 printf(" id: %.*s\n", argId.length, argId.str);
-                for(int h = 0; h < indent; h++) printf("  ");
-                printf(" type: %.*s\n", argType.length, argType.str);
+                printf(" ");
+                ASTNodePrint(argType, indent);
             }
             
             // statements
@@ -83,21 +82,19 @@ void ASTNodePrint(ASTNode* node, int indent){
             printf("VAR DECL:\n");
             for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL.identifier;
-            String type = node->node.VAR_DECL.type;
+            ASTNode* type = node->node.VAR_DECL.type;
             printf("id: %.*s\n", id.length, id.str);
-            for(int h = 0; h < indent; h++) printf("  ");
-            printf("type: %.*s\n", type.length, type.str);
+            ASTNodePrint(type, indent);
             for(int h = 0; h < indent; h++) printf("  ");
         } break;
         case ASTNodeType_VAR_DECL_ASSIGN: {
             printf("VAR DECL ASSIGN:\n");
             for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL_ASSIGN.identifier;
-            String type = node->node.VAR_DECL_ASSIGN.type;
+            ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
             ASTNode* expr = node->node.VAR_DECL_ASSIGN.expresion;
             printf("id: %.*s\n", id.length, id.str);
-            for(int h = 0; h < indent; h++) printf("  ");
-            printf("type: %.*s\n", type.length, type.str);
+            ASTNodePrint(type, indent);
             for(int h = 0; h < indent; h++) printf("  ");
             printf("expr: \n");
             ASTNodePrint(expr, indent + 1);
@@ -169,6 +166,14 @@ void ASTNodePrint(ASTNode* node, int indent){
                 printf("arg%i:\n", i + 1);
                 ASTNodePrint(args.args[i], indent + 1);
             }
+        } break;
+        case ASTNodeType_TYPE:{
+            printf("TYPE: ");
+            String symbol = node->node.TYPE.symbol;
+            bool array = node->node.TYPE.array;
+            printf("%.*s", symbol.length, symbol.str);
+            if(array) printf("[]");
+            printf("\n");
         } break;
     }
 }
@@ -342,12 +347,29 @@ void parseScopeAddSymbol(Scope* scope, String symbol){
 }
 
 // context should point to the first token of the type
-void parseType(ParseContext* ctx){
-    UNUSED(ctx);
-    UNIMPLEMENTED("parseType");
-
+ASTNode* parseType(ParseContext* ctx, Arena* mem){
     Token next = parseConsume(ctx);
-    // if(next.type )
+    if(next.type != TokenType_TYPE){
+        ERROR(next.loc, "Token should be a type");
+    }
+
+    ASTNode* node = NodeInit(mem);
+    node->type = ASTNodeType_TYPE;
+    node->node.TYPE.symbol = next.value;
+    node->node.TYPE.array = FALSE;
+
+    next = parsePeek(ctx, 0);
+    if(next.type != TokenType_LBRACKET){
+        return node;
+    }
+    parseConsume(ctx); // '['
+
+    next = parseConsume(ctx);
+    if(next.type != TokenType_RBRACKET){
+        ERROR(next.loc, "Expected closing pair to square bracket ']'");
+    }
+    node->node.TYPE.array = TRUE;
+    return node;
 }
 
 // NOTE: parseFunctionCall and parseExpresion should return a custom error type that stores the error if one happened.
@@ -422,16 +444,18 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
                 exit(EXIT_FAILURE);
             }
             parseConsume(ctx);
-            next = parsePeek(ctx, 0);
-            if(next.type != TokenType_TYPE){
-                ERROR(next.loc, "Function argument needs a type");
-                exit(EXIT_FAILURE);
-            }
-            parseConsume(ctx);
+
+            // next = parsePeek(ctx, 0);
+            // if(next.type != TokenType_TYPE){
+            //     ERROR(next.loc, "Function argument needs a type");
+            //     exit(EXIT_FAILURE);
+            // }
+            // parseConsume(ctx);
+
             ASTNode* node = NodeInit(&result.mem);
             node->type = ASTNodeType_VAR_DECL;
             node->node.VAR_DECL.identifier = id.value;
-            node->node.VAR_DECL.type = next.value;
+            node->node.VAR_DECL.type = parseType(ctx, &result.mem);
 
             parseAddArg(&result, node);
 
@@ -499,7 +523,9 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                     }
                     node->node.VAR_DECL_ASSIGN.expresion = expr;
                     // TODO: add types, figure out type here
-                    // node->node.VAR_DECL_ASSIGN.type = ;
+                    ASTNode* tmp = NodeInit(mem);
+                    tmp->type = ASTNodeType_NONE; // TODO: FIX ASAP
+                    node->node.VAR_DECL_ASSIGN.type = tmp;
                     
                     // TODO: add the variable to the symbol table
                     parseScopeAddSymbol(currentScope, t.value);
@@ -511,16 +537,18 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                 }else if(next.type == TokenType_COLON){
                     // decl
                     parseConsume(ctx);
-                    next = parsePeek(ctx, 0);
-                    if(next.type != TokenType_TYPE){
-                        ERROR(next.loc, "Variable declaration without initializer needs a type");
-                        exit(EXIT_FAILURE);
-                    }
-                    parseConsume(ctx);
+
+                    // next = parsePeek(ctx, 0);
+                    // if(next.type != TokenType_TYPE){
+                    //     ERROR(next.loc, "Variable declaration without initializer needs a type");
+                    //     exit(EXIT_FAILURE);
+                    // }
+                    // parseConsume(ctx);
+                    
                     ASTNode* node = NodeInit(mem);
                     node->type = ASTNodeType_VAR_DECL;
                     node->node.VAR_DECL.identifier = t.value;
-                    node->node.VAR_DECL.type = next.value;
+                    node->node.VAR_DECL.type = parseType(ctx, mem);
 
                     // TODO: add the variable to the symbol table
                     parseScopeAddSymbol(currentScope, t.value);
@@ -596,13 +624,16 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                             exit(EXIT_FAILURE);
                         }
                         parseConsume(ctx);
-                        next = parsePeek(ctx, 0);
-                        if(next.type != TokenType_TYPE){
-                            ERROR(next.loc, "Function needs a return type");
-                            exit(EXIT_FAILURE);
-                        }
-                        parseConsume(ctx);
-                        node->node.FUNCTION_DEF.type = next.value;
+
+                        // next = parsePeek(ctx, 0);
+                        // if(next.type != TokenType_TYPE){
+                        //     ERROR(next.loc, "Function needs a return type");
+                        //     exit(EXIT_FAILURE);
+                        // }
+                        // parseConsume(ctx);
+                        
+                        node->node.FUNCTION_DEF.type = parseType(ctx, mem);
+                        
                         next = parsePeek(ctx, 0);
                         if(next.type != TokenType_LSCOPE){
                             ERROR(next.loc, "Function needs to have a scope");
