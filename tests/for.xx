@@ -1,0 +1,43 @@
+enum dsa: s64 {
+    NONE,
+    COUNT,
+}
+
+struct asd {
+    foo: u32 = 69; // default initalizer
+    bar: u32 = 69; // by default values are uninitialized
+    baz: u32 = 69; // compiler flag to zero initialize all variables
+}
+
+main :: (args: string[]) -> u8 {
+    // [3] indicates an array of 3 elements
+    arr1 : asd[3];
+    // [] no number in type means size will be infered using the number of elements provided
+    arr2 : asd[] = [[0] = {}, [1] = {}, [2] = {}];
+    // [...] tripple dot (elipses) means dynamic array
+    arr3 : asd[...];
+
+    using dsa {
+        type := NONE; // using keyword so 'dsa.' doesnt need to be prepended every time
+    }
+    asd : asd = {.foo = 1, .bar = 2, .baz = 3}; // member initializers, type required
+
+    // loop 5 times
+    loop 5 {
+        arr3.push({1, 2, 3});
+    }
+
+    // iterating a specific interval, iterator type can be specified
+    loop i: s64 in (1, 3) {
+        arr2[i - 1].foo = 1;
+        arr2[i - 1].bar = 2;
+        arr2[i - 1].baz = 3;
+    }
+
+    // iterating over elements of an array
+    loop it in arr1 {
+        it.foo = 0;
+    }
+
+    return 0;
+}

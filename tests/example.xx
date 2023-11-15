@@ -2,7 +2,8 @@
 // Demonstrate the basic language syntax
 
 // main function has the same signature as main in C
-main :: (argc: u64, argv: string[]) -> u8 {
+// actually main is slighly different because arrays are sized even after passing them around, so there is no need for argc
+main :: (args: string[...]) -> u8 {
     // variable initialization uses the ":=" operator, the type is inferred
     foo := 1;
     // variable declaration uses the ":" operator, type cannot be inferred so it is needed
