@@ -62,7 +62,7 @@ typedef struct GenContext {
     Arena mem;
 } GenContext;
 
-StringChain gen_x86_64_wasm_primary(GenContext* ctx, ASTNode* expr){
+StringChain gen_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     
     if(expr->type == ASTNodeType_INT_LIT){
@@ -83,7 +83,7 @@ StringChain gen_x86_64_wasm_primary(GenContext* ctx, ASTNode* expr){
     return result;
 }
 
-StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
+StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     // TODO: for now hardcode + operator
     if(expr->type == ASTNodeType_INT_LIT){
@@ -97,9 +97,9 @@ StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
     }else if(expr->type == ASTNodeType_FUNCTION_CALL){
         // TODO: call function and put the ret value in rax, should be defount behaviour
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "+")){
-        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
         String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
-        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
         String s2 = StringFromCstrLit("    pop rcx\n");
         String s3 = StringFromCstrLit("    add rax, rcx\n");
 
@@ -109,9 +109,9 @@ StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
         StringChainAppend(&result, &ctx->mem, s2);
         StringChainAppend(&result, &ctx->mem, s3);
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "-")){
-        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
         String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
-        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
         String s2 = StringFromCstrLit("    pop rcx\n");
         String s3 = StringFromCstrLit("    sub rax, rcx\n");
 
@@ -122,9 +122,9 @@ StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
         StringChainAppend(&result, &ctx->mem, s3);
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "*")){
         // NOTE: mul rcx means rax = rax * rcx
-        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
         String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
-        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
         String s2 = StringFromCstrLit("    pop rcx\n");
         String s3 = StringFromCstrLit("    mul rcx\n");
 
@@ -136,9 +136,9 @@ StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "/")){
         // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
         // div rcx means rax = rax / rcx remainder is rdx
-        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
         String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
-        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
         String s4 = StringFromCstrLit("    mov rdx, 0\n");
         String s2 = StringFromCstrLit("    pop rcx\n");
         String s3 = StringFromCstrLit("    div rcx\n");
@@ -157,7 +157,7 @@ StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
     return result;
 }
 
-StringChain generate_x86_64_wasm(GenContext* ctx, Scope* globalScope){
+StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
     StringChain result = {0};
     
     // header
@@ -176,7 +176,7 @@ StringChain generate_x86_64_wasm(GenContext* ctx, Scope* globalScope){
             } break;
 
             case ASTNodeType_VAR_DECL_ASSIGN: {
-                StringChain chain1 = gen_x86_64_wasm_expresion(ctx, node->node.VAR_DECL_ASSIGN.expresion);
+                StringChain chain1 = gen_x86_64_nasm_expresion(ctx, node->node.VAR_DECL_ASSIGN.expresion);
                 StringChainAppendChain(&result, &ctx->mem, chain1);
 
                 // get stack location
@@ -209,7 +209,7 @@ StringChain generate_x86_64_wasm(GenContext* ctx, Scope* globalScope){
 }
 
 StringChain Generate(GenContext* ctx, Scope* globalScope){
-    return generate_x86_64_wasm(ctx, globalScope);
+    return generate_x86_64_nasm(ctx, globalScope);
 }
 
 // 
