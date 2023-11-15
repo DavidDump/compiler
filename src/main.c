@@ -54,6 +54,168 @@ bool EntireFileWrite(const char* filePath, StringChain data){
     }
 }
 
+// 
+// Generator
+// 
+
+typedef struct GenContext {
+    Arena mem;
+} GenContext;
+
+StringChain gen_x86_64_wasm_primary(GenContext* ctx, ASTNode* expr){
+    StringChain result = {0};
+    
+    if(expr->type == ASTNodeType_INT_LIT){
+        String s1 = StringFromCstr(&ctx->mem, "    mov rax, ");
+        String s2 = expr->node.INT_LIT.value;
+        String s3 = StringFromCstr(&ctx->mem, "\n");
+
+        StringChainAppend(&result, &ctx->mem, s1);
+        StringChainAppend(&result, &ctx->mem, s2);
+        StringChainAppend(&result, &ctx->mem, s3);
+    }else if(expr->type == ASTNodeType_FUNCTION_CALL){
+        // call function and put the ret value in rax, should be defount behaviour
+    }else{
+        printf("error in primary\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
+
+StringChain gen_x86_64_wasm_expresion(GenContext* ctx, ASTNode* expr){
+    StringChain result = {0};
+    // TODO: for now hardcode + operator
+    if(expr->type == ASTNodeType_INT_LIT){
+        String s1 = StringFromCstr(&ctx->mem, "    mov rax, ");
+        String s2 = expr->node.INT_LIT.value;
+        String s3 = StringFromCstr(&ctx->mem, "\n");
+
+        StringChainAppend(&result, &ctx->mem, s1);
+        StringChainAppend(&result, &ctx->mem, s2);
+        StringChainAppend(&result, &ctx->mem, s3);
+    }else if(expr->type == ASTNodeType_FUNCTION_CALL){
+        // TODO: call function and put the ret value in rax, should be defount behaviour
+    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "+")){
+        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
+        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        String s2 = StringFromCstrLit("    pop rcx\n");
+        String s3 = StringFromCstrLit("    add rax, rcx\n");
+
+        StringChainAppendChain(&result, &ctx->mem, lhs);
+        StringChainAppend(&result, &ctx->mem, s1);
+        StringChainAppendChain(&result, &ctx->mem, rhs);
+        StringChainAppend(&result, &ctx->mem, s2);
+        StringChainAppend(&result, &ctx->mem, s3);
+    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "-")){
+        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
+        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        String s2 = StringFromCstrLit("    pop rcx\n");
+        String s3 = StringFromCstrLit("    sub rax, rcx\n");
+
+        StringChainAppendChain(&result, &ctx->mem, rhs);
+        StringChainAppend(&result, &ctx->mem, s1);
+        StringChainAppendChain(&result, &ctx->mem, lhs);
+        StringChainAppend(&result, &ctx->mem, s2);
+        StringChainAppend(&result, &ctx->mem, s3);
+    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "*")){
+        // NOTE: mul rcx means rax = rax * rcx
+        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
+        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        String s2 = StringFromCstrLit("    pop rcx\n");
+        String s3 = StringFromCstrLit("    mul rcx\n");
+
+        StringChainAppendChain(&result, &ctx->mem, lhs);
+        StringChainAppend(&result, &ctx->mem, s1);
+        StringChainAppendChain(&result, &ctx->mem, rhs);
+        StringChainAppend(&result, &ctx->mem, s2);
+        StringChainAppend(&result, &ctx->mem, s3);
+    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "/")){
+        // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
+        // div rcx means rax = rax / rcx remainder is rdx
+        StringChain lhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
+        StringChain rhs = gen_x86_64_wasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        String s4 = StringFromCstrLit("    mov rdx, 0\n");
+        String s2 = StringFromCstrLit("    pop rcx\n");
+        String s3 = StringFromCstrLit("    div rcx\n");
+
+        StringChainAppendChain(&result, &ctx->mem, rhs); // 2
+        StringChainAppend(&result, &ctx->mem, s1);
+        StringChainAppendChain(&result, &ctx->mem, lhs); // 8
+        StringChainAppend(&result, &ctx->mem, s4);
+        StringChainAppend(&result, &ctx->mem, s2);
+        StringChainAppend(&result, &ctx->mem, s3);
+    }else{
+        printf("[ERROR] Unknown operator: %.*s\n", expr->node.EXPRESION.operator.length, expr->node.EXPRESION.operator.str);
+        exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
+
+StringChain generate_x86_64_wasm(GenContext* ctx, Scope* globalScope){
+    StringChain result = {0};
+    
+    // header
+    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("global _main\n"));
+    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("segment .text\n"));
+    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("_main:\n"));
+
+    for(int i = 0; i < globalScope->stmts.size; i++){
+        ASTNode* node = globalScope->stmts.statements[i];
+
+        switch(node->type){
+            case ASTNodeType_NONE:
+            case ASTNodeType_COUNT: {
+                printf("[ERROR] ast node none and count are errors\n");
+                exit(EXIT_FAILURE);
+            } break;
+
+            case ASTNodeType_VAR_DECL_ASSIGN: {
+                StringChain chain1 = gen_x86_64_wasm_expresion(ctx, node->node.VAR_DECL_ASSIGN.expresion);
+                StringChainAppendChain(&result, &ctx->mem, chain1);
+
+                // get stack location
+                // store location in a hashmap with the symbol identifier as a key
+                // push variable to stack
+            } break;
+
+            case ASTNodeType_FUNCTION_DEF:
+            case ASTNodeType_FUNCTION_CALL:
+            case ASTNodeType_VAR_DECL:
+            case ASTNodeType_VAR_REASSIGN:
+            case ASTNodeType_VAR_CONST:
+            case ASTNodeType_RET:
+            case ASTNodeType_IF:
+            case ASTNodeType_ELSE:
+            case ASTNodeType_EXPRESION:
+            case ASTNodeType_INT_LIT:
+            case ASTNodeType_SYMBOL_RVALUE:
+            case ASTNodeType_TYPE:
+                printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);
+                break;
+        }
+    }
+
+    // TODO: this is temporary footer
+    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("    ret\n"));
+
+
+    return result;
+}
+
+StringChain Generate(GenContext* ctx, Scope* globalScope){
+    return generate_x86_64_wasm(ctx, globalScope);
+}
+
+// 
+// Main
+// 
+
 int main(int argc, char** argv){
     if(argc < 2){
         printf("[ERROR] Source file not provided\n");
@@ -112,23 +274,23 @@ int main(int argc, char** argv){
     TokenArray tokens = Tokenize(&tokenizer);
     if(printTokens) TokensPrint(&tokens);
     
-    ParseContext ctx = ParseContextInit(tokens, &typeInfo, &opInfo);
+    ParseContext parseContext = ParseContextInit(tokens, &typeInfo, &opInfo);
 
-    Scope* globalScope = Parse(&ctx, &readFileMem);
+    Scope* globalScope = Parse(&parseContext, &readFileMem);
     if(printAST) ASTPrint(globalScope);
 
-    // TODO: do proper CreateProcess() calls here, but this will do for now
-    // system("nasm -fwin64 output.asm");
-    // system("ld -o output.exe output.obj");
+    GenContext genContext = {0};
+    StringChain outRaw = Generate(&genContext, globalScope);
 
-    // NOTE: for using kernel functions build like this
-    // system("nasm -fwin32 output.asm");
-    // system("C:\\MinGW\\bin\\gcc.exe -m32 -o output.exe output.obj -lkernel32");
+    char* outFilePath = "output.asm";
+    bool success = EntireFileWrite(outFilePath, outRaw);
+    if(!success){
+        printf("[ERROR] Failed to write output asm file\n");
+        exit(EXIT_FAILURE);
+    }
 
-    // arena_free(&parser.mem);
-    // arena_free(&gen.mem);
-    
     arena_free(&readFileMem);
+    arena_free(&genContext.mem);
     exit(EXIT_SUCCESS);
 }
 

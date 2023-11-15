@@ -25,6 +25,28 @@ typedef enum ASTNodeType{
     ASTNodeType_COUNT,
 } ASTNodeType;
 
+#pragma GCC diagnostic ignored "-Wunused-variable"
+static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
+    [ASTNodeType_NONE]            = "NONE",
+    
+    [ASTNodeType_FUNCTION_DEF]    = "FUNCTION_DEF",
+    [ASTNodeType_FUNCTION_CALL]   = "FUNCTION_CALL",
+    [ASTNodeType_VAR_DECL]        = "VAR_DECL",
+    [ASTNodeType_VAR_DECL_ASSIGN] = "VAR_DECL_ASSIGN",
+    [ASTNodeType_VAR_REASSIGN]    = "VAR_REASSIGN",
+    [ASTNodeType_VAR_CONST]       = "VAR_CONST",
+    [ASTNodeType_RET]             = "RET",
+    [ASTNodeType_IF]              = "IF",
+    [ASTNodeType_ELSE]            = "ELSE",
+    [ASTNodeType_EXPRESION]       = "EXPRESION",
+    [ASTNodeType_INT_LIT]         = "INT_LIT",
+    [ASTNodeType_SYMBOL_RVALUE]   = "SYMBOL_RVALUE",
+    [ASTNodeType_TYPE]            = "TYPE",
+
+    [ASTNodeType_COUNT]           = "COUNT",
+};
+#pragma GCC diagnostic pop
+
 typedef struct _ASTNode ASTNode;
 
 typedef struct Args{

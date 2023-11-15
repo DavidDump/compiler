@@ -24,6 +24,7 @@ typedef struct StringChain{
 } StringChain;
 
 void StringChainAppend(StringChain* chain, Arena* mem, String str);
+void StringChainAppendChain(StringChain* dest, Arena* mem, StringChain src);
 String StringFromCstr(Arena* mem, const char* cstr);
 String StringFromCstrLit(const char* cstr);
 String StringFromArray(Arena* mem, const char* arr, int size);

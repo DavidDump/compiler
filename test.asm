@@ -1,27 +1,28 @@
+; 64-bit program
 global _main
 
 segment .text
 _main:
     ; save stack position
-    mov ebp, esp
+    mov rbp, rsp
     
     ; var a = 9;
-    mov eax, 9
-    push eax
+    mov rax, 9
+    push rax
     
     ; var b = 5;
-    mov eax, 5
-    push eax
+    mov rax, 5
+    push rax
     
     ; var d;
-    sub esp, 4
+    ; sub rsp, 8
 
     ; var c = 7;
-    mov eax, 7
-    push eax
+    mov rax, 7
+    push rax
 
     ; return d;
-    push DWORD [esp + 1 * 4]
-    pop eax
-    mov esp, ebp ; restore stack position before returning
+    push QWORD [rsp + 2 * 4] ; 8 is the size of one int (8 bytes)
+    pop rax
+    mov rsp, rbp ; restore stack position before returning
     ret

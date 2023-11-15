@@ -22,9 +22,18 @@ main :: (args: string[]) -> u8 {
     }
     asd : asd = {.foo = 1, .bar = 2, .baz = 3}; // member initializers, type required
 
+    // loop can have both expresions that evaluate to integers and booleans
+    // in the case of booleans the loop will keep going while true
+    // in the case of integers the loop will to n number on iterations
+    // this may be changed later if inconvenient to use
     // loop 5 times
     loop 5 {
         arr3.push({1, 2, 3});
+    }
+    // loop while true
+    loop 1 == 1 {
+        arr3.push({4, 5, 6});
+        break;
     }
 
     // iterating a specific interval, iterator type can be specified

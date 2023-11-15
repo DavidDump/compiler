@@ -13,6 +13,14 @@ void StringChainAppend(StringChain* chain, Arena* mem, String str){
     chain->nodeCount++;
 }
 
+void StringChainAppendChain(StringChain* dest, Arena* mem, StringChain src){
+    StringNode* current = src.first;
+    for(int i = 0; i < src.nodeCount; i++){
+        StringChainAppend(dest, mem, current->str);
+        current = current->next;
+    }
+}
+
 String StringFromCstr(Arena* mem, const char* cstr){
     String result = {0};
     int len = strlen(cstr);
