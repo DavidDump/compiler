@@ -20,10 +20,10 @@ int main(int argc, char** argv){
     GO_REBUILD_URSELF(argc, argv);
 
     int debug = 0;
+    int clean = 0;
     if(argc > 1){
         if(strcmp(argv[1], "clean") == 0){
-            RM(PATH("build"));
-            return 0;
+            clean = 1;
         }else if(strcmp(argv[1], "debug") == 0){
             debug = 1;
         }else{
@@ -34,6 +34,12 @@ int main(int argc, char** argv){
 
     Cstr objString = 0;
 
+    if(clean){
+        RM(PATH("build"));
+        if(!debug){
+            return 0;
+        }
+    }
     EnsureBuildDir();
 
     // Build all object files and collect paths in objString
