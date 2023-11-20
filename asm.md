@@ -51,3 +51,30 @@ The registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, and R15 are considered non
 
 https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170
 https://en.wikipedia.org/wiki/X86_calling_conventions
+
+## Linux X86_64 calling convention
+Register | Usage | Preserve racross function calls
+--- | --- | ---
+%rax | temporary register; with variable arguments, passes information about the number of vector registers used; 1st return register | no
+%rbx | callee-saved register; optionaly used as base pointer | yes
+%rcx | used to pass the 4th integer arguments to functions | no
+%rdx | used to pass the 3rd argument to functions; 2nd return register | no
+%rsp | stack pointer | yes
+%rbp | callee-saved register; optionally used as frame pointer | yes
+%rsi | used to pass the 2nd argument to functions | no
+%rdi | used to pass the 1nd argument to functions | no
+%r8  | used to pass the 5nd argument to functions | no
+%r9  | used to pass the 6nd argument to functions | no
+%r10 | temporary register; used for passing function's static chain pointer | no
+%r11 | temporary register | no
+%r12 - %r15 | callee-saved registers | yes
+%xmm0 - %xmm1 | used to pass and return floating point argumetns | no
+%xmm2 - %xmm7 | used to pass floating point arguments | no
+%xmm8 - %xmm15 | temporary registers | no
+%mmx0 - %mmx7  | temporary registers | no
+%st0,  %st1 | temporary registers; used to return `long double` arguments | no
+%st2 - %st7 | temporary registers | no
+%fs | reserved for system (as thread specific data register) | no
+mxcsr | SSE2 control and status word | partial
+x87 SW | x87 status word | no
+x87 CW | x87 control word | yes

@@ -16,7 +16,7 @@ main :: (args: string[...]) -> u8 {
     // boolean comparison uses the "==" operator
     if foo == 1 {
         bar = add(2, bar);
-    }else{
+    } else {
         bar = add(3, 3);
     }
 
