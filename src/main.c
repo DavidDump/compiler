@@ -1,6 +1,7 @@
 #include <stdio.h>  // fopen(), fseek(), ftell(), fread(), fclose(), printf(), 
 #include <string.h> // strlen(), memcpy()
 #include <assert.h> // assert()
+#include <stdarg.h> // va_list, va_start, va_end, va_arg
 
 #include "structs.h"
 #include "parser.h"
@@ -59,20 +60,57 @@ bool EntireFileWrite(const char* filePath, StringChain data){
 // 
 
 typedef struct GenContext {
+    int stack;
     Arena mem;
 } GenContext;
 
+// %s in the format string means String type instead of regular cstring
+void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...){
+    va_list args;
+    va_start(args, format);
+
+    String workingStr = {.str = format, .length = 0};
+    bool wasPercent = FALSE;
+    while(*format != '\0'){
+        if(wasPercent == FALSE && *format == '%'){
+            wasPercent = TRUE;
+        }else if(wasPercent == TRUE && *format == 's'){
+            wasPercent = FALSE;
+            String arg = va_arg(args, String);
+            
+            StringChainAppend(result, mem, workingStr);
+            StringChainAppend(result, mem, arg);
+            
+            workingStr.str = format + 1;
+            workingStr.length = 0;
+        }else{
+            wasPercent = FALSE;
+            workingStr.length++;
+        }
+        format++;
+    }
+    // add the string between the last `%s` and `\0`
+    if(workingStr.length > 0) StringChainAppend(result, mem, workingStr);
+
+    va_end(args);
+}
+
+void genPushReg(GenContext* ctx, StringChain* result, const char* reg){
+    ctx->stack++;
+    genChainPrintf(result, &ctx->mem, "    push %s\n", (String){.str = reg, .length = strlen(reg)});
+}
+
+void genPopReg(GenContext* ctx, StringChain* result, const char* reg){
+    ctx->stack--;
+    genChainPrintf(result, &ctx->mem, "    pop %s\n", (String){.str = reg, .length = strlen(reg)});
+}
+
+// TODO: unused
 StringChain gen_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     
     if(expr->type == ASTNodeType_INT_LIT){
-        String s1 = StringFromCstr(&ctx->mem, "    mov rax, ");
-        String s2 = expr->node.INT_LIT.value;
-        String s3 = StringFromCstr(&ctx->mem, "\n");
-
-        StringChainAppend(&result, &ctx->mem, s1);
-        StringChainAppend(&result, &ctx->mem, s2);
-        StringChainAppend(&result, &ctx->mem, s3);
+        genChainPrintf(&result, &ctx->mem, "    mov rax, %s\n", expr->node.INT_LIT.value);
     }else if(expr->type == ASTNodeType_FUNCTION_CALL){
         // call function and put the ret value in rax, should be defount behaviour
     }else{
@@ -87,68 +125,49 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     // TODO: for now hardcode + operator
     if(expr->type == ASTNodeType_INT_LIT){
-        String s1 = StringFromCstr(&ctx->mem, "    mov rax, ");
-        String s2 = expr->node.INT_LIT.value;
-        String s3 = StringFromCstr(&ctx->mem, "\n");
-
-        StringChainAppend(&result, &ctx->mem, s1);
-        StringChainAppend(&result, &ctx->mem, s2);
-        StringChainAppend(&result, &ctx->mem, s3);
+        genChainPrintf(&result, &ctx->mem, "    mov rax, %s\n", expr->node.INT_LIT.value);
     }else if(expr->type == ASTNodeType_FUNCTION_CALL){
         // TODO: call function and put the ret value in rax, should be defount behaviour
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "+")){
         StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
-        String s2 = StringFromCstrLit("    pop rcx\n");
-        String s3 = StringFromCstrLit("    add rax, rcx\n");
 
-        StringChainAppendChain(&result, &ctx->mem, lhs);
-        StringChainAppend(&result, &ctx->mem, s1);
-        StringChainAppendChain(&result, &ctx->mem, rhs);
-        StringChainAppend(&result, &ctx->mem, s2);
-        StringChainAppend(&result, &ctx->mem, s3);
+        StringChainAppendChain(&result, &ctx->mem, lhs);       // expresion ends up in rax
+        genChainPrintf(&result, &ctx->mem, "    push rax\n");
+        StringChainAppendChain(&result, &ctx->mem, rhs);       // expresion ends up in rax
+        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genChainPrintf(&result, &ctx->mem, "    add rax, rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "-")){
         StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
-        String s2 = StringFromCstrLit("    pop rcx\n");
-        String s3 = StringFromCstrLit("    sub rax, rcx\n");
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        StringChainAppend(&result, &ctx->mem, s1);
+        genChainPrintf(&result, &ctx->mem, "    push rax\n");
         StringChainAppendChain(&result, &ctx->mem, lhs);
-        StringChainAppend(&result, &ctx->mem, s2);
-        StringChainAppend(&result, &ctx->mem, s3);
+        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genChainPrintf(&result, &ctx->mem, "    sub rax, rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "*")){
         // NOTE: mul rcx means rax = rax * rcx
         StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
-        String s2 = StringFromCstrLit("    pop rcx\n");
-        String s3 = StringFromCstrLit("    mul rcx\n");
 
         StringChainAppendChain(&result, &ctx->mem, lhs);
-        StringChainAppend(&result, &ctx->mem, s1);
+        genChainPrintf(&result, &ctx->mem, "    push rax\n");
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        StringChainAppend(&result, &ctx->mem, s2);
-        StringChainAppend(&result, &ctx->mem, s3);
+        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genChainPrintf(&result, &ctx->mem, "    mul rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "/")){
         // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
         // div rcx means rax = rax / rcx remainder is rdx
         StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        String s1 = StringFromCstr(&ctx->mem, "    push rax\n");
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
-        String s4 = StringFromCstrLit("    mov rdx, 0\n");
-        String s2 = StringFromCstrLit("    pop rcx\n");
-        String s3 = StringFromCstrLit("    div rcx\n");
 
-        StringChainAppendChain(&result, &ctx->mem, rhs); // 2
-        StringChainAppend(&result, &ctx->mem, s1);
-        StringChainAppendChain(&result, &ctx->mem, lhs); // 8
-        StringChainAppend(&result, &ctx->mem, s4);
-        StringChainAppend(&result, &ctx->mem, s2);
-        StringChainAppend(&result, &ctx->mem, s3);
+        StringChainAppendChain(&result, &ctx->mem, rhs);
+        genChainPrintf(&result, &ctx->mem, "    push rax\n");
+        StringChainAppendChain(&result, &ctx->mem, lhs);
+        genChainPrintf(&result, &ctx->mem, "    mov rdx, 0\n");
+        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genChainPrintf(&result, &ctx->mem, "    div rcx\n");
     }else{
         printf("[ERROR] Unknown operator: %.*s\n", expr->node.EXPRESION.operator.length, expr->node.EXPRESION.operator.str);
         exit(EXIT_FAILURE);
@@ -176,8 +195,8 @@ StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
             } break;
 
             case ASTNodeType_VAR_DECL_ASSIGN: {
-                StringChain chain1 = gen_x86_64_nasm_expresion(ctx, node->node.VAR_DECL_ASSIGN.expresion);
-                StringChainAppendChain(&result, &ctx->mem, chain1);
+                StringChain expr = gen_x86_64_nasm_expresion(ctx, node->node.VAR_DECL_ASSIGN.expresion);
+                StringChainAppendChain(&result, &ctx->mem, expr);
 
                 // get stack location
                 // store location in a hashmap with the symbol identifier as a key
