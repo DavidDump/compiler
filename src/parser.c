@@ -733,3 +733,5 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
 
     return globalScope;
 }
+
+// TODO: check if functions with return type return on all codepaths

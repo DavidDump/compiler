@@ -22,7 +22,7 @@ _main:
     push rax
 
     ; return d;
-    push QWORD [rsp + 2 * 4] ; 8 is the size of one int (8 bytes)
+    push QWORD [rsp + 2 * 8] ; 8 is the size of one int (8 bytes)
     pop rax
     mov rsp, rbp ; restore stack position before returning
     ret

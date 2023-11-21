@@ -133,18 +133,18 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, lhs);       // expresion ends up in rax
-        genChainPrintf(&result, &ctx->mem, "    push rax\n");
+        genPushReg(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, rhs);       // expresion ends up in rax
-        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genPopReg(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    add rax, rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "-")){
         StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        genChainPrintf(&result, &ctx->mem, "    push rax\n");
+        genPushReg(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, lhs);
-        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genPopReg(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    sub rax, rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "*")){
         // NOTE: mul rcx means rax = rax * rcx
@@ -152,9 +152,9 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, lhs);
-        genChainPrintf(&result, &ctx->mem, "    push rax\n");
+        genPushReg(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genPopReg(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    mul rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "/")){
         // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
@@ -163,10 +163,10 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
         StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        genChainPrintf(&result, &ctx->mem, "    push rax\n");
+        genPushReg(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, lhs);
         genChainPrintf(&result, &ctx->mem, "    mov rdx, 0\n");
-        genChainPrintf(&result, &ctx->mem, "    pop rcx\n");
+        genPopReg(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    div rcx\n");
     }else{
         printf("[ERROR] Unknown operator: %.*s\n", expr->node.EXPRESION.operator.length, expr->node.EXPRESION.operator.str);
@@ -176,13 +176,18 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
     return result;
 }
 
+typedef struct Hashmap {
+    char* key;
+    int value;
+} Hashmap;
+
 StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
     StringChain result = {0};
     
     // header
-    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("global _main\n"));
-    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("segment .text\n"));
-    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("_main:\n"));
+    genChainPrintf(&result, &ctx->mem, "global _main\n");
+    genChainPrintf(&result, &ctx->mem, "segment .text\n");
+    genChainPrintf(&result, &ctx->mem, "_main:\n");
 
     for(int i = 0; i < globalScope->stmts.size; i++){
         ASTNode* node = globalScope->stmts.statements[i];
@@ -195,10 +200,23 @@ StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
             } break;
 
             case ASTNodeType_VAR_DECL_ASSIGN: {
-                StringChain expr = gen_x86_64_nasm_expresion(ctx, node->node.VAR_DECL_ASSIGN.expresion);
+                ASTNode* exprNode = node->node.VAR_DECL_ASSIGN.expresion;
+                String id = node->node.VAR_DECL_ASSIGN.identifier;
+                ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
+                
+                StringChain expr = gen_x86_64_nasm_expresion(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
 
+                Hashmap* hashmap = NULL;
+                stbds_shput(hashmap, "string1", 1);
+                stbds_shput(hashmap, "string2", 2);
+                stbds_shput(hashmap, "string3", 3);
+                for(int i = 0; i < stbds_shlen(hashmap); i++){
+                    printf("key: %s, value: %i\n", hashmap[i].key, hashmap[i].value);
+                }
+
                 // get stack location
+                printf("stack location: %i\n", ctx->stack);
                 // store location in a hashmap with the symbol identifier as a key
                 // push variable to stack
             } break;
@@ -221,8 +239,7 @@ StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
     }
 
     // TODO: this is temporary footer
-    StringChainAppend(&result, &ctx->mem, StringFromCstrLit("    ret\n"));
-
+    genChainPrintf(&result, &ctx->mem, "    ret\n");
 
     return result;
 }
@@ -253,8 +270,8 @@ int main(int argc, char** argv){
         }else{
             if(argv[i][0] == '-' && argv[i][1] == '-'){
                 printf("[ERROR] Argument \"%s\" not supported, supported args:\n", argv[i]);
-                printf("[ERROR]   --tokens\n");
-                printf("[ERROR]   --ast\n");
+                printf("          --tokens\n");
+                printf("          --ast\n");
                 exit(EXIT_FAILURE);
             }else{
                 filepath = argv[i];
