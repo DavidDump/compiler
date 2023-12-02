@@ -62,6 +62,7 @@ bool EntireFileWrite(const char* filePath, StringChain data){
 typedef struct GenContext {
     int stack;
     Arena mem;
+    Hashmap* variableLocs;
 } GenContext;
 
 // %s in the format string means String type instead of regular cstring
@@ -177,12 +178,13 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
 }
 
 typedef struct Hashmap {
-    char* key;
+    String key;
     int value;
 } Hashmap;
 
 StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
     StringChain result = {0};
+    StringChain dataSection = {0};
     
     // header
     genChainPrintf(&result, &ctx->mem, "global _main\n");
@@ -207,25 +209,22 @@ StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
                 StringChain expr = gen_x86_64_nasm_expresion(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
 
-                Hashmap* hashmap = NULL;
-                stbds_shput(hashmap, "string1", 1);
-                stbds_shput(hashmap, "string2", 2);
-                stbds_shput(hashmap, "string3", 3);
-                for(int i = 0; i < stbds_shlen(hashmap); i++){
-                    printf("key: %s, value: %i\n", hashmap[i].key, hashmap[i].value);
-                }
-
                 // get stack location
                 printf("stack location: %i\n", ctx->stack);
                 // store location in a hashmap with the symbol identifier as a key
+                stbds_hmput(ctx->variableLocs, id, ctx->stack);
                 // push variable to stack
+                genPushReg(ctx, &result, "rax");
+            } break;
+            case ASTNodeType_VAR_CONST: {
+                String id = node->node.VAR_CONST.identifier;
+                String value = node->node.VAR_CONST.value;
             } break;
 
             case ASTNodeType_FUNCTION_DEF:
             case ASTNodeType_FUNCTION_CALL:
             case ASTNodeType_VAR_DECL:
             case ASTNodeType_VAR_REASSIGN:
-            case ASTNodeType_VAR_CONST:
             case ASTNodeType_RET:
             case ASTNodeType_IF:
             case ASTNodeType_ELSE:
