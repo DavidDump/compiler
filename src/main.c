@@ -12,9 +12,6 @@
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
-
 String EntireFileRead(Arena* mem, const char* filePath){
     FILE* f = fopen(filePath, "rb");
     
@@ -57,13 +54,63 @@ bool EntireFileWrite(const char* filePath, StringChain data){
 
 // 
 // Generator
+// NOTE: using intel asm syntax
 // 
 
+typedef struct IdentifierLocations{
+    struct Item {
+        String key;
+        int value;
+    }* items;
+    int size;
+    int capacity;
+    Arena mem;
+} IdentifierLocations;
+
+// NOTE: i dont know if the stack pointer get saved any other time other than function calls,
+// but SAVED_STACK_SIZE is basically the callstack depth
+#define SAVED_STACK_SIZE 255
 typedef struct GenContext {
     int stack;
+    int savedStack[SAVED_STACK_SIZE];
+    int savedStackPointer;
+    int intSize; // 8 for 64-bit, 4 for 32-bit
+    IdentifierLocations idLoc;
     Arena mem;
-    Hashmap* variableLocs;
 } GenContext;
+
+void appendIdLoc(IdentifierLocations* idLoc, String key, int value){
+    if(idLoc->size >= idLoc->capacity){
+        size_t newCap = idLoc->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        idLoc->items = arena_realloc(&idLoc->mem, idLoc->items, idLoc->capacity * sizeof(idLoc->items[0]), newCap * sizeof(idLoc->items[0]));
+        idLoc->capacity = newCap;
+    }
+
+    idLoc->items[idLoc->size].key = key;
+    idLoc->items[idLoc->size].value = value;
+    idLoc->size++;
+}
+
+int findIdLoc(IdentifierLocations* idLoc, String key){
+    for(int i = 0; i < idLoc->size; i++){
+        if(StringEquals(idLoc->items[i].key, key)){
+            return idLoc->items[i].value;
+        }
+    }
+
+    return -1;
+}
+
+// helper for counting the digits of and int
+int digitsCount(int value){
+    int l = !value;
+    while(value){
+        l++;
+        value/=10;
+    }
+    return l;
+}
 
 // %s in the format string means String type instead of regular cstring
 void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...){
@@ -84,6 +131,19 @@ void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...){
             
             workingStr.str = format + 1;
             workingStr.length = 0;
+        }else if(wasPercent == TRUE && *format == 'i'){
+            wasPercent = FALSE;
+            int arg = va_arg(args, int);
+
+            StringChainAppend(result, mem, workingStr);
+
+            int intLen = digitsCount(arg) + 1; // NOTE: snprintf only works if the buffer has enough space for a \0 terminator
+            char* buffer = arena_alloc(mem, intLen * sizeof(char));
+            snprintf(buffer, intLen, "%i", arg);
+            StringChainAppend(result, mem, (String){.str = buffer, .length = intLen});
+
+            workingStr.str = format + 1;
+            workingStr.length = 0;
         }else{
             wasPercent = FALSE;
             workingStr.length++;
@@ -96,18 +156,34 @@ void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...){
     va_end(args);
 }
 
-void genPushReg(GenContext* ctx, StringChain* result, const char* reg){
+void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, const char* reg){
     ctx->stack++;
     genChainPrintf(result, &ctx->mem, "    push %s\n", (String){.str = reg, .length = strlen(reg)});
 }
 
-void genPopReg(GenContext* ctx, StringChain* result, const char* reg){
+void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, const char* reg){
     ctx->stack--;
     genChainPrintf(result, &ctx->mem, "    pop %s\n", (String){.str = reg, .length = strlen(reg)});
 }
 
-// TODO: unused
-StringChain gen_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
+void genSaveStack(GenContext* ctx){
+    if(ctx->savedStackPointer + 1 >= SAVED_STACK_SIZE){
+        printf("[ERROR] Call stack overflow\n");
+        exit(EXIT_FAILURE);
+    }
+    ctx->savedStack[ctx->savedStackPointer++] = ctx->stack;
+}
+
+void genRestoreStack(GenContext* ctx){
+    if(ctx->savedStackPointer - 1 < 0){
+        printf("[ERROR] Call stack underflow\n");
+        exit(EXIT_FAILURE);
+    }
+    ctx->stack = ctx->savedStack[--ctx->savedStackPointer];
+}
+
+#if 0
+StringChain gen_win_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     
     if(expr->type == ASTNodeType_INT_LIT){
@@ -121,53 +197,63 @@ StringChain gen_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
 
     return result;
 }
+#endif
 
-StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
+StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     // TODO: for now hardcode + operator
     if(expr->type == ASTNodeType_INT_LIT){
         genChainPrintf(&result, &ctx->mem, "    mov rax, %s\n", expr->node.INT_LIT.value);
     }else if(expr->type == ASTNodeType_FUNCTION_CALL){
-        // TODO: call function and put the ret value in rax, should be defount behaviour
+        // TODO: call function and put the ret value in rax, should be default behaviour
+        UNIMPLEMENTED("gen_win_x86_64_nasm_expresion: ASTNodeType_FUNCTION_CALL");
+    }else if(expr->type == ASTNodeType_SYMBOL_RVALUE){
+        String id = expr->node.SYMBOL_RVALUE.identifier;
+        int loc = findIdLoc(&ctx->idLoc, id);
+        if(loc == -1){
+            genChainPrintf(&result, &ctx->mem, "    mov rax, [%s]\n", id);
+        }else{
+            genChainPrintf(&result, &ctx->mem, "    mov rax, [rbp - %i * %i]\n", loc, ctx->intSize);
+        }
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "+")){
-        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, lhs);       // expresion ends up in rax
-        genPushReg(ctx, &result, "rax");
+        gen_win_x86_64_nasm_push(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, rhs);       // expresion ends up in rax
-        genPopReg(ctx, &result, "rcx");
+        gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    add rax, rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "-")){
-        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        genPushReg(ctx, &result, "rax");
+        gen_win_x86_64_nasm_push(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, lhs);
-        genPopReg(ctx, &result, "rcx");
+        gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    sub rax, rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "*")){
         // NOTE: mul rcx means rax = rax * rcx
-        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, lhs);
-        genPushReg(ctx, &result, "rax");
+        gen_win_x86_64_nasm_push(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        genPopReg(ctx, &result, "rcx");
+        gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    mul rcx\n");
     }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "/")){
         // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
         // div rcx means rax = rax / rcx remainder is rdx
-        StringChain lhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
-        genPushReg(ctx, &result, "rax");
+        gen_win_x86_64_nasm_push(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, lhs);
         genChainPrintf(&result, &ctx->mem, "    mov rdx, 0\n");
-        genPopReg(ctx, &result, "rcx");
+        gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    div rcx\n");
     }else{
         printf("[ERROR] Unknown operator: %.*s\n", expr->node.EXPRESION.operator.length, expr->node.EXPRESION.operator.str);
@@ -177,20 +263,8 @@ StringChain gen_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
     return result;
 }
 
-typedef struct Hashmap {
-    String key;
-    int value;
-} Hashmap;
-
-StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
+StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, StringChain* dataSection){
     StringChain result = {0};
-    StringChain dataSection = {0};
-    
-    // header
-    genChainPrintf(&result, &ctx->mem, "global _main\n");
-    genChainPrintf(&result, &ctx->mem, "segment .text\n");
-    genChainPrintf(&result, &ctx->mem, "_main:\n");
-
     for(int i = 0; i < globalScope->stmts.size; i++){
         ASTNode* node = globalScope->stmts.statements[i];
 
@@ -206,26 +280,113 @@ StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
                 String id = node->node.VAR_DECL_ASSIGN.identifier;
                 ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
                 
-                StringChain expr = gen_x86_64_nasm_expresion(ctx, exprNode);
+                StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
 
-                // get stack location
-                printf("stack location: %i\n", ctx->stack);
                 // store location in a hashmap with the symbol identifier as a key
-                stbds_hmput(ctx->variableLocs, id, ctx->stack);
+                appendIdLoc(&ctx->idLoc, id, ctx->stack);
                 // push variable to stack
-                genPushReg(ctx, &result, "rax");
+                gen_win_x86_64_nasm_push(ctx, &result, "rax");
             } break;
             case ASTNodeType_VAR_CONST: {
                 String id = node->node.VAR_CONST.identifier;
                 String value = node->node.VAR_CONST.value;
+
+                // TODO: dont hardcode dq size but somehow use space more efficiently
+                genChainPrintf(dataSection, &ctx->mem, "    %s dq %s\n", id, value);
+            } break;
+            case ASTNodeType_VAR_DECL: {
+                String id = node->node.VAR_DECL.identifier;
+                ASTNode* type = node->node.VAR_DECL.type;
+
+                // store location in a hashmap with the symbol identifier as a key
+                appendIdLoc(&ctx->idLoc, id, ctx->stack);
+                // increase the stack
+                genChainPrintf(&result, &ctx->mem, "    sub rsp, %i\n", ctx->intSize);
+                ctx->stack++;
+            } break;
+            case ASTNodeType_VAR_REASSIGN: {
+                String id = node->node.VAR_REASSIGN.identifier;
+                ASTNode* exprNode = node->node.VAR_REASSIGN.expresion;
+
+                StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+                StringChainAppendChain(&result, &ctx->mem, expr);
+
+                int loc = findIdLoc(&ctx->idLoc, id);
+                if(loc == -1){
+                    printf("[ERROR] Symbol access not found\n");
+                    exit(EXIT_FAILURE);
+                }
+                int savedStack = ctx->stack;
+                genChainPrintf(&result, &ctx->mem, "    lea rsp, [rbp - %i * %i]\n", loc - 1, ctx->intSize);
+                genChainPrintf(&result, &ctx->mem, "    push rax\n");
+                genChainPrintf(&result, &ctx->mem, "    lea rsp, [rbp - %i * %i]\n", savedStack - 1, ctx->intSize);
+            } break;
+            case ASTNodeType_RET: {
+                ASTNode* exprNode = node->node.RET.expresion;
+                
+                StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+                StringChainAppendChain(&result, &ctx->mem, expr);
+
+                genChainPrintf(&result, &ctx->mem, "    mov rsp, rbp\n");
+                genRestoreStack(ctx);
+                gen_win_x86_64_nasm_pop(ctx, &result, "rbp");
+                genChainPrintf(&result, &ctx->mem, "    ret\n");
+            } break;
+            case ASTNodeType_FUNCTION_DEF: {
+                String id = node->node.FUNCTION_DEF.identifier;
+                ASTNode* type = node->node.FUNCTION_DEF.type;
+                Scope* scope = node->node.FUNCTION_DEF.scope;
+                Args args = node->node.FUNCTION_DEF.args;
+
+                // function header
+                genChainPrintf(&result, &ctx->mem, "jmp after_%s\n", id);
+                genChainPrintf(&result, &ctx->mem, "%s:\n", id);
+                genChainPrintf(&result, &ctx->mem, "    push rbp\n");
+                genChainPrintf(&result, &ctx->mem, "    mov rbp, rsp\n");
+                genSaveStack(ctx);
+                
+                // get args
+                for(int i = 0; i < args.size; i++){
+                    String argId = args.args[i]->node.VAR_DECL.identifier;
+                    ASTNode* argType = args.args[i]->node.VAR_DECL.type;
+
+                    if(i == 0){
+                        // first arg
+                        appendIdLoc(&ctx->idLoc, argId, ctx->stack);
+                        gen_win_x86_64_nasm_push(ctx, &result, "rcx");
+                    }else if(i == 1){
+                        // second arg
+                        appendIdLoc(&ctx->idLoc, argId, ctx->stack);
+                        gen_win_x86_64_nasm_push(ctx, &result, "rdx");
+                    }else if(i == 2){
+                        // third arg
+                        appendIdLoc(&ctx->idLoc, argId, ctx->stack);
+                        gen_win_x86_64_nasm_push(ctx, &result, "r8");
+                    }else if(i == 3){
+                        // fourth arg
+                        appendIdLoc(&ctx->idLoc, argId, ctx->stack);
+                        gen_win_x86_64_nasm_push(ctx, &result, "r9");
+                    }else{
+                        // fifth+ arg
+                        appendIdLoc(&ctx->idLoc, argId, ctx->stack);
+                        genChainPrintf(&result, &ctx->mem, "    mov rax, [rbp + %i * %i]\n", i - 3, ctx->intSize);
+                        gen_win_x86_64_nasm_push(ctx, &result, "rax");
+                        // NOTE: maybe this isnt nessecary and we can just save a negative stack value and store half the args above rbp and the other half below
+                    }
+                }
+
+                // generate body
+                StringChain body = generate_win_x86_64_nasm_scope(ctx, scope, dataSection);
+                StringChainAppendChain(&result, &ctx->mem, body);
+
+                // function footer
+                // NOTE: return is handled by the return keyword,
+                // dont know if there is a situation it need to be generated here
+                genChainPrintf(&result, &ctx->mem, "after_%s:\n", id);
             } break;
 
-            case ASTNodeType_FUNCTION_DEF:
             case ASTNodeType_FUNCTION_CALL:
-            case ASTNodeType_VAR_DECL:
-            case ASTNodeType_VAR_REASSIGN:
-            case ASTNodeType_RET:
             case ASTNodeType_IF:
             case ASTNodeType_ELSE:
             case ASTNodeType_EXPRESION:
@@ -237,14 +398,29 @@ StringChain generate_x86_64_nasm(GenContext* ctx, Scope* globalScope){
         }
     }
 
-    // TODO: this is temporary footer
-    genChainPrintf(&result, &ctx->mem, "    ret\n");
-
     return result;
 }
 
 StringChain Generate(GenContext* ctx, Scope* globalScope){
-    return generate_x86_64_nasm(ctx, globalScope);
+    ctx->intSize = 8;
+
+    // header
+    StringChain result = {0};
+    genChainPrintf(&result, &ctx->mem, "bits 64\n");
+    genChainPrintf(&result, &ctx->mem, "default rel\n");
+    genChainPrintf(&result, &ctx->mem, "section .text\n");
+
+    // data
+    StringChain dataSection = {0};
+    genChainPrintf(&dataSection, &ctx->mem, "section .data\n");
+
+    StringChain scope = generate_win_x86_64_nasm_scope(ctx, globalScope, &dataSection);
+    StringChainAppendChain(&result, &ctx->mem, scope);
+
+    // data section at the end
+    StringChainAppendChain(&result, &ctx->mem, dataSection);
+
+    return result;
 }
 
 // 

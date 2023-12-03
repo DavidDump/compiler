@@ -1,7 +1,7 @@
 // the 4 cases of line starting with identifier
-foo := 1;
 bar : s64;
+foo := 1;
 bar = 2;
 baz :: 3;
 
-return 1;
+return baz;

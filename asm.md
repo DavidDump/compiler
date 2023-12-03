@@ -43,8 +43,8 @@
 ## Windows x86_64 calling convention
 The first four arguments are placed onto the registers. That means RCX, RDX, R8, R9 (in that order) for integer, struct or pointer arguments, and XMM0, XMM1, XMM2, XMM3 for floating point arguments.
 
-- integers arguments: RAX func(RCX, RDX, R8, R9, ...(on the stack));
-- floats arguments: XMM0 func(XMM0, XMM1, XMM2, XMM3, ...(on the stack));
+- integers arguments: RAX func(RCX, RDX, R8, R9, ...(on the stack, right to left));
+- floats arguments: XMM0 func(XMM0, XMM1, XMM2, XMM3, ...(on the stack, right to left));
 
 The registers RAX, RCX, RDX, R8, R9, R10, R11 are considered volatile (caller-saved).
 The registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, and R15 are considered nonvolatile (callee-saved).

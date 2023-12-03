@@ -1,8 +1,13 @@
 ; 64-bit program
-global _main
+bits 64
+default rel
 
-segment .text
-_main:
+section .data
+    num dq 12
+
+section .text
+global _start
+_start:
     ; save stack position
     mov rbp, rsp
     
@@ -15,10 +20,10 @@ _main:
     push rax
     
     ; var d;
-    ; sub rsp, 8
+    sub rsp, 8
 
-    ; var c = 7;
-    mov rax, 7
+    ; var c = num;
+    mov rax, [num]
     push rax
 
     ; return d;
