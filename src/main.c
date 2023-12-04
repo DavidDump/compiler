@@ -200,14 +200,50 @@ StringChain gen_win_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
 }
 #endif
 
+StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr);
+
+StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args){
+    StringChain result = {0};
+
+    for(int i = 0; i < args.size; i++){
+        ASTNode* exprNode = args.args[i];
+
+        StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+        StringChainAppendChain(&result, &ctx->mem, expr);
+        if(i == 0){
+            // first arg
+            genChainPrintf(&result, &ctx->mem, "    mov rcx, rax\n");
+        }else if(i == 1){
+            // second arg
+            genChainPrintf(&result, &ctx->mem, "    mov rdx, rax\n");
+        }else if(i == 2){
+            // third arg
+            genChainPrintf(&result, &ctx->mem, "    mov r8, rax\n");
+        }else if(i == 3){
+            // fourth arg
+            genChainPrintf(&result, &ctx->mem, "    mov r9, rax\n");
+        }else{
+            // fifth+ arg
+            gen_win_x86_64_nasm_push(ctx, &result, "rax");
+        }
+    }
+
+    genChainPrintf(&result, &ctx->mem, "    call %s\n", id);
+
+    return result;
+}
+
 StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     // TODO: for now hardcode + operator
     if(expr->type == ASTNodeType_INT_LIT){
         genChainPrintf(&result, &ctx->mem, "    mov rax, %s\n", expr->node.INT_LIT.value);
     }else if(expr->type == ASTNodeType_FUNCTION_CALL){
-        // TODO: call function and put the ret value in rax, should be default behaviour
-        UNIMPLEMENTED("gen_win_x86_64_nasm_expresion: ASTNodeType_FUNCTION_CALL");
+        String id = expr->node.FUNCTION_CALL.identifier;
+        Args args = expr->node.FUNCTION_CALL.args;
+
+        StringChain funcCall = gen_win_x86_64_nasm_func_call(ctx, id, args);
+        StringChainAppendChain(&result, &ctx->mem, funcCall);
     }else if(expr->type == ASTNodeType_SYMBOL_RVALUE){
         String id = expr->node.SYMBOL_RVALUE.identifier;
         int loc = findIdLoc(&ctx->idLoc, id);
@@ -412,7 +448,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                         appendIdLoc(&ctx->idLoc, argId, ctx->stack);
                         genChainPrintf(&result, &ctx->mem, "    mov rax, [rbp + %i * %i]\n", i - 3, ctx->intSize);
                         gen_win_x86_64_nasm_push(ctx, &result, "rax");
-                        // NOTE: maybe this isnt nessecary and we can just save a negative stack value and store half the args above rbp and the other half below
+                        // NOTE: maybe this isnt nessecary and we can just save a negative stack value and store half the args above rbp and the other half below, whould save stack space
                     }
                 }
 
@@ -465,8 +501,14 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 ifBody.last = NULL;
                 ifBody.nodeCount = 0;
             } break;
+            case ASTNodeType_FUNCTION_CALL: {
+                String id = node->node.FUNCTION_CALL.identifier;
+                Args args = node->node.FUNCTION_CALL.args;
 
-            case ASTNodeType_FUNCTION_CALL:
+                StringChain funcCall = gen_win_x86_64_nasm_func_call(ctx, id, args);
+                StringChainAppendChain(&result, &ctx->mem, funcCall);
+            } break;
+
             case ASTNodeType_EXPRESION:
             case ASTNodeType_INT_LIT:
             case ASTNodeType_SYMBOL_RVALUE:
