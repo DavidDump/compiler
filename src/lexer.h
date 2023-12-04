@@ -39,6 +39,9 @@ typedef enum TokenType{
     TokenType_LBRACKET,    // [
     TokenType_RBRACKET,    // ]
     TokenType_COMMA,       // ,
+    TokenType_DOT,         // .
+    TokenType_DOUBLEDOT,   // ..
+    TokenType_TRIPLEDOT,   // ...
     TokenType_OPERATOR,    // +
     TokenType_ASSIGNMENT,  // =
     TokenType_COMPARISON,  // ==
@@ -68,6 +71,9 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_LBRACKET]    = "LBRACKET",
     [TokenType_RBRACKET]    = "RBRACKET",
     [TokenType_COMMA]       = "COMMA",
+    [TokenType_DOT]         = "DOT",
+    [TokenType_DOUBLEDOT]   = "DOUBLEDOT",
+    [TokenType_TRIPLEDOT]   = "TRIPLEDOT",
     [TokenType_OPERATOR]    = "OPERATOR",
     [TokenType_ASSIGNMENT]  = "ASSIGNMENT",
     [TokenType_COMPARISON]  = "COMPARISON",

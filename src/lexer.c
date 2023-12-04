@@ -202,6 +202,32 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             // comma
             String str = {.str = c, .length = 1};
             TokenArrayAddToken(&tokens, str, TokenType_COMMA, tokenizer->filename, lineNum, collumNum);
+        }else if(*c == '.'){
+            // dot, double dot, tripple dot
+            char next = TokenizerPeek(tokenizer, 0);
+            if(next == '.'){
+                TokenizerConsume(tokenizer);
+                next = TokenizerPeek(tokenizer, 0);
+                if(next == '.'){
+                    TokenizerConsume(tokenizer);
+                    
+                    // '...' operator
+                    String str = {.str = c, .length = 3};
+                    TokenArrayAddToken(&tokens, str, TokenType_TRIPLEDOT, tokenizer->filename, lineNum, collumNum);
+
+                    collumNum += 2;
+                }else{
+                    // '..' operator
+                    String str = {.str = c, .length = 2};
+                    TokenArrayAddToken(&tokens, str, TokenType_DOUBLEDOT, tokenizer->filename, lineNum, collumNum);
+                    
+                    collumNum++;
+                }
+            }else{
+                // '.' operator
+                String str = {.str = c, .length = 1};
+                TokenArrayAddToken(&tokens, str, TokenType_DOT, tokenizer->filename, lineNum, collumNum);
+            }
         }else if(*c == '\n'){
             lineNum++;
             collumNum = 0;

@@ -357,12 +357,24 @@ ASTNode* parseType(ParseContext* ctx, Arena* mem){
     node->type = ASTNodeType_TYPE;
     node->node.TYPE.symbol = next.value;
     node->node.TYPE.array = FALSE;
+    node->node.TYPE.arraySize = 0;
+    node->node.TYPE.dynamic = FALSE;
 
     next = parsePeek(ctx, 0);
     if(next.type != TokenType_LBRACKET){
         return node;
     }
     parseConsume(ctx); // '['
+
+    next = parseConsume(ctx);
+    if(next.type == TokenType_TRIPLEDOT){
+        node->node.TYPE.dynamic = TRUE;
+    }else if(next.type == TokenType_INT_LITERAL){
+        int num = StringToInt(next.value);
+        node->node.TYPE.arraySize = num;
+    }else{
+        ERROR(next.loc, "Array needs a fixed size or '...' for dynamic size");
+    }
 
     next = parseConsume(ctx);
     if(next.type != TokenType_RBRACKET){
@@ -438,12 +450,11 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
             parseScopeAddSymbol(scope, next.value);
             Token id = next;
 
-            next = parsePeek(ctx, 0);
+            next = parseConsume(ctx);
             if(next.type != TokenType_COLON){
                 ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
                 exit(EXIT_FAILURE);
             }
-            parseConsume(ctx);
 
             // next = parsePeek(ctx, 0);
             // if(next.type != TokenType_TYPE){
@@ -722,11 +733,14 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
             case TokenType_LBRACKET:
             case TokenType_RBRACKET:
             case TokenType_COMMA:
+            case TokenType_DOT:
+            case TokenType_DOUBLEDOT:
+            case TokenType_TRIPLEDOT:
             case TokenType_OPERATOR:
             case TokenType_ASSIGNMENT:
             case TokenType_COMPARISON:
             case TokenType_INT_LITERAL:
-                printf("[ERROR] Unhandled token type: %s\n", TokenTypeStr[t.type]);
+                printf("[ERROR] Unhandled token type: %s at (%.*s:%i:%i)\n", TokenTypeStr[t.type], t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
             break;
         }
     }

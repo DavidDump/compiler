@@ -137,7 +137,10 @@ typedef struct _ASTNode{
         } SYMBOL_RVALUE;
         struct TYPE {
             String symbol;
+            
             bool array;
+            int arraySize; // maybe ??
+            bool dynamic; // is the array dynamic
         } TYPE;
     } node;
 } ASTNode;
