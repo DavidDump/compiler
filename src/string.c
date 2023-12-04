@@ -3,6 +3,21 @@
 
 #include <string.h> // strlen(), memcpy()
 
+int StringToInt(String str){
+    int result = 0;
+    for(int i = str.length; i >= 0; i++){
+        char c = str.str[i];
+        if('0' < c && c < '9'){
+            int num = c - '0';
+            result *= 10;
+            result += num;
+        }else{
+            break;
+        }
+    }
+    return result;
+}
+
 void StringChainAppend(StringChain* chain, Arena* mem, String str){
     StringNode* node = arena_alloc(mem, sizeof(StringNode));
     node->str = str;
@@ -13,10 +28,28 @@ void StringChainAppend(StringChain* chain, Arena* mem, String str){
     chain->nodeCount++;
 }
 
+void StringChainPrepend(StringChain* chain, Arena* mem, String str){
+    StringNode* node = arena_alloc(mem, sizeof(StringNode));
+    node->str = str;
+    node->next = chain->first;
+    if(chain->first) chain->first->prev = node;
+    chain->first = node;
+    if(!chain->last) chain->last = node;
+    chain->nodeCount++;
+}
+
 void StringChainAppendChain(StringChain* dest, Arena* mem, StringChain src){
     StringNode* current = src.first;
     for(int i = 0; i < src.nodeCount; i++){
         StringChainAppend(dest, mem, current->str);
+        current = current->next;
+    }
+}
+
+void StringChainPrependChain(StringChain* dest, Arena* mem, StringChain src){
+    StringNode* current = src.last;
+    for(int i = src.nodeCount; i >= 0; i++){
+        StringChainPrepend(dest, mem, current->str);
         current = current->next;
     }
 }
