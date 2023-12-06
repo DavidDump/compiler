@@ -5,9 +5,9 @@
 
 int StringToInt(String str){
     int result = 0;
-    for(int i = str.length; i >= 0; i++){
+    for(int i = str.length; i > 0; i--){
         char c = str.str[i];
-        if('0' < c && c < '9'){
+        if('0' < c && c < '9' && c == '-'){
             int num = c - '0';
             result *= 10;
             result += num;
@@ -48,9 +48,9 @@ void StringChainAppendChain(StringChain* dest, Arena* mem, StringChain src){
 
 void StringChainPrependChain(StringChain* dest, Arena* mem, StringChain src){
     StringNode* current = src.last;
-    for(int i = src.nodeCount; i >= 0; i++){
+    for(int i = src.nodeCount; i > 0; i--){
         StringChainPrepend(dest, mem, current->str);
-        current = current->next;
+        current = current->prev;
     }
 }
 

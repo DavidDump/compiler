@@ -16,11 +16,13 @@ main :: (args: string[...]) -> u8 {
     // boolean comparison uses the "==" operator
     if foo == 1 {
         bar = add(2, bar);
-    } else {
+    } else if foo == 2 {
         bar = add(3, 3);
+    } else {
+        bar = add(4, 4);
     }
 
-    return 0;
+    return bar;
 }
 
 // multiple pass compilation, symbols can be defined after use

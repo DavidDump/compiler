@@ -149,6 +149,21 @@ void ASTNodePrint(ASTNode* node, int indent){
                 ASTNodePrint(scope->stmts.statements[i], indent + 1);
             }
         } break;
+        case ASTNodeType_ELSE_IF: {
+            printf("ELSE_IF:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
+            ASTNode* expr = node->node.ELSE_IF.expresion;
+            Scope* scope = node->node.ELSE_IF.scope;
+            printf("expr:\n");
+            ASTNodePrint(expr, indent + 1);
+
+            // statements
+            for(int i = 0; i < scope->stmts.size; i++){
+                for(int h = 0; h < indent + 1; h++) printf("  ");
+                printf("Statement %i\n", i + 1);
+                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            }
+        } break;
         case ASTNodeType_SYMBOL_RVALUE: {
             String id = node->node.SYMBOL_RVALUE.identifier;
             printf("RVALUE: %.*s\n", id.length, id.str);
@@ -673,14 +688,13 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
             case TokenType_RSCOPE: {
                 // TODO: is this all here???
                 if(!currentScope->parent){
-                    ERROR(t.loc, "Closing parenthesis needs a pair");
+                    ERROR(t.loc, "Closing parenthesis needs an openinig pair");
                     exit(EXIT_FAILURE);
                 }
                 currentScope = currentScope->parent;
             } break;
             case TokenType_IF: {
                 // if block
-                // parseConsume(ctx);
                 ASTNode* node = NodeInit(mem);
                 node->type = ASTNodeType_IF;
                 ASTNode* expr = parseExpression(ctx, mem, currentScope);
@@ -704,21 +718,64 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                 currentScope = newScope;
             } break;
             case TokenType_ELSE: {
-                ASTNode* node = NodeInit(mem);
-                node->type = ASTNodeType_ELSE;
-
                 Token next = parsePeek(ctx, 0);
-                if(next.type != TokenType_LSCOPE){
-                    // TODO: later add else block without curly braces when it only contains one statement
-                    ERROR(next.loc, "Else branch needs a body");
-                    exit(EXIT_FAILURE);
-                }
-                parseConsume(ctx);
-                Scope* newScope = parseScopeInit(mem, currentScope);
-                node->node.ELSE.scope = newScope;
+                if(next.type == TokenType_IF){
+                    // else if
+                    parseConsume(ctx);
 
-                parseAddStatement(&currentScope->stmts, node);
-                currentScope = newScope;
+                    ASTNode* node = NodeInit(mem);
+                    node->type = ASTNodeType_ELSE_IF;
+
+                    ASTNode* expr = parseExpression(ctx, mem, currentScope);
+                    if(!expr){
+                        ERROR(next.loc, "Invalid expresion in if condition");
+                    }
+                    node->node.ELSE_IF.expresion = expr;
+                    
+                    Token next = parsePeek(ctx, 0);
+                    if(next.type != TokenType_LSCOPE){
+                        // TODO: later add if condition without curly braces when it only contains one statement
+                        ERROR(next.loc, "If condition needs a body");
+                    }
+                    parseConsume(ctx);
+
+                    Scope* newScope = parseScopeInit(mem, currentScope);
+                    node->node.ELSE_IF.scope = newScope;
+
+                    parseAddStatement(&currentScope->stmts, node);
+                    currentScope = newScope;
+                }else if(next.type == TokenType_LSCOPE){
+                    // else
+                    #if 0
+                    ASTNode* node = NodeInit(mem);
+                    node->type = ASTNodeType_ELSE;
+
+                    // next = parsePeek(ctx, 0);
+                    if(next.type != TokenType_LSCOPE){
+                        // TODO: later add else block without curly braces when it only contains one statement
+                        ERROR(next.loc, "Else branch needs a body");
+                        exit(EXIT_FAILURE);
+                    }
+                    parseConsume(ctx);
+                    Scope* newScope = parseScopeInit(mem, currentScope);
+                    node->node.ELSE.scope = newScope;
+
+                    parseAddStatement(&currentScope->stmts, node);
+                    currentScope = newScope;
+                    #else
+                    parseConsume(ctx);
+
+                    ASTNode* node = NodeInit(mem);
+                    node->type = ASTNodeType_ELSE;
+                    Scope* newScope = parseScopeInit(mem, currentScope);
+                    node->node.ELSE.scope = newScope;
+
+                    parseAddStatement(&currentScope->stmts, node);
+                    currentScope = newScope;
+                    #endif
+                }else{
+                    ERROR(next.loc, "Else needs to be followed by if condition or a scope");
+                }
             } break;
 
             case TokenType_TYPE:

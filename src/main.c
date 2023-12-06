@@ -330,10 +330,12 @@ StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, i
     return result;
 }
 
+#define INVALID_IF_LABEL_COUNTER -1
 StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, StringChain* dataSection){
     StringChain result = {0};
     StringChain ifConditions = {0};
     StringChain ifBody = {0};
+    int ifEndLabel = INVALID_IF_LABEL_COUNTER;
     for(int i = 0; i < globalScope->stmts.size; i++){
         ASTNode* node = globalScope->stmts.statements[i];
 
@@ -348,6 +350,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 ASTNode* exprNode = node->node.VAR_DECL_ASSIGN.expresion;
                 String id = node->node.VAR_DECL_ASSIGN.identifier;
                 ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
+                UNUSED(type);
                 
                 StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
@@ -367,6 +370,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             case ASTNodeType_VAR_DECL: {
                 String id = node->node.VAR_DECL.identifier;
                 ASTNode* type = node->node.VAR_DECL.type;
+                UNUSED(type);
 
                 // store location in a hashmap with the symbol identifier as a key
                 appendIdLoc(&ctx->idLoc, id, ctx->stack);
@@ -406,9 +410,10 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             } break;
             case ASTNodeType_FUNCTION_DEF: {
                 String id = node->node.FUNCTION_DEF.identifier;
-                ASTNode* type = node->node.FUNCTION_DEF.type;
                 Scope* scope = node->node.FUNCTION_DEF.scope;
                 Args args = node->node.FUNCTION_DEF.args;
+                ASTNode* type = node->node.FUNCTION_DEF.type;
+                UNUSED(type);
 
                 // function header
                 genChainPrintf(&result, &ctx->mem, "jmp after_%s\n", id);
@@ -426,6 +431,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 for(int i = 0; i < args.size; i++){
                     String argId = args.args[i]->node.VAR_DECL.identifier;
                     ASTNode* argType = args.args[i]->node.VAR_DECL.type;
+                    UNUSED(argType);
 
                     if(i == 0){
                         // first arg
@@ -462,7 +468,6 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 genChainPrintf(&result, &ctx->mem, "after_%s:\n", id);
             } break;
             // TODO: see if some of the StringChainAppendChain calls can be removed adding a string not to the and of the chain but inserting it in the middle
-            // case ASTNodeType_ELSE_IF:
             case ASTNodeType_IF: {
                 ASTNode* exprNode = node->node.IF.expresion;
                 Scope* scope = node->node.IF.scope;
@@ -481,12 +486,12 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 Scope* scope = node->node.ELSE.scope;
 
                 // else body
-                int labelCounter = ctx->labelCounter++; // end label
+                if(ifEndLabel == INVALID_IF_LABEL_COUNTER) ifEndLabel = ctx->labelCounter++;
                 StringChain body = generate_win_x86_64_nasm_scope(ctx, scope, dataSection);
-                genChainPrintf(&body, &ctx->mem, "    jmp .L%i\n", labelCounter);
+                genChainPrintf(&body, &ctx->mem, "    jmp .L%i\n", ifEndLabel);
 
                 // end label
-                genChainPrintf(&ifBody, &ctx->mem, ".L%i:\n", labelCounter);
+                genChainPrintf(&ifBody, &ctx->mem, ".L%i:\n", ifEndLabel);
                 
                 // append everything
                 StringChainAppendChain(&result, &ctx->mem, ifConditions);
@@ -500,6 +505,28 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 ifBody.first = NULL;
                 ifBody.last = NULL;
                 ifBody.nodeCount = 0;
+                ifEndLabel = INVALID_IF_LABEL_COUNTER;
+            } break;
+            case ASTNodeType_ELSE_IF: {
+                // TODO: if the if block doesnt end with else it doesnt work
+                ASTNode* exprNode = node->node.ELSE_IF.expresion;
+                Scope* scope = node->node.ELSE_IF.scope;
+
+                // condition
+                int label = ctx->labelCounter++;
+                StringChain condition = generate_win_x86_64_nasm_condition(ctx, exprNode, label);
+                StringChainAppendChain(&ifConditions, &ctx->mem, condition);
+                
+                // body
+                StringChain body = generate_win_x86_64_nasm_scope(ctx, scope, dataSection);
+                StringChain tmp = {0};
+                genChainPrintf(&tmp, &ctx->mem, ".L%i:\n", label);
+                StringChainAppendChain(&tmp, &ctx->mem, body);
+
+                // end label
+                if(ifEndLabel == INVALID_IF_LABEL_COUNTER) ifEndLabel = ctx->labelCounter++;
+                genChainPrintf(&tmp, &ctx->mem, "    jmp .L%i:\n", ifEndLabel);
+                StringChainPrependChain(&ifBody, &ctx->mem, tmp);
             } break;
             case ASTNodeType_FUNCTION_CALL: {
                 String id = node->node.FUNCTION_CALL.identifier;
