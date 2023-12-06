@@ -25,7 +25,11 @@ main :: (args: string[...]) -> u8 {
     return bar;
 }
 
-// multiple pass compilation, symbols can be defined after use
+// multiple pass compilation, the following symbols can be defined after use:
+// functions
+// constants
+// structs
+// enums
 add :: (a: s64, b: s64) -> s64 {
     return a + b;
 }
