@@ -18,6 +18,7 @@ typedef enum ASTNodeType{
     ASTNodeType_IF,
     ASTNodeType_ELSE,
     ASTNodeType_ELSE_IF,
+    ASTNodeType_LOOP,
     ASTNodeType_EXPRESION,
     ASTNodeType_INT_LIT,
     ASTNodeType_SYMBOL_RVALUE,
@@ -40,6 +41,7 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_IF]              = "IF",
     [ASTNodeType_ELSE]            = "ELSE",
     [ASTNodeType_ELSE_IF]         = "ELSE_IF",
+    [ASTNodeType_LOOP]            = "LOOP",
     [ASTNodeType_EXPRESION]       = "EXPRESION",
     [ASTNodeType_INT_LIT]         = "INT_LIT",
     [ASTNodeType_SYMBOL_RVALUE]   = "SYMBOL_RVALUE",
@@ -138,6 +140,10 @@ typedef struct _ASTNode{
             ASTNode* expresion;
             Scope* scope;
         } ELSE_IF;
+        struct LOOP {
+            ASTNode* expresion;
+            Scope* scope;
+        } LOOP;
         struct SYMBOL_RVALUE {
             String identifier;
         } SYMBOL_RVALUE;

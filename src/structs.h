@@ -51,6 +51,8 @@ void addType(TypeInformation* info, TypeDefinition def);
 void addOperator(OperatorInformation* info, OperatorDefinition def);
 TypeDefinition TypeDefinitionInit(String symbol, int byteSize);
 OperatorDefinition OperatorDefinitionInit(String symbol, int precedence, TypeDefinition ret, TypeDefinition lhs, TypeDefinition rhs);
+bool containsOp(OperatorInformation opInfo, String op, OperatorDefinition* result);
+
 
 #endif // COMP_STRUCTS_H
 

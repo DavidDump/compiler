@@ -77,8 +77,17 @@ typedef struct GenContext {
     int labelCounter;
     int intSize; // 8 for 64-bit, 4 for 32-bit
     IdentifierLocations idLoc;
+    TypeInformation typeInfo;
+    OperatorInformation opInfo;
     Arena mem;
 } GenContext;
+
+GenContext GenContextInit(TypeInformation typeInfo, OperatorInformation opInfo){
+    GenContext ctx = {0};
+    ctx.typeInfo = typeInfo;
+    ctx.opInfo = opInfo;
+    return ctx;
+}
 
 void appendIdLoc(IdentifierLocations* idLoc, String key, int value){
     if(idLoc->size >= idLoc->capacity){
@@ -163,12 +172,16 @@ void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, const char* 
 }
 
 void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, const char* reg){
+    if(ctx->stack - 1 < 0){
+        printf("[ERROR] Stack underflow\n");
+        exit(EXIT_FAILURE);
+    }
     ctx->stack--;
     genChainPrintf(result, &ctx->mem, "    pop %s\n", (String){.str = reg, .length = strlen(reg)});
 }
 
 void genSaveStack(GenContext* ctx){
-    if(ctx->savedStackPointer + 1 >= SAVED_STACK_SIZE){
+    if(ctx->savedStackPointer + 1 > SAVED_STACK_SIZE){
         printf("[ERROR] Call stack overflow\n");
         exit(EXIT_FAILURE);
     }
@@ -301,15 +314,16 @@ StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
 }
 
 StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, int label){
-    // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition, it doesnt need to be moved into a register as its already there
+    // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
+    // it doesnt need to be moved into a register as its already there
     StringChain result = {0};
 
     StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
     StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
 
-    StringChainAppendChain(&result, &ctx->mem, lhs);
-    gen_win_x86_64_nasm_push(ctx, &result, "rax");
     StringChainAppendChain(&result, &ctx->mem, rhs);
+    gen_win_x86_64_nasm_push(ctx, &result, "rax");
+    StringChainAppendChain(&result, &ctx->mem, lhs);
     gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
     genChainPrintf(&result, &ctx->mem, "    cmp rax, rcx\n");
     
@@ -393,12 +407,14 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 int savedStack = ctx->stack;
                 genChainPrintf(&result, &ctx->mem, "    lea rsp, [rbp - %i * %i]\n", loc - 1, ctx->intSize);
                 gen_win_x86_64_nasm_push(ctx, &result, "rax");
-                genChainPrintf(&result, &ctx->mem, "    lea rsp, [rbp - %i * %i]\n", savedStack - 1, ctx->intSize);
+                // TODO: investigate if this has to be `savedStack` or `savedStack - 1`
+                genChainPrintf(&result, &ctx->mem, "    lea rsp, [rbp - %i * %i]\n", savedStack, ctx->intSize);
                 ctx->stack = savedStack;
                 // TODO: reseting the stack to its original position is only neccesary if it didnt alrady get reset by the push
                 // ie.: if((savedStack - 1) - (loc - 1) != 1) reset stack pos 
             } break;
             case ASTNodeType_RET: {
+                // NOTE: dead code elimination, currently internal stack underflows if there is more than one return in a add
                 ASTNode* exprNode = node->node.RET.expresion;
                 
                 StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
@@ -511,7 +527,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
 
                         // end label
                         if(ifEndLabel == INVALID_IF_LABEL_COUNTER) ifEndLabel = ctx->labelCounter++;
-                        genChainPrintf(&tmp, &ctx->mem, "    jmp .L%i:\n", ifEndLabel);
+                        genChainPrintf(&tmp, &ctx->mem, "    jmp .L%i\n", ifEndLabel);
                         StringChainPrependChain(&ifBody, &ctx->mem, tmp);
                     }
                     next = globalScope->stmts.statements[i + 1];
@@ -540,6 +556,56 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
 
                 StringChain funcCall = gen_win_x86_64_nasm_func_call(ctx, id, args);
                 StringChainAppendChain(&result, &ctx->mem, funcCall);
+            } break;
+            case ASTNodeType_LOOP: {
+                ASTNode* exprNode = node->node.LOOP.expresion;
+                Scope* scope = node->node.LOOP.scope;
+
+                StringChain body = generate_win_x86_64_nasm_scope(ctx, scope, dataSection);
+
+                // TODO: very scuffed way of finding if the expresion evaluates to a bool or an int
+                // this is temporary, should get removed when typechecking is added
+                OperatorDefinition opDef;
+                if(exprNode->type == ASTNodeType_EXPRESION && containsOp(ctx->opInfo, exprNode->node.EXPRESION.operator, &opDef) && StringEqualsCstr(opDef.retType.symbol, "bool")){
+                    // expr evaluates to bool
+                    // do the loop while condition is true
+                    int startLabel = ctx->labelCounter++;
+                    int endLabel = ctx->labelCounter++;
+                    int conditionLabel = ctx->labelCounter++;
+                    
+                    StringChain condition = generate_win_x86_64_nasm_condition(ctx, exprNode, startLabel);
+
+                    genChainPrintf(&result, &ctx->mem, ".L%i:\n", conditionLabel);
+                    StringChainAppendChain(&result, &ctx->mem, condition);
+                    genChainPrintf(&result, &ctx->mem, "    jmp .L%i\n", endLabel);
+                    genChainPrintf(&result, &ctx->mem, ".L%i:\n", startLabel);
+                    StringChainAppendChain(&result, &ctx->mem, body);
+                    genChainPrintf(&result, &ctx->mem, "    jmp .L%i\n", conditionLabel);
+                    genChainPrintf(&result, &ctx->mem, ".L%i:\n", endLabel);
+                }else{
+                    // expr is int litaral or evaluates to int
+                    // do the loop n times
+                    int startLabel = ctx->labelCounter++;
+                    int endLabel = ctx->labelCounter++;
+
+                    StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+
+                    int savedStack = ctx->stack;
+                    StringChainAppendChain(&result, &ctx->mem, expr);
+                    genChainPrintf(&result, &ctx->mem, "    mov rcx, 0\n");
+                    genChainPrintf(&result, &ctx->mem, "    cmp rax, rcx\n");
+                    genChainPrintf(&result, &ctx->mem, ".L%i:\n", startLabel);
+                    gen_win_x86_64_nasm_push(ctx, &result, "rax");
+                    genChainPrintf(&result, &ctx->mem, "    jz .L%i\n", endLabel);
+                    StringChainAppendChain(&result, &ctx->mem, body);
+                    gen_win_x86_64_nasm_pop(ctx, &result, "rax");
+                    genChainPrintf(&result, &ctx->mem, "    dec rax\n");
+                    genChainPrintf(&result, &ctx->mem, "    jmp .L%i\n", startLabel);
+                    genChainPrintf(&result, &ctx->mem, ".L%i:\n", endLabel);
+                    genChainPrintf(&result, &ctx->mem, "    add rsp, 8\n");
+                    ctx->stack--;
+                    ctx->stack = savedStack;
+                }
             } break;
 
             case ASTNodeType_ELSE:
@@ -628,14 +694,14 @@ int main(int argc, char** argv){
     // operators
     OperatorInformation opInfo = {0};
     // TODO: figure out how to group all the int-like types so biary operators can be generated easily
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit(">="), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("<="), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit(">"), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("<"), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("!="), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("=="), 4, typeInfo.types[0], typeInfo.types[9], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("+"), 5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("-"), 5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit(">="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("<="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit(">"),  4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("<"),  4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("!="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("=="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("+"),  5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("-"),  5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
     addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("*"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
     addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("/"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
 
@@ -653,7 +719,7 @@ int main(int argc, char** argv){
     Scope* globalScope = Parse(&parseContext, &readFileMem);
     if(printAST) ASTPrint(globalScope);
 
-    GenContext genContext = {0};
+    GenContext genContext = GenContextInit(typeInfo, opInfo);
     StringChain outRaw = Generate(&genContext, globalScope);
 
     char* outFilePath = "output.asm";

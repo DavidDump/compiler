@@ -164,6 +164,21 @@ void ASTNodePrint(ASTNode* node, int indent){
                 ASTNodePrint(scope->stmts.statements[i], indent + 1);
             }
         } break;
+        case ASTNodeType_LOOP: {
+            printf("LOOP:\n");
+            for(int h = 0; h < indent; h++) printf("  ");
+            ASTNode* expr = node->node.LOOP.expresion;
+            Scope* scope = node->node.LOOP.scope;
+            printf("expr:\n");
+            ASTNodePrint(expr, indent + 1);
+
+            // statements
+            for(int i = 0; i < scope->stmts.size; i++){
+                for(int h = 0; h < indent + 1; h++) printf("  ");
+                printf("Statement %i\n", i + 1);
+                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            }
+        } break;
         case ASTNodeType_SYMBOL_RVALUE: {
             String id = node->node.SYMBOL_RVALUE.identifier;
             printf("RVALUE: %.*s\n", id.length, id.str);
@@ -776,6 +791,29 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                 }else{
                     ERROR(next.loc, "Else needs to be followed by if condition or a scope");
                 }
+            } break;
+            case TokenType_LOOP: {
+                ASTNode* node = NodeInit(mem);
+                node->type = ASTNodeType_LOOP;
+                
+                ASTNode* expr = parseExpression(ctx, mem, currentScope);
+                if(!expr){
+                    ERROR(t.loc, "Loop needs an expresion");
+                }
+                node->node.LOOP.expresion = expr;
+
+                Token next = parsePeek(ctx, 0);
+                if(next.type != TokenType_LSCOPE){
+                    // TODO: later add loop condition without curly braces when it only contains one statement
+                    ERROR(next.loc, "Loop needs a body");
+                }
+                parseConsume(ctx);
+
+                Scope* newScope = parseScopeInit(mem, currentScope);
+                node->node.LOOP.scope = newScope;
+
+                parseAddStatement(&currentScope->stmts, node);
+                currentScope = newScope;
             } break;
 
             case TokenType_TYPE:

@@ -26,6 +26,7 @@ typedef enum TokenType{
     TokenType_RETURN,      // return
     TokenType_IF,          // if
     TokenType_ELSE,        // else
+    TokenType_LOOP,        // loop
     TokenType_TYPE,        // like u8
     TokenType_SEMICOLON,   // ;
     TokenType_COLON,       // :
@@ -58,6 +59,7 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_RETURN]      = "RETURN",
     [TokenType_IF]          = "IF",
     [TokenType_ELSE]        = "ELSE",
+    [TokenType_LOOP]        = "LOOP",
     [TokenType_TYPE]        = "TYPE",
     [TokenType_SEMICOLON]   = "SEMICOLON",
     [TokenType_COLON]       = "COLON",

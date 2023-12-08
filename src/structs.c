@@ -1,5 +1,16 @@
 #include "structs.h"
 
+bool containsOp(OperatorInformation opInfo, String op, OperatorDefinition* result){
+    for(int i = 0; i < opInfo.size; i++){
+        if(StringEquals(opInfo.ops[i].symbol, op)){
+            *result = opInfo.ops[i];
+            return TRUE;
+        }
+    }
+    result = NULL;
+    return FALSE;
+}
+
 void addType(TypeInformation* info, TypeDefinition def){
     if(info->size >= info->capacity){
         size_t newCap = info->capacity * 2;

@@ -106,6 +106,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             if(StringEqualsCstr(value, "return"))    type = TokenType_RETURN;
             else if(StringEqualsCstr(value, "if"))   type = TokenType_IF;
             else if(StringEqualsCstr(value, "else")) type = TokenType_ELSE;
+            else if(StringEqualsCstr(value, "loop")) type = TokenType_LOOP;
             else if(TokenIsType(tokenizer, value))   type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
 
