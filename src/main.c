@@ -660,20 +660,25 @@ int main(int argc, char** argv){
     // parse args
     bool printTokens = FALSE;
     bool printAST = FALSE;
-    char* filepath;
+    char* inFilepath;
+    char* outFilepath;
     for(int i = 0; i < argc; i++){
         if(strcmp(argv[i], "--tokens") == 0){
             printTokens = TRUE;
         }else if(strcmp(argv[i], "--ast") == 0){
             printAST = TRUE;
+        }else if(strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0){
+            outFilepath = argv[i + 1];
+            i++;
         }else{
-            if(argv[i][0] == '-' && argv[i][1] == '-'){
+            if(argv[i][0] == '-'){
                 printf("[ERROR] Argument \"%s\" not supported, supported args:\n", argv[i]);
                 printf("          --tokens\n");
                 printf("          --ast\n");
+                printf("          --output -o <filepath>\n");
                 exit(EXIT_FAILURE);
             }else{
-                filepath = argv[i];
+                inFilepath = argv[i];
             }
         }
     }
@@ -706,10 +711,10 @@ int main(int argc, char** argv){
     addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("/"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
 
     Arena readFileMem = {0}; // source file is stored in here
-    String sourceRaw = EntireFileRead(&readFileMem, filepath);
+    String sourceRaw = EntireFileRead(&readFileMem, inFilepath);
 
-    int filenameLen = strlen(filepath);
-    String filename = {.str = filepath, .length = filenameLen};
+    int filenameLen = strlen(inFilepath);
+    String filename = {.str = inFilepath, .length = filenameLen};
     Tokenizer tokenizer = TokenizerInit(sourceRaw, filename, &typeInfo, &opInfo);
     TokenArray tokens = Tokenize(&tokenizer);
     if(printTokens) TokensPrint(&tokens);
@@ -722,8 +727,7 @@ int main(int argc, char** argv){
     GenContext genContext = GenContextInit(typeInfo, opInfo);
     StringChain outRaw = Generate(&genContext, globalScope);
 
-    char* outFilePath = "output.asm";
-    bool success = EntireFileWrite(outFilePath, outRaw);
+    bool success = EntireFileWrite(outFilepath, outRaw);
     if(!success){
         printf("[ERROR] Failed to write output asm file\n");
         exit(EXIT_FAILURE);

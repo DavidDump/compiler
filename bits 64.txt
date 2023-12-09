@@ -1,0 +1,37 @@
+; code to figure out loops
+bits 64
+default rel
+
+section .text
+global _start
+_start:
+    ; loop where we iterate a fixed amount of times
+    mov rax, 3
+    mov rcx, 0
+    cmp rax, rcx
+loop_start:
+    push rax
+    jz loop_end
+    ...
+    
+    pop rax
+    dec rax
+    jmp loop_start
+loop_end:
+    add rsp, 8 ; pop without clobberig register
+
+    ; loop where we keep going while a condition if true
+    ; 1 < 2
+other_condition:
+    mov rax, 1
+    mov rcx, 2
+    cmp rax, rcx
+    jl other_start
+    jmp other_end
+other_start:
+    ...
+    jmp other_condition
+other_end:
+    
+    mov rax, 1
+    ret

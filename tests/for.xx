@@ -1,16 +1,22 @@
 dsa :: enum: s64 {
     NONE,
+    // enums can have values specified
+    ONE   = 1,
+    TWO   = 2,
+    THREE = 3,
+    // next value will continue from last, 4 in this case
+    FOUR,
     COUNT,
 }
 
 asd :: struct {
     foo: u32 = 69; // default initalizer
-    bar: u32 = 69; // by default values are uninitialized
-    baz: u32 = 69; // compiler flag to zero initialize all variables
+    bar: u32 = 42; // by default values are uninitialized
+    baz: u32 = 77; // compiler flag to zero initialize all variables
 }
 
 main :: (args: string[]) -> u8 {
-    // [3] indicates an array of 3 elements
+    // [3] means an array of 3 elements
     arr1 : asd[3];
     // [] no number in type means size will be infered using the number of elements provided
     arr2 : asd[] = [[0] = {}, [1] = {}, [2] = {}];
@@ -22,17 +28,18 @@ main :: (args: string[]) -> u8 {
     }
     asd : asd = {.foo = 1, .bar = 2, .baz = 3}; // member initializers, type required
 
-    // loop can have both expresions that evaluate to integers and booleans
+    // loop can have both expresions that evaluate to integers or booleans
     // in the case of booleans the loop will keep going while true
     // in the case of integers the loop will to n number on iterations
     // this may be changed later if inconvenient to use
+    
     // loop 5 times
     loop 5 {
-        arr3.push({1, 2, 3});
+        push(arr3, {1, 2, 3});
     }
     // loop while true
     loop 1 == 1 {
-        arr3.push({4, 5, 6});
+        push(arr3, {4, 5, 6});
         break;
     }
 
