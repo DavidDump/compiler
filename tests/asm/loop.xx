@@ -1,0 +1,21 @@
+main :: (args: string[...]) -> u8 {
+    foo := 5;
+    
+    loop 2 {
+        foo = foo + 1;
+    }
+    
+    loop foo {
+        foo = foo + 1;
+    }
+
+    loop foo < 14 {
+        foo = foo + 1;
+    }
+
+    loop foo > 5 {
+        foo = foo - 1;
+    }
+    
+    return foo;
+}

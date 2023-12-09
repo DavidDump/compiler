@@ -661,7 +661,7 @@ int main(int argc, char** argv){
     bool printTokens = FALSE;
     bool printAST = FALSE;
     char* inFilepath;
-    char* outFilepath;
+    char* outFilepath = "output.asm";
     for(int i = 0; i < argc; i++){
         if(strcmp(argv[i], "--tokens") == 0){
             printTokens = TRUE;

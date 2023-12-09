@@ -1,0 +1,15 @@
+blo :: 3;
+
+foo :: (arg1: u8, arg2: u16) -> u32 {
+    foo := 1;
+    bar : s64;
+    bar = 2;
+    baz :: 3;
+
+    return 1;
+}
+
+main :: (args: string[...]) -> u8 {
+    foo(1, 2);
+    return 3;
+}
