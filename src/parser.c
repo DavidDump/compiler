@@ -690,7 +690,11 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                     }
                 }else if(next.type == TokenType_LPAREN){
                     // function call
+                    if(ctx->index - 1 >= 0) ctx->index--; // NOTE: need to rewind the context, because parseFunctionCall expects the context to point to the function identifier
                     ASTNode* func = parseFunctionCall(ctx, mem, currentScope);
+                    if(!func){
+                        ERROR(next.loc, "Function call malformed");
+                    }
 
                     if(parseCheckSemicolon(ctx)){
                         parseAddStatement(&currentScope->stmts, func);
