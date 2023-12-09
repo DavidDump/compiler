@@ -685,7 +685,7 @@ int main(int argc, char** argv){
 
     // types
     TypeInformation typeInfo = {0};
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u8"),  1)); // NOTE: for now the [0] item is what all binaty operators operate on
+    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u8"),  1)); // NOTE: for now the [0] item is what all binary operators operate on
     addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u16"), 2));
     addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u32"), 4));
     addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u64"), 8));
