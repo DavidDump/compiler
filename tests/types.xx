@@ -1,0 +1,26 @@
+// u8, u16, u32, u64
+// s8, s16, s32, s64
+// f32, f64
+// int, float
+// string, bool
+
+main :: () {
+    a: u8  = 0;
+    b: u16 = 0;
+    c: u64 = 0;
+    d: u64 = 0;
+    
+    e: s8  = 0;
+    f: s16 = 0;
+    g: s64 = 0;
+    h: s64 = 0;
+
+    i: f32 = 0.0;
+    j: f64 = 0.0;
+
+    k: string = "";
+    l: bool   = true;
+    
+    m: int   = 1;
+    n: float = 1.0;
+}

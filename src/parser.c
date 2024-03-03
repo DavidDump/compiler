@@ -224,11 +224,13 @@ int OpGetPrecedence(ParseContext* ctx, String op){
     return -1;
 }
 
+// return what the parse context is pointong to then advance
 Token parseConsume(ParseContext* ctx){
 	if (ctx->index + 1 > ctx->tokens.size) return (Token){0};
 	return ctx->tokens.tokens[ctx->index++];
 }
 
+// return what the parse context is pointon to without advancing
 Token parsePeek(ParseContext* ctx, int num){
 	if (ctx->index + num > ctx->tokens.size) return (Token){0};
 	return ctx->tokens.tokens[ctx->index + num];
@@ -376,7 +378,18 @@ void parseScopeAddSymbol(Scope* scope, String symbol){
     scope->symbolTable[scope->symbolSize++] = symbol;
 }
 
+ASTNode* typeVoid(Arena* mem){
+    ASTNode* node = NodeInit(mem);
+    node->type = ASTNodeType_TYPE;
+    node->node.TYPE.symbol = StringFromCstr(mem, "void");
+    node->node.TYPE.array = FALSE;
+    node->node.TYPE.arraySize = 0;
+    node->node.TYPE.dynamic = FALSE;
+    return node;
+}
+
 // context should point to the first token of the type
+// when this return the parse context will point to the first token after the type
 ASTNode* parseType(ParseContext* ctx, Arena* mem){
     Token next = parseConsume(ctx);
     if(next.type != TokenType_TYPE){
@@ -577,23 +590,38 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                     }
                 }else if(next.type == TokenType_COLON){
                     // decl
-                    parseConsume(ctx);
-
-                    // next = parsePeek(ctx, 0);
-                    // if(next.type != TokenType_TYPE){
-                    //     ERROR(next.loc, "Variable declaration without initializer needs a type");
-                    //     exit(EXIT_FAILURE);
-                    // }
-                    // parseConsume(ctx);
+                    parseConsume(ctx); // :
                     
                     ASTNode* node = NodeInit(mem);
-                    node->type = ASTNodeType_VAR_DECL;
-                    node->node.VAR_DECL.identifier = t.value;
-                    node->node.VAR_DECL.type = parseType(ctx, mem);
+                    Token identifier = t;
+                    ASTNode* type = parseType(ctx, mem);
+                    // ERROR(next.loc, "Variable declaration without initializer needs a type");
 
                     // TODO: add the variable to the symbol table
                     parseScopeAddSymbol(currentScope, t.value);
                     
+                    // check if the var is initialized to a value
+                    next = parsePeek(ctx, 0);
+                    if(next.type == TokenType_ASSIGNMENT){
+                        parseConsume(ctx); // =
+                        
+                        next = parsePeek(ctx, 0); // this is for error reporting
+                        ASTNode* expr = parseExpression(ctx, mem, currentScope);
+                        if(!expr){
+                            ERROR(next.loc, "Invalid expression");
+                            exit(EXIT_FAILURE);
+                        }
+                        
+                        node->type = ASTNodeType_VAR_DECL_ASSIGN;
+                        node->node.VAR_DECL_ASSIGN.expresion = expr;
+                        node->node.VAR_DECL_ASSIGN.identifier = identifier.value;
+                        node->node.VAR_DECL_ASSIGN.type = type;
+                    }else{
+                        node->type = ASTNodeType_VAR_DECL;
+                        node->node.VAR_DECL.identifier = identifier.value;
+                        node->node.VAR_DECL.type = type;
+                    }
+
                     // Check for semicolon
                     if(parseCheckSemicolon(ctx)){
                         parseAddStatement(&currentScope->stmts, node);
@@ -660,27 +688,24 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
 
                         // ret type
                         next = parsePeek(ctx, 0);
-                        if(next.type != TokenType_RARROW){
-                            ERROR(next.loc, "Function arguments need to be followed by the return type bikeshedder \"->\"");
-                            exit(EXIT_FAILURE);
-                        }
-                        parseConsume(ctx);
+                        if(next.type == TokenType_RARROW){
+                            parseConsume(ctx);
+                            // TODO: make parseType return null on error and handle the error logging here,
+                            //       more specific error based on where the error occured is better
+                            node->node.FUNCTION_DEF.type = parseType(ctx, mem);
 
-                        // next = parsePeek(ctx, 0);
-                        // if(next.type != TokenType_TYPE){
-                        //     ERROR(next.loc, "Function needs a return type");
-                        //     exit(EXIT_FAILURE);
-                        // }
-                        // parseConsume(ctx);
-                        
-                        node->node.FUNCTION_DEF.type = parseType(ctx, mem);
-                        
-                        next = parsePeek(ctx, 0);
-                        if(next.type != TokenType_LSCOPE){
-                            ERROR(next.loc, "Function needs to have a scope");
+                            next = parseConsume(ctx);
+                            if(next.type != TokenType_LSCOPE){
+                                ERROR(next.loc, "Function needs to have a scope");
+                                exit(EXIT_FAILURE);
+                            }
+                        }else if(next.type == TokenType_LSCOPE){
+                            parseConsume(ctx);
+                            node->node.FUNCTION_DEF.type = typeVoid(mem);
+                        }else{
+                            ERROR(next.loc, "Function args need to be followed by the return type or the function body");
                             exit(EXIT_FAILURE);
                         }
-                        parseConsume(ctx);
 
                         node->node.FUNCTION_DEF.scope = functionScope;
                         parseAddStatement(&scopeBackup->stmts, node);
