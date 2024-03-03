@@ -23,66 +23,68 @@ typedef struct Location{
 typedef enum TokenType{
     TokenType_NONE,
     
-    TokenType_RETURN,      // return
-    TokenType_IF,          // if
-    TokenType_ELSE,        // else
-    TokenType_LOOP,        // loop
-    TokenType_TYPE,        // like u8
-    TokenType_SEMICOLON,   // ;
-    TokenType_COLON,       // :
-    TokenType_DOUBLECOLON, // ::
-    TokenType_INITIALIZER, // :=
-    TokenType_RARROW,      // ->
-    TokenType_LPAREN,      // (
-    TokenType_RPAREN,      // )
-    TokenType_LSCOPE,      // {
-    TokenType_RSCOPE,      // }
-    TokenType_LBRACKET,    // [
-    TokenType_RBRACKET,    // ]
-    TokenType_COMMA,       // ,
-    TokenType_DOT,         // .
-    TokenType_DOUBLEDOT,   // ..
-    TokenType_TRIPLEDOT,   // ...
-    TokenType_OPERATOR,    // +
-    TokenType_ASSIGNMENT,  // =
-    TokenType_COMPARISON,  // ==
-    TokenType_IDENTIFIER,  // any string that is not a keyword
-    TokenType_INT_LITERAL, // 69
+    TokenType_RETURN,        // return
+    TokenType_IF,            // if
+    TokenType_ELSE,          // else
+    TokenType_LOOP,          // loop
+    TokenType_TYPE,          // like u8
+    TokenType_SEMICOLON,     // ;
+    TokenType_COLON,         // :
+    TokenType_DOUBLECOLON,   // ::
+    TokenType_INITIALIZER,   // :=
+    TokenType_RARROW,        // ->
+    TokenType_LPAREN,        // (
+    TokenType_RPAREN,        // )
+    TokenType_LSCOPE,        // {
+    TokenType_RSCOPE,        // }
+    TokenType_LBRACKET,      // [
+    TokenType_RBRACKET,      // ]
+    TokenType_COMMA,         // ,
+    TokenType_DOT,           // .
+    TokenType_DOUBLEDOT,     // ..
+    TokenType_TRIPLEDOT,     // ...
+    TokenType_OPERATOR,      // +
+    TokenType_ASSIGNMENT,    // =
+    TokenType_COMPARISON,    // ==
+    TokenType_IDENTIFIER,    // any string that is not a keyword
+    TokenType_INT_LITERAL,   // 69
+    TokenType_STRING_LIT,    // "Hello, world!"
     
     TokenType_COUNT,
 } TokenType;
 
 #pragma GCC diagnostic ignored "-Wunused-variable"
 static char* TokenTypeStr[TokenType_COUNT + 1] = {
-    [TokenType_NONE]        = "NONE",
+    [TokenType_NONE]          = "NONE",
     
-    [TokenType_RETURN]      = "RETURN",
-    [TokenType_IF]          = "IF",
-    [TokenType_ELSE]        = "ELSE",
-    [TokenType_LOOP]        = "LOOP",
-    [TokenType_TYPE]        = "TYPE",
-    [TokenType_SEMICOLON]   = "SEMICOLON",
-    [TokenType_COLON]       = "COLON",
-    [TokenType_DOUBLECOLON] = "DOUBLECOLON",
-    [TokenType_INITIALIZER] = "INITIALIZER",
-    [TokenType_RARROW]      = "RARROW",
-    [TokenType_LPAREN]      = "LPAREN",
-    [TokenType_RPAREN]      = "RPAREN",
-    [TokenType_LSCOPE]      = "LSCOPE",
-    [TokenType_RSCOPE]      = "RSCOPE",
-    [TokenType_LBRACKET]    = "LBRACKET",
-    [TokenType_RBRACKET]    = "RBRACKET",
-    [TokenType_COMMA]       = "COMMA",
-    [TokenType_DOT]         = "DOT",
-    [TokenType_DOUBLEDOT]   = "DOUBLEDOT",
-    [TokenType_TRIPLEDOT]   = "TRIPLEDOT",
-    [TokenType_OPERATOR]    = "OPERATOR",
-    [TokenType_ASSIGNMENT]  = "ASSIGNMENT",
-    [TokenType_COMPARISON]  = "COMPARISON",
-    [TokenType_IDENTIFIER]  = "IDENTIFIER",
-    [TokenType_INT_LITERAL] = "INT_LITERAL",
+    [TokenType_RETURN]        = "RETURN",
+    [TokenType_IF]            = "IF",
+    [TokenType_ELSE]          = "ELSE",
+    [TokenType_LOOP]          = "LOOP",
+    [TokenType_TYPE]          = "TYPE",
+    [TokenType_SEMICOLON]     = "SEMICOLON",
+    [TokenType_COLON]         = "COLON",
+    [TokenType_DOUBLECOLON]   = "DOUBLECOLON",
+    [TokenType_INITIALIZER]   = "INITIALIZER",
+    [TokenType_RARROW]        = "RARROW",
+    [TokenType_LPAREN]        = "LPAREN",
+    [TokenType_RPAREN]        = "RPAREN",
+    [TokenType_LSCOPE]        = "LSCOPE",
+    [TokenType_RSCOPE]        = "RSCOPE",
+    [TokenType_LBRACKET]      = "LBRACKET",
+    [TokenType_RBRACKET]      = "RBRACKET",
+    [TokenType_COMMA]         = "COMMA",
+    [TokenType_DOT]           = "DOT",
+    [TokenType_DOUBLEDOT]     = "DOUBLEDOT",
+    [TokenType_TRIPLEDOT]     = "TRIPLEDOT",
+    [TokenType_OPERATOR]      = "OPERATOR",
+    [TokenType_ASSIGNMENT]    = "ASSIGNMENT",
+    [TokenType_COMPARISON]    = "COMPARISON",
+    [TokenType_IDENTIFIER]    = "IDENTIFIER",
+    [TokenType_INT_LITERAL]   = "INT_LITERAL",
+    [TokenType_STRING_LIT]    = "STRING_LIT",
     
-    [TokenType_COUNT]       = "COUNT",
+    [TokenType_COUNT]         = "COUNT",
 };
 #pragma GCC diagnostic pop
 

@@ -15,10 +15,12 @@ main :: () {
     g: s64 = 0;
     h: s64 = 0;
 
-    i: f32 = 0.0;
-    j: f64 = 0.0;
+    i: f32   = 0.0;
+    j: f64   =  .0;
+    foo: f64 = 0.;
+    bar: f64 =  .;
 
-    k: string = "";
+    k: string = "Hello, world!";
     l: bool   = true;
     
     m: int   = 1;

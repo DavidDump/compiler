@@ -32,6 +32,7 @@ ASTNode* NodeInit(Arena* mem){
     return node;
 }
 
+#ifdef COMP_DEBUG
 void ASTNodePrint(ASTNode* node, int indent){
     // TODO: need to fix indentation, everytime a case has a newline it needs to be indented
     for(int h = 0; h < indent; h++) printf("  ");
@@ -42,6 +43,15 @@ void ASTNodePrint(ASTNode* node, int indent){
         case ASTNodeType_INT_LIT: {
             String val = node->node.INT_LIT.value;
             printf("INT LIT: %.*s\n", val.length, val.str);
+        } break;
+        case ASTNodeType_FLOAT_LIT: {
+            String val = node->node.FLOAT_LIT.value;
+            printf("FLOAT LIT: %.*s\n", val.length, val.str);
+        } break;
+        case ASTNodeType_STRING_LIT: {
+            String val = node->node.STRING_LIT.value;
+            if(val.length > 50) printf("STRING LIT: %.*s...\n", 50, val.str);
+            else                printf("STRING LIT: %.*s\n", val.length, val.str);
         } break;
         case ASTNodeType_EXPRESION: {
             String val = node->node.EXPRESION.operator;
@@ -214,6 +224,7 @@ void ASTPrint(Scope* root){
         ASTNodePrint(root->stmts.statements[i], 0);
     }
 }
+#endif // COMP_DEBUG
 
 int OpGetPrecedence(ParseContext* ctx, String op){
     for(int i = 0; i < ctx->opsInfo->size; i++){
@@ -252,13 +263,68 @@ bool parseScopeContainsSymbol(Scope* scope, String symbol){
 ASTNode* parsePrimary(ParseContext* ctx, Arena* mem, Scope* scope){
 	Token t = parseConsume(ctx);
 	if(t.type == TokenType_INT_LITERAL){
-		ASTNode* node = NodeInit(mem);
-		node->type = ASTNodeType_INT_LIT;
-        node->node.INT_LIT.value = t.value;
-		return node;
-	}else if(t.type == TokenType_IDENTIFIER){
+		Token next = parsePeek(ctx, 0);
+        ASTNode* node = NodeInit(mem);
+        if(next.type == TokenType_DOT){
+            // float lit
+            parseConsume(ctx); // dot (.)
+            node->type = ASTNodeType_FLOAT_LIT;
+
+            int wholePartLen = t.value.length;
+            
+            next = parsePeek(ctx, 0);
+            if(next.type == TokenType_INT_LITERAL){
+                parseConsume(ctx); // int lit
+                int decimalPartLen = next.value.length;
+                node->node.FLOAT_LIT.value = (String){.str = t.value.str, .length = wholePartLen + decimalPartLen + 1}; // +1 for the dot (.)
+            }else{
+                int floatLen = wholePartLen + 2; // +2 for the ".0" suffix
+                // NOTE: this scrach memory is messy, fine for now, will probably get cleaned up when bytocode gen get added
+                char* tmp = (char*)arena_alloc(mem, floatLen);
+                for(int i = 0; i < t.value.length; i++) tmp[i] = t.value.str[i];
+                tmp[wholePartLen + 0] = '.';
+                tmp[wholePartLen + 1] = '0';
+                node->node.FLOAT_LIT.value = (String){.str = tmp, .length = floatLen};
+            }
+        }else{
+            // int lit
+            node->type = ASTNodeType_INT_LIT;
+            node->node.INT_LIT.value = t.value;
+        }
+        return node;
+	}else if(t.type == TokenType_DOT){
+        // float lit
+        ASTNode* node = NodeInit(mem);
+        node->type = ASTNodeType_FLOAT_LIT;
+        
+        Token next = parsePeek(ctx, 0);
+        if(next.type == TokenType_INT_LITERAL){
+            parseConsume(ctx); // int lit
+            // "0." + next.value.str
+            int decimalPartLen = next.value.length;
+            int floatLen = decimalPartLen + 2;
+            // NOTE: this scrach memory is messy, fine for now, will probably get cleaned up when bytocode gen get added
+            char* tmp = (char*)arena_alloc(mem, floatLen);
+            tmp[0] = '0';
+            tmp[1] = '.';
+            for(int i = 2; i < floatLen; i++) tmp[i] = next.value.str[i - 2];
+            
+            node->node.FLOAT_LIT.value = (String){.str = tmp, .length = floatLen};
+        }else{
+            // .; case == 0.0
+            node->node.FLOAT_LIT.value = StringFromCstr(mem, "0.0");
+        }
+        return node;
+    }else if(t.type == TokenType_STRING_LIT){
+        // TODO: probably not the best spot for this maybe check for string before entering expression parsing
+        ASTNode* node = NodeInit(mem);
+        node->type = ASTNodeType_STRING_LIT;
+        node->node.STRING_LIT.value = t.value;
+        return node;
+    }else if(t.type == TokenType_IDENTIFIER){
 		ASTNode* node = NodeInit(mem);
 		node->type = ASTNodeType_SYMBOL_RVALUE;
+        // TODO: true/false should be bool liretal not rvalue
         node->node.SYMBOL_RVALUE.identifier = t.value;
         // TODO: should look up in the symbol table if the symbol is already defined
         // since functions can be defined after use this can only be done on the second pass
@@ -864,6 +930,7 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
             case TokenType_ASSIGNMENT:
             case TokenType_COMPARISON:
             case TokenType_INT_LITERAL:
+            case TokenType_STRING_LIT:
                 printf("[ERROR] Unhandled token type: %s at (%.*s:%i:%i)\n", TokenTypeStr[t.type], t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
             break;
         }
@@ -872,4 +939,4 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
     return globalScope;
 }
 
-// TODO: check if functions with return type return on all codepaths
+// TODO: check if functions with return type return on all codepaths (typechecking step)

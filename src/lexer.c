@@ -229,6 +229,23 @@ TokenArray Tokenize(Tokenizer* tokenizer){
                 String str = {.str = c, .length = 1};
                 TokenArrayAddToken(&tokens, str, TokenType_DOT, tokenizer->filename, lineNum, collumNum);
             }
+        }else if(*c == '\"'){
+            // string literal
+            // TODO: propper string literal parsing with escape characters
+            char* start = c;
+            char* end = start + 1;
+            while(*end && *end != '\"'){
+                if(*end == '\n') lineNum++;
+                end++;
+            }
+            end++; // the second "
+            int len = end - start;
+
+            String str = {.str = start, .length = len};
+            TokenArrayAddToken(&tokens, str, TokenType_STRING_LIT, tokenizer->filename, lineNum, collumNum);
+
+            collumNum += len - 1;
+            tokenizer->index += len - 1;
         }else if(*c == '\n'){
             lineNum++;
             collumNum = 0;
@@ -249,6 +266,7 @@ TokenArray Tokenize(Tokenizer* tokenizer){
     return tokens;
 }
 
+#ifdef COMP_DEBUG
 void TokenPrint(Token t){
     printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
 }
@@ -297,3 +315,4 @@ void TokensPrint(TokenArray* tokens){
         TokenPrintAsTable(t, locWidth, symbolNameWidth, symbolWidth);
     }
 }
+#endif // COMP_DEBUG

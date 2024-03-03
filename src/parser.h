@@ -21,6 +21,8 @@ typedef enum ASTNodeType{
     ASTNodeType_LOOP,
     ASTNodeType_EXPRESION,
     ASTNodeType_INT_LIT,
+    ASTNodeType_FLOAT_LIT,
+    ASTNodeType_STRING_LIT,
     ASTNodeType_SYMBOL_RVALUE,
     ASTNodeType_TYPE,
     
@@ -44,6 +46,8 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_LOOP]            = "LOOP",
     [ASTNodeType_EXPRESION]       = "EXPRESION",
     [ASTNodeType_INT_LIT]         = "INT_LIT",
+    [ASTNodeType_FLOAT_LIT]       = "FLOAT_LIT,",
+    [ASTNodeType_STRING_LIT]      = "STRING_LIT",
     [ASTNodeType_SYMBOL_RVALUE]   = "SYMBOL_RVALUE",
     [ASTNodeType_TYPE]            = "TYPE",
 
@@ -55,7 +59,7 @@ typedef struct _ASTNode ASTNode;
 
 typedef struct Args{
     // the type of this node has to be:
-    // on FUNCTION_DEF - VAR_DECL
+    // on FUNCTION_DEF  - VAR_DECL
     // on FUNCTION_CALL - INT_LIT or EXPRESION
     ASTNode** args;
     int size;
@@ -129,6 +133,12 @@ typedef struct _ASTNode{
         struct INT_LIT {
             String value;
         } INT_LIT;
+        struct FLOAT_LIT {
+            String value;
+        } FLOAT_LIT;
+        struct STRING_LIT {
+            String value;
+        } STRING_LIT;
         struct IF {
             ASTNode* expresion;
             Scope* scope;

@@ -530,6 +530,8 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             case ASTNodeType_ELSE_IF:
             case ASTNodeType_EXPRESION:
             case ASTNodeType_INT_LIT:
+            case ASTNodeType_FLOAT_LIT:
+            case ASTNodeType_STRING_LIT:
             case ASTNodeType_SYMBOL_RVALUE:
             case ASTNodeType_TYPE:
                 printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);
