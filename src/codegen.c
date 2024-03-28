@@ -1,9 +1,12 @@
 #include "codegen.h"
 
-GenContext GenContextInit(TypeInformation typeInfo, OperatorInformation opInfo){
-    GenContext ctx = {0};
-    ctx.typeInfo = typeInfo;
-    ctx.opInfo = opInfo;
+GenContext GenContextInit(TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize){
+    GenContext ctx = {
+        .typeMappings = typeMappings,
+        .typeMappingsSize = typeMappingsSize,
+        .opInfo = opInfo,
+        .opInfoSize = opInfoSize,
+    };
     return ctx;
 }
 
@@ -483,8 +486,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
 
                 // TODO: very scuffed way of finding if the expresion evaluates to a bool or an int
                 // this is temporary, should get removed when typechecking is added
-                OperatorDefinition opDef;
-                if(exprNode->type == ASTNodeType_EXPRESION && containsOp(ctx->opInfo, exprNode->node.EXPRESION.operator, &opDef) && StringEqualsCstr(opDef.retType.symbol, "bool")){
+                if(exprNode->type == ASTNodeType_EXPRESION && getOperatorBehaviourType(ctx->opInfo, ctx->opInfoSize, exprNode->node.EXPRESION.operator) == OP_TYPE_ARITHMETIC){
                     // expr evaluates to bool
                     // do the loop while condition is true
                     int startLabel = ctx->labelCounter++;
@@ -532,6 +534,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             case ASTNodeType_INT_LIT:
             case ASTNodeType_FLOAT_LIT:
             case ASTNodeType_STRING_LIT:
+            case ASTNodeType_BOOL_LIT:
             case ASTNodeType_SYMBOL_RVALUE:
             case ASTNodeType_TYPE:
                 printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);

@@ -4,12 +4,14 @@
 #include <stdio.h> // printf()
 #include <string.h> // strlen()
 
-Tokenizer TokenizerInit(String source, String filename, TypeInformation* typeInfo, OperatorInformation* opsInfo){
+Tokenizer TokenizerInit(String source, String filename, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize){
     Tokenizer tokenizer = {
         .filename = filename,
         .source = source,
-        .typeInfo = typeInfo,
-        .opsInfo = opsInfo,
+        .typeMappings = typeMappings,
+        .typeMappingsSize = typeMappingsSize,
+        .opInfo = opInfo,
+        .opInfoSize = opInfoSize,
     };
     return tokenizer;
 }
@@ -43,9 +45,9 @@ bool isSpecial(char c){
 #endif
 
 bool isOperator(Tokenizer* tokenizer, char* c, int* len){
-    for(int i = 0; i < tokenizer->opsInfo->size; i++){
-        if(StringContains(tokenizer->opsInfo->ops[i].symbol, c)){
-            *len = tokenizer->opsInfo->ops[i].symbol.length;
+    for(int i = 0; i < tokenizer->opInfoSize; i++){
+        if(StringContains(tokenizer->opInfo[i].symbol, c)){
+            *len = tokenizer->opInfo[i].symbol.length;
             return TRUE;
         }
     }
@@ -70,8 +72,8 @@ void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String fi
 }
 
 bool TokenIsType(Tokenizer* tokenizer, String value){
-    for(int i = 0; i < tokenizer->typeInfo->size; i++){
-        if(StringEquals(tokenizer->typeInfo->types[i].symbol, value)){
+    for(int i = 0; i < tokenizer->typeMappingsSize; i++){
+        if(StringEquals(tokenizer->typeMappings[i].symbol, value)){
             return TRUE;
         }
     }
@@ -103,11 +105,13 @@ TokenArray Tokenize(Tokenizer* tokenizer){
             String value = {.str = start, .length = len};
             TokenType type = TokenType_NONE;
             // compare keywords and types
-            if(StringEqualsCstr(value, "return"))    type = TokenType_RETURN;
-            else if(StringEqualsCstr(value, "if"))   type = TokenType_IF;
-            else if(StringEqualsCstr(value, "else")) type = TokenType_ELSE;
-            else if(StringEqualsCstr(value, "loop")) type = TokenType_LOOP;
-            else if(TokenIsType(tokenizer, value))   type = TokenType_TYPE;
+            if(StringEqualsCstr(value, "return"))     type = TokenType_RETURN;
+            else if(StringEqualsCstr(value, "if"))    type = TokenType_IF;
+            else if(StringEqualsCstr(value, "else"))  type = TokenType_ELSE;
+            else if(StringEqualsCstr(value, "loop"))  type = TokenType_LOOP;
+            else if(StringEqualsCstr(value, "true"))  type = TokenType_BOOL_LITERAL;
+            else if(StringEqualsCstr(value, "false")) type = TokenType_BOOL_LITERAL;
+            else if(TokenIsType(tokenizer, value))    type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
 
             TokenArrayAddToken(&tokens, value, type, tokenizer->filename, lineNum, collumNum);

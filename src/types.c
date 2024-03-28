@@ -1,5 +1,6 @@
-#include "structs.h"
+#include "types.h"
 
+#if 0
 bool containsOp(OperatorInformation opInfo, String op, OperatorDefinition* result){
     for(int i = 0; i < opInfo.size; i++){
         if(StringEquals(opInfo.ops[i].symbol, op)){
@@ -50,4 +51,23 @@ OperatorDefinition OperatorDefinitionInit(String symbol, int precedence, TypeDef
         .rhsType = rhs,
     };
     return op;
+}
+#endif
+
+Type mapFromSymbolToType(TypeMapping* mappings, int mappingsSize, String symbol){
+    for(int i = 0; i < mappingsSize; i++){
+        if(StringEquals(mappings[i].symbol, symbol)){
+            return mappings[i].type;
+        }
+    }
+    return TYPE_NONE;
+}
+
+OperatorType getOperatorBehaviourType(OperatorInfo* opInfo, int opInfoSize, String symbol){
+    for(int i = 0; i < opInfoSize; i++){
+        if(StringEquals(opInfo[i].symbol, symbol)){
+            return opInfo[i].behaviour;
+        }
+    }
+    return OP_TYPE_NONE;
 }

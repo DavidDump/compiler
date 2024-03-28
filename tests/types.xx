@@ -4,7 +4,7 @@
 // int, float
 // string, bool
 
-main :: () {
+foo :: () {
     a: u8  = 0;
     b: u16 = 0;
     c: u64 = 0;
@@ -25,4 +25,27 @@ main :: () {
     
     m: int   = 1;
     n: float = 1.0;
+}
+
+bar :: () {
+    a := 0;
+    b := 0;
+    c := 0;
+    d := 0;
+    
+    e := 0;
+    f := 0;
+    g := 0;
+    h := 0;
+
+    i   := 0.0;
+    j   :=  .0;
+    foo := 0.;
+    bar :=  .;
+
+    k := "Hello, world!";
+    l := false;
+    
+    m := 1;
+    n := 1.0;
 }

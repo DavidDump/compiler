@@ -3,7 +3,7 @@
 #include <assert.h> // assert()
 
 #include "codegen.h"
-#include "structs.h"
+#include "types.h"
 #include "parser.h"
 #include "lexer.h"
 #include "string.h"
@@ -105,57 +105,59 @@ int main(int argc, char** argv){
     }
 
     // types
-    TypeInformation typeInfo = {0};
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u8"),  1)); // NOTE: for now the [0] item is what all binary operators operate on
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u16"), 2));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u32"), 4));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("u64"), 8));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s8"),  1));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s16"), 2));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s32"), 4));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("s64"), 8));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("int"), 8)); // TODO: int byte size should depend on if the comp target is 64bit or 32bit
+    TypeMapping typeMappings[] = {
+        {.type = TYPE_U8,     .symbol = StringFromCstrLit("u8")},
+        {.type = TYPE_U16,    .symbol = StringFromCstrLit("u16")},
+        {.type = TYPE_U32,    .symbol = StringFromCstrLit("u32")},
+        {.type = TYPE_U64,    .symbol = StringFromCstrLit("u64")},
+        {.type = TYPE_S8,     .symbol = StringFromCstrLit("s8")},
+        {.type = TYPE_S16,    .symbol = StringFromCstrLit("s16")},
+        {.type = TYPE_S32,    .symbol = StringFromCstrLit("s32")},
+        {.type = TYPE_S64,    .symbol = StringFromCstrLit("s64")},
+        {.type = TYPE_F32,    .symbol = StringFromCstrLit("f32")},
+        {.type = TYPE_F64,    .symbol = StringFromCstrLit("f64")},
+        {.type = TYPE_STRING, .symbol = StringFromCstrLit("string")},
+        {.type = TYPE_BOOL,   .symbol = StringFromCstrLit("bool")},
+        {.type = TYPE_VOID,   .symbol = StringFromCstrLit("void")},
+        
+        {.type = TYPE_S64,    .symbol = StringFromCstrLit("int")},
+        {.type = TYPE_F64,    .symbol = StringFromCstrLit("float")},
+    };
     
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("f32"), 4));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("f64"), 8));
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("float"), 8)); // TODO: float byte size should depend on if the comp target is 64bit or 32bit
-    
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("string"), 0)); // TODO: figure out string byteSize
-    addType(&typeInfo, TypeDefinitionInit(StringFromCstrLit("bool"), 1));
-
-    // operators
-    OperatorInformation opInfo = {0};
-    // TODO: figure out how to group all the int-like types so binary operators can be generated easily
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit(">="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("<="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit(">"),  4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("<"),  4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("!="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("=="), 4, typeInfo.types[9], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("+"),  5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("-"),  5, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("*"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
-    addOperator(&opInfo, OperatorDefinitionInit(StringFromCstrLit("/"), 10, typeInfo.types[0], typeInfo.types[0], typeInfo.types[0]));
+    OperatorInfo opInfo[] = {
+        {.symbol = StringFromCstrLit(">="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
+        {.symbol = StringFromCstrLit("<="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
+        {.symbol = StringFromCstrLit(">"),  .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
+        {.symbol = StringFromCstrLit("<"),  .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
+        {.symbol = StringFromCstrLit("!="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
+        {.symbol = StringFromCstrLit("=="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
+        
+        {.symbol = StringFromCstrLit("+"), .precedence = 5,  .behaviour = OP_TYPE_ARITHMETIC},
+        {.symbol = StringFromCstrLit("-"), .precedence = 5,  .behaviour = OP_TYPE_ARITHMETIC},
+        {.symbol = StringFromCstrLit("*"), .precedence = 10, .behaviour = OP_TYPE_ARITHMETIC},
+        {.symbol = StringFromCstrLit("/"), .precedence = 10, .behaviour = OP_TYPE_ARITHMETIC},
+    };
 
     Arena readFileMem = {0}; // source file is stored in here
     String sourceRaw = EntireFileRead(&readFileMem, inFilepath);
 
     int filenameLen = strlen(inFilepath);
     String filename = {.str = inFilepath, .length = filenameLen};
-    Tokenizer tokenizer = TokenizerInit(sourceRaw, filename, &typeInfo, &opInfo);
+    Tokenizer tokenizer = TokenizerInit(sourceRaw, filename, typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
     TokenArray tokens = Tokenize(&tokenizer);
 #ifdef COMP_DEBUG
     if(printTokens) TokensPrint(&tokens);
 #endif // COMP_DEBUG
     
-    ParseContext parseContext = ParseContextInit(tokens, &typeInfo, &opInfo);
+    ParseContext parseContext = ParseContextInit(tokens, typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
 
     Scope* globalScope = Parse(&parseContext, &readFileMem);
 #ifdef COMP_DEBUG
     if(printAST) ASTPrint(globalScope);
 #endif // COMP_DEBUG
 
-    GenContext genContext = GenContextInit(typeInfo, opInfo);
+#if 0 // NOTE: tmp while doig typechecking
+    GenContext genContext = GenContextInit(typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
     StringChain outRaw = Generate(&genContext, globalScope);
 
     bool success = EntireFileWrite(outFilepath, outRaw);
@@ -164,12 +166,11 @@ int main(int argc, char** argv){
         exit(EXIT_FAILURE);
     }
 
-    arena_free(&readFileMem);
     arena_free(&genContext.mem);
+#endif
+    arena_free(&readFileMem);
     exit(EXIT_SUCCESS);
 }
 
 // TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
 // TODO: better error messeges when failing to parse an expresion
-// TODO: instead of specifying operator left hand type and right hand type,
-//       use type properties so we dont have to add operators multiple times for different types

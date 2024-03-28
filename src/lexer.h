@@ -1,7 +1,7 @@
 #ifndef COMP_LEXER_H
 #define COMP_LEXER_H
 
-#include "structs.h"
+#include "types.h"
 #include "string.h"
 #include "common.h"
 
@@ -10,8 +10,10 @@ typedef struct Tokenizer{
     String filename;
     int index;
 
-    TypeInformation* typeInfo;
-    OperatorInformation* opsInfo;
+    TypeMapping* typeMappings;
+    int typeMappingsSize;
+    OperatorInfo* opInfo;
+    int opInfoSize;
 } Tokenizer;
 
 typedef struct Location{
@@ -49,6 +51,7 @@ typedef enum TokenType{
     TokenType_IDENTIFIER,    // any string that is not a keyword
     TokenType_INT_LITERAL,   // 69
     TokenType_STRING_LIT,    // "Hello, world!"
+    TokenType_BOOL_LITERAL,  // true and false
     
     TokenType_COUNT,
 } TokenType;
@@ -83,6 +86,7 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_IDENTIFIER]    = "IDENTIFIER",
     [TokenType_INT_LITERAL]   = "INT_LITERAL",
     [TokenType_STRING_LIT]    = "STRING_LIT",
+    [TokenType_BOOL_LITERAL]  = "BOOL_LITERAL",
     
     [TokenType_COUNT]         = "COUNT",
 };
@@ -104,7 +108,7 @@ typedef struct TokenArray{
 TokenArray Tokenize(Tokenizer* tokenizer);
 void TokensPrint(TokenArray* tokens);
 void TokenPrint(Token t);
-Tokenizer TokenizerInit(String source, String filename, TypeInformation* typeInfo, OperatorInformation* opsInfo);
+Tokenizer TokenizerInit(String source, String filename, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize);
 
 char TokenizerPeek(Tokenizer* tokenizer, int offset);
 char* TokenizerConsume(Tokenizer* tokenizer);

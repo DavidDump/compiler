@@ -7,7 +7,7 @@
 #include <string.h> // strlen()
 
 #include "string.h"
-#include "structs.h"
+#include "types.h"
 #include "parser.h"
 
 typedef struct IdentifierLocations {
@@ -30,12 +30,16 @@ typedef struct GenContext {
     int labelCounter;
     int intSize; // 8 for 64-bit, 4 for 32-bit
     IdentifierLocations idLoc;
-    TypeInformation typeInfo;
-    OperatorInformation opInfo;
+    
+    TypeMapping* typeMappings;
+    int typeMappingsSize;
+    OperatorInfo* opInfo;
+    int opInfoSize;
+    
     Arena mem;
 } GenContext;
 
-GenContext GenContextInit(TypeInformation typeInfo, OperatorInformation opInfo);
+GenContext GenContextInit(TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize);
 void appendIdLoc(IdentifierLocations* idLoc, String key, int value);
 int findIdLoc(IdentifierLocations* idLoc, String key);
 int digitsCount(int value);

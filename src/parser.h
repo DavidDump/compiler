@@ -1,6 +1,7 @@
 #ifndef COMP_PARSER_NEW_H
 #define COMP_PARSER_NEW_H
 
+#include "types.h"
 #include "arena.h"
 #include "string.h"
 #include "lexer.h"
@@ -23,6 +24,7 @@ typedef enum ASTNodeType{
     ASTNodeType_INT_LIT,
     ASTNodeType_FLOAT_LIT,
     ASTNodeType_STRING_LIT,
+    ASTNodeType_BOOL_LIT,
     ASTNodeType_SYMBOL_RVALUE,
     ASTNodeType_TYPE,
     
@@ -48,6 +50,7 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_INT_LIT]         = "INT_LIT",
     [ASTNodeType_FLOAT_LIT]       = "FLOAT_LIT,",
     [ASTNodeType_STRING_LIT]      = "STRING_LIT",
+    [ASTNodeType_BOOL_LIT]        = "BOOL_LIT",
     [ASTNodeType_SYMBOL_RVALUE]   = "SYMBOL_RVALUE",
     [ASTNodeType_TYPE]            = "TYPE",
 
@@ -139,6 +142,9 @@ typedef struct _ASTNode{
         struct STRING_LIT {
             String value;
         } STRING_LIT;
+        struct BOOL_LIT {
+            String value;
+        } BOOL_LIT;
         struct IF {
             ASTNode* expresion;
             Scope* scope;
@@ -156,9 +162,10 @@ typedef struct _ASTNode{
         } LOOP;
         struct SYMBOL_RVALUE {
             String identifier;
+            ASTNode* type;
         } SYMBOL_RVALUE;
         struct TYPE {
-            String symbol;
+            Type type;
             
             bool array;
             int arraySize; // maybe ??
@@ -171,12 +178,14 @@ typedef struct ParseContext{
     TokenArray tokens;
 	int index;
     
-    TypeInformation* typeInfo;
-    OperatorInformation* opsInfo;
+    TypeMapping* typeMappings;
+    int typeMappingsSize;
+    OperatorInfo* opInfo;
+    int opInfoSize;
 } ParseContext;
 
 void parseAddStatement(StmtList* list, ASTNode* node);
-ParseContext ParseContextInit(TokenArray tokens, TypeInformation* typeInfo, OperatorInformation* opsInfo);
+ParseContext ParseContextInit(TokenArray tokens, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize);
 ASTNode* NodeInit(Arena* mem);
 void ASTNodePrint(ASTNode* node, int indent);
 void ASTPrint(Scope* root);
