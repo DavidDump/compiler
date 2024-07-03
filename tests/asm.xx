@@ -1,0 +1,41 @@
+// An example for interfacing with ASM
+
+// registers provided as variables
+rax: u64;
+rbx: u64;
+rcx: u64;
+rdx: u64;
+
+// assining to a register generates a `mov` instuction
+rax = 1;   // mov rax, 1
+rax = rbx; // mov rax, rbx
+
+// saving the registers to a local variable pushes the register to the stack
+foo := rax; // push rax
+bar := rbx; // push rbx
+
+// assining a local variable to a register uses the value from the stack
+rax = bar; // mov rax, [rbp - 0 * 8]
+rbx = foo; // mov rax, [rbp - 1 * 8]
+// if the local variable is used for the last time and its at the top of the stack we pop the stack
+
+// basic optimization is to reorder the operations 
+// so the last use of local variables happend in the order they appear on the stack
+// so as many stack accesses turn into pops
+
+// so saving the registers and restoring them at the end of the function would look like this:
+foo :: () {
+  a := rax;
+  b := rbx;
+  c := rcx;
+  d := rdx;
+  
+  // body of the function
+  // ...
+  
+  // the order doesnt matter here as the local variables dont get accesses after
+  rax = a;
+  rbx = b;
+  rcx = c;
+  rdx = d;
+}

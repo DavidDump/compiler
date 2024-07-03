@@ -622,6 +622,10 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     return result;
 }
 
+// TODO: this function can only be called after the second pass,
+//       because ASTNodeType_SYMBOL_RVALUE only get their type once functions are all parsed,
+//       so expressions can also only be typed on the second pass,
+//       the only variable that can get a type are the ones explicitly given one and not inferred
 ASTNode* parseGetTypeOfExpression(ParseContext* ctx, Arena* mem, ASTNode* expr){
     ASTNode* result = NodeInit(mem);
     result->type = ASTNodeType_TYPE;

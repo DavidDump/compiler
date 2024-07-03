@@ -174,3 +174,11 @@ int main(int argc, char** argv){
 
 // TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
 // TODO: better error messeges when failing to parse an expresion
+
+// TODO: implement a symetrical operation to parseing, reverseParse() that takes an AST and generates code,
+// maintain multiple versions, to migrate from older versions of the code to newer,
+// keep single parse() and reverseParse() function in separete compilation unit,
+// and build with one depending the version, can be integrated into the build system to build and older version
+// then migrate the code, then build the next version and reapead until the code is up to date
+// this could be usefull later in development when standard libraries already exist and have to be updated
+// with syntax changes
