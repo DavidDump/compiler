@@ -60,31 +60,42 @@ typedef enum Scale {
 #define MB(x) (KB(x) * 1000)
 #define GB(x) (MB(x) * 1000)
 
-#define CODE_CAP MB(1)
-u8 code[CODE_CAP] = {0};
-int codeCount = 0;
+typedef struct EmiterContext {
+    u8* code;
+    int count;
+    int capacity;
+} EmiterContext;
 
-void Emit8(u8 data) {
-    if(codeCount + 1 < CODE_CAP) code[codeCount++] = data;
-    else assert(0 && "Ran out of space for code");
+void AppendCode(EmiterContext* ctx, u8 code) {
+    if(ctx->count >= ctx->capacity){
+        unsigned int newCapacity = ctx->capacity * 2;
+        if(newCapacity == 0) newCapacity = 32;
+        ctx->code = realloc(ctx->code, newCapacity);
+        ctx->capacity = newCapacity;
+    }
+    ctx->code[ctx->count++] = code;
 }
 
-void Emit32(u32 data) {
-    Emit8((data >> 0)  & 0xFF);
-    Emit8((data >> 8)  & 0xFF);
-    Emit8((data >> 16) & 0xFF);
-    Emit8((data >> 24) & 0xFF);
+void Emit8(EmiterContext* ctx, u8 data) {
+    AppendCode(ctx, data);
 }
 
-void Emit64(u64 data) {
-    Emit8((data >> 0)  & 0xFF);
-    Emit8((data >> 8)  & 0xFF);
-    Emit8((data >> 16) & 0xFF);
-    Emit8((data >> 24) & 0xFF);
-    Emit8((data >> 32) & 0xFF);
-    Emit8((data >> 40) & 0xFF);
-    Emit8((data >> 48) & 0xFF);
-    Emit8((data >> 56) & 0xFF);
+void Emit32(EmiterContext* ctx, u32 data) {
+    Emit8(ctx, (data >> 0)  & 0xFF);
+    Emit8(ctx, (data >> 8)  & 0xFF);
+    Emit8(ctx, (data >> 16) & 0xFF);
+    Emit8(ctx, (data >> 24) & 0xFF);
+}
+
+void Emit64(EmiterContext* ctx, u64 data) {
+    Emit8(ctx, (data >> 0)  & 0xFF);
+    Emit8(ctx, (data >> 8)  & 0xFF);
+    Emit8(ctx, (data >> 16) & 0xFF);
+    Emit8(ctx, (data >> 24) & 0xFF);
+    Emit8(ctx, (data >> 32) & 0xFF);
+    Emit8(ctx, (data >> 40) & 0xFF);
+    Emit8(ctx, (data >> 48) & 0xFF);
+    Emit8(ctx, (data >> 56) & 0xFF);
 }
 
 // Mod/RM byte:
@@ -100,11 +111,11 @@ void Emit64(u64 data) {
 // the reg value always encodes a register, except when the opcode only uses one operand, then the reg value can be used as a opcode extension
 // the rm value is also a register but it is used based on the addressing mode, if rm = RSP(4) and mode is indirect, a SIB must follow, if mod = 0 and rm = RBP(5) it means absolute address?? [0x1234]
 // in DIRECT addressing mode, if both operands are registers: reg = dst, rm = src, add reg rm
-void EmitModRMByte(AddressingMode mod, Register reg, Register rm) {
+void EmitModRMByte(EmiterContext* ctx, AddressingMode mod, Register reg, Register rm) {
     assert(mod < 4);  // 2 bit number
     assert(reg < 16); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     assert(rm < 16);  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
-    Emit8(((mod & 3) << 6) | ((reg & 7) << 3) | ((rm & 7) << 0));
+    Emit8(ctx, ((mod & 3) << 6) | ((reg & 7) << 3) | ((rm & 7) << 0));
 }
 
 // SIB byte:
@@ -117,11 +128,11 @@ void EmitModRMByte(AddressingMode mod, Register reg, Register rm) {
 // scale is the scale to apply to the index
 // index is a register that stores the index to use, rsp means no index, it cant be used as an index
 // base is a register that stores the base to use, base = RBP(5) is a special case, if in the ModR/M byte mod = 0 base is ignored
-void EmitSIBByte(Scale scale, Register index, Register base) {
+void EmitSIBByte(EmiterContext* ctx, Scale scale, Register index, Register base) {
     assert(scale < 4);  // 2 bit number
     assert(index < 16); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     assert(base < 16);  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
-    Emit8(((scale & 3) << 6) | ((index & 7) << 3) | ((base & 7) << 0));
+    Emit8(ctx, ((scale & 3) << 6) | ((index & 7) << 3) | ((base & 7) << 0));
 }
 
 // REX byte:
@@ -136,84 +147,83 @@ void EmitSIBByte(Scale scale, Register index, Register base) {
 // |  0  |  1  |  0  |  0  |  W  |  R  |  X  |  B  |
 // ------------------------|-----|-----|-----|------
 
-void EmitRexByte(Register r, Register x, Register b) {
+void EmitRexByte(EmiterContext* ctx, Register r, Register x, Register b) {
     assert(r < 16); // 1 bit number, but 16 registers, only the top bit is extracted
     assert(x < 16); // 1 bit number, but 16 registers, only the top bit is extracted
     assert(b < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    Emit8(0x48 | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0));
+    Emit8(ctx, 0x48 | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0));
 }
 
 // ModR/M and SIB byte emiters
 
 // op rax, rcx
 // rx = RAX, reg = RCX
-void EmitDirect(u8 rx, Register reg) {
-    EmitModRMByte(DIRECT, rx, reg);
+void EmitDirect(EmiterContext* ctx, u8 rx, Register reg) {
+    EmitModRMByte(ctx, DIRECT, rx, reg);
 }
 
 // op rax, [rcx]
 // rx = RAX, base = RCX
-void EmitIndirect(u8 rx, Register reg) {
+void EmitIndirect(EmiterContext* ctx, u8 rx, Register reg) {
     assert((reg & 7) != RSP);
     assert((reg & 7) != RBP);
-    EmitModRMByte(INDIRECT_NO_DISPLACE, rx, reg);
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, reg);
 }
 
 // op rax, [rcx + 0x12]
 // rx = RAX, base = RCX, displacement = 0x12
-void EmitIndirectDisplaced8(u8 rx, Register base, u8 displacement) {
+void EmitIndirectDisplaced8(EmiterContext* ctx, u8 rx, Register base, u8 displacement) {
     assert((base & 7) != RSP);
-    EmitModRMByte(INDIRECT_08_DISPLACE, rx, base);
-    Emit8(displacement);
+    EmitModRMByte(ctx, INDIRECT_08_DISPLACE, rx, base);
+    Emit8(ctx, displacement);
 }
 
 // op rax, [rcx + 0x12345678]
 // rx = RAX, base = RCX, displacement = 0x12345678
-void EmitIndirectDisplaced32(u8 rx, Register base, u32 displacement) {
+void EmitIndirectDisplaced32(EmiterContext* ctx, u8 rx, Register base, u32 displacement) {
     assert((base & 7) != RSP);
-    EmitModRMByte(INDIRECT_32_DISPLACE, rx, base);
-    Emit32(displacement);
+    EmitModRMByte(ctx, INDIRECT_32_DISPLACE, rx, base);
+    Emit32(ctx, displacement);
 }
 
 // op rax, [rcx + 4*rdx]
 // rx = RAX, base = RCX, index = RDX, scale = X4
-void EmitIndirectSIB(u8 rx, Register base, Register index, Scale scale) {
+void EmitIndirectSIB(EmiterContext* ctx, u8 rx, Register base, Register index, Scale scale) {
     assert((base & 7) != RBP);
-    EmitModRMByte(INDIRECT_NO_DISPLACE, rx, RSP);
-    EmitSIBByte(scale, index, base);
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, RSP);
+    EmitSIBByte(ctx, scale, index, base);
 }
 
 // op rax, [rcx + 4*rdx + 0x12]
 // rx = RAX, base = RCX, index = RDX, scale = X4, displacement = 0x12
-void EmitIndirectDisplaced8SIB(u8 rx, Register base, Register index, Scale scale, u8 displacement) {
-    EmitModRMByte(INDIRECT_08_DISPLACE, rx, RSP);
-    EmitSIBByte(scale, index, base);
-    Emit8(displacement);
+void EmitIndirectDisplaced8SIB(EmiterContext* ctx, u8 rx, Register base, Register index, Scale scale, u8 displacement) {
+    EmitModRMByte(ctx, INDIRECT_08_DISPLACE, rx, RSP);
+    EmitSIBByte(ctx, scale, index, base);
+    Emit8(ctx, displacement);
 }
 
 // op rax, [rcx + 4*rdx + 0x12345678]
 // rx = RAX, base = RCX, index = RDX, scale = X4, displacement = 0x12345678
-void EmitIndirectDisplaced32SIB(u8 rx, Register base, Register index, Scale scale, u32 displacement) {
-    EmitModRMByte(INDIRECT_32_DISPLACE, rx, RSP);
-    EmitSIBByte(scale, index, base);
-    Emit32(displacement);
+void EmitIndirectDisplaced32SIB(EmiterContext* ctx, u8 rx, Register base, Register index, Scale scale, u32 displacement) {
+    EmitModRMByte(ctx, INDIRECT_32_DISPLACE, rx, RSP);
+    EmitSIBByte(ctx, scale, index, base);
+    Emit32(ctx, displacement);
 }
 
 // op rax, [rip + 0x12345678]
 // rx = RAX, displacement = 0x12345678
-void EmitIndirectDisplacedRip(u8 rx, s32 displacement) {
-    EmitModRMByte(INDIRECT_NO_DISPLACE, rx, RBP);
-    Emit32(displacement);
+void EmitIndirectDisplacedRip(EmiterContext* ctx, u8 rx, s32 displacement) {
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, RBP);
+    Emit32(ctx, displacement);
 }
 
 // op rax, [0x12345678]
 // rx = RAX, displacement = 0x12345678
-void EmitIndirectAbsolute(u8 rx, int32_t displacement) {
-    EmitModRMByte(INDIRECT_NO_DISPLACE, rx, RSP);
-    EmitSIBByte(X0, RSP, RBP);
-    Emit32(displacement);
+void EmitIndirectAbsolute(EmiterContext* ctx, u8 rx, int32_t displacement) {
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, RSP);
+    EmitSIBByte(ctx, X0, RSP, RBP);
+    Emit32(ctx, displacement);
 }
-
 
 // --------------------------------------------------
 
@@ -245,55 +255,57 @@ int main() {
     // Emit8(0x8b);
     // Emit8(0xc3);
 
+    EmiterContext ctx = {0};
+
     for(Register dest = RAX; dest <= R15; dest++){
         for(Register source = RAX; source <= R15; source++){
-            EmitRexByte(0, 0, 0);
-            Emit8(0x8b);
-            EmitDirect(dest, source);
+            EmitRexByte(&ctx, 0, 0, 0);
+            Emit8(&ctx, 0x8b);
+            EmitDirect(&ctx, dest, source);
             
             if((source & 7) != RSP && (source & 7) != RBP){
-                EmitRexByte(0, 0, 0);
-                Emit8(0x8b);
-                EmitIndirect(dest, source);
+                EmitRexByte(&ctx, 0, 0, 0);
+                Emit8(&ctx, 0x8b);
+                EmitIndirect(&ctx, dest, source);
             }
             
             if((source & 7) != RSP){
-                EmitRexByte(0, 0, 0);
-                Emit8(0x8b);
-                EmitIndirectDisplaced8(dest, source, 0x12);
+                EmitRexByte(&ctx, 0, 0, 0);
+                Emit8(&ctx, 0x8b);
+                EmitIndirectDisplaced8(&ctx, dest, source, 0x12);
                 
-                EmitRexByte(0, 0, 0);
-                Emit8(0x8b);
-                EmitIndirectDisplaced32(dest, source, 0x1234);
+                EmitRexByte(&ctx, 0, 0, 0);
+                Emit8(&ctx, 0x8b);
+                EmitIndirectDisplaced32(&ctx, dest, source, 0x1234);
             }
             
             for(Scale scale = X0; scale <= X8; scale++){
                 if((source & 7) != RBP){
-                    EmitRexByte(0, 0, 0);
-                    Emit8(0x8b);
-                    EmitIndirectSIB(dest, source, dest, scale);
+                    EmitRexByte(&ctx, 0, 0, 0);
+                    Emit8(&ctx, 0x8b);
+                    EmitIndirectSIB(&ctx, dest, source, dest, scale);
                 }
 
-                EmitRexByte(0, 0, 0);
-                Emit8(0x8b);
-                EmitIndirectDisplaced8SIB(dest, source, dest, scale, 0x12);
+                EmitRexByte(&ctx, 0, 0, 0);
+                Emit8(&ctx, 0x8b);
+                EmitIndirectDisplaced8SIB(&ctx, dest, source, dest, scale, 0x12);
                 
-                EmitRexByte(0, 0, 0);
-                Emit8(0x8b);
-                EmitIndirectDisplaced32SIB(dest, source, dest, scale, 0x1234);
+                EmitRexByte(&ctx, 0, 0, 0);
+                Emit8(&ctx, 0x8b);
+                EmitIndirectDisplaced32SIB(&ctx, dest, source, dest, scale, 0x1234);
             }
             
-            EmitRexByte(0, 0, 0);
-            Emit8(0x8b);
-            EmitIndirectDisplacedRip(dest, 0x1234);
+            EmitRexByte(&ctx, 0, 0, 0);
+            Emit8(&ctx, 0x8b);
+            EmitIndirectDisplacedRip(&ctx, dest, 0x1234);
             
-            EmitRexByte(0, 0, 0);
-            Emit8(0x8b);
-            EmitIndirectAbsolute(dest, 0x1234);
+            EmitRexByte(&ctx, 0, 0, 0);
+            Emit8(&ctx, 0x8b);
+            EmitIndirectAbsolute(&ctx, dest, 0x1234);
         }
     }
 
-    fwrite(code, sizeof(*code), codeCount, f);
+    fwrite(ctx.code, sizeof(*ctx.code), ctx.count, f);
     fclose(f);
     return 0;
 }
