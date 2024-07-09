@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "sectionCharacteristics.h"
 
 typedef int8_t  s8;
 typedef int16_t s16;
@@ -527,40 +528,86 @@ SectionTable readSectionTable(u8* fileBuffer, u32 offset, PEHeader peHeader) {
     return result;
 }
 
+void printSectionCharacteristics(u32 characteristics) {
+    if(characteristics & IMAGE_SCN_TYPE_NO_PAD)            printf("NO_PAD          ");
+    if(characteristics & IMAGE_SCN_CNT_CODE)               printf("CODE            ");
+    if(characteristics & IMAGE_SCN_CNT_INITIALIZED_DATA)   printf("INITIALIZED     ");
+    if(characteristics & IMAGE_SCN_CNT_UNINITIALIZED_DATA) printf("UNINITIALIZED   ");
+    if(characteristics & IMAGE_SCN_LNK_OTHER)              printf("LNK_OTHER       ");
+    if(characteristics & IMAGE_SCN_LNK_INFO)               printf("LNK_INFO        ");
+    if(characteristics & IMAGE_SCN_LNK_REMOVE)             printf("LNK_REMOVE      ");
+    if(characteristics & IMAGE_SCN_LNK_COMDAT)             printf("LNK_COMDAT      ");
+    if(characteristics & IMAGE_SCN_GPREL)                  printf("GPREL           ");
+    if(characteristics & IMAGE_SCN_MEM_PURGEABLE)          printf("MEM_PURGEABLE   ");
+    if(characteristics & IMAGE_SCN_MEM_16BIT)              printf("MEM_16BIT       ");
+    if(characteristics & IMAGE_SCN_MEM_LOCKED)             printf("MEM_LOCKED      ");
+    if(characteristics & IMAGE_SCN_MEM_PRELOAD)            printf("MEM_PRELOAD     ");
+    if(characteristics & IMAGE_SCN_ALIGN_1BYTES)           printf("ALIGN_1BYTES    ");
+    if(characteristics & IMAGE_SCN_ALIGN_2BYTES)           printf("ALIGN_2BYTES    ");
+    if(characteristics & IMAGE_SCN_ALIGN_4BYTES)           printf("ALIGN_4BYTES    ");
+    if(characteristics & IMAGE_SCN_ALIGN_8BYTES)           printf("ALIGN_8BYTES    ");
+    if(characteristics & IMAGE_SCN_ALIGN_16BYTES)          printf("ALIGN_16BYTES   ");
+    if(characteristics & IMAGE_SCN_ALIGN_32BYTES)          printf("ALIGN_32BYTES   ");
+    if(characteristics & IMAGE_SCN_ALIGN_64BYTES)          printf("ALIGN_64BYTES   ");
+    if(characteristics & IMAGE_SCN_ALIGN_128BYTES)         printf("ALIGN_128BYTES  ");
+    if(characteristics & IMAGE_SCN_ALIGN_256BYTES)         printf("ALIGN_256BYTES  ");
+    if(characteristics & IMAGE_SCN_ALIGN_512BYTES)         printf("ALIGN_512BYTES  ");
+    if(characteristics & IMAGE_SCN_ALIGN_1024BYTES)        printf("ALIGN_1024BYTES ");
+    if(characteristics & IMAGE_SCN_ALIGN_2048BYTES)        printf("ALIGN_2048BYTES ");
+    if(characteristics & IMAGE_SCN_ALIGN_4096BYTES)        printf("ALIGN_4096BYTES ");
+    if(characteristics & IMAGE_SCN_ALIGN_8192BYTES)        printf("ALIGN_8192BYTES ");
+    if(characteristics & IMAGE_SCN_LNK_NRELOC_OVFL)        printf("LNK_NRELOC_OVFL ");
+    if(characteristics & IMAGE_SCN_MEM_DISCARDABLE)        printf("MEM_DISCARDABLE ");
+    if(characteristics & IMAGE_SCN_MEM_NOT_CACHED)         printf("MEM_NOT_CACHED  ");
+    if(characteristics & IMAGE_SCN_MEM_NOT_PAGED)          printf("MEM_NOT_PAGED   ");
+    if(characteristics & IMAGE_SCN_MEM_SHARED)             printf("MEM_SHARED      ");
+    if(characteristics & IMAGE_SCN_MEM_EXECUTE)            printf("MEM_EXECUTE     ");
+    if(characteristics & IMAGE_SCN_MEM_READ)               printf("MEM_READ        ");
+    if(characteristics & IMAGE_SCN_MEM_WRITE)              printf("MEM_WRITE       ");
+}
+
 void printSectionTable(SectionTable sectionTable) {
     printf("------------------------ Section Table (0x%x) ------------------------\n", sectionTable.SectionTableOffset);
     printf("  name  | VirtualSize | VirtualAddress | SizeOfRawData | PointerToRawData | Characteristics\n");
 
     for(int i = 0; i < sectionTable.count; i++) {
+        // name
         int collumWidth = 8;
         printf("%.8s", sectionTable.entries[i].Name.as_u8s);
         for(int h = 0; h < collumWidth - (8 - FindHowManyNonNullBytes(sectionTable.entries[i].Name.as_u64)); h++) printf(" ");
         printf("|");
 
+        // VirtualSize
         collumWidth = 13;
         printf(" 0x%x", sectionTable.entries[i].VirtualSize);
         for(int h = 0; h < (collumWidth - 3) - FindHowManyHexDigits(sectionTable.entries[i].VirtualSize); h++) printf(" ");
         printf("|");
         
+        // VirtualAddress
         collumWidth = 16;
         printf(" 0x%x", sectionTable.entries[i].VirtualAddress);
         for(int h = 0; h < (collumWidth - 3) - FindHowManyHexDigits(sectionTable.entries[i].VirtualAddress); h++) printf(" ");
         printf("|");
         
+        // SizeOfRawData
         collumWidth = 15;
         printf(" 0x%x", sectionTable.entries[i].SizeOfRawData);
         for(int h = 0; h < (collumWidth - 3) - FindHowManyHexDigits(sectionTable.entries[i].SizeOfRawData); h++) printf(" ");
         printf("|");
         
+        // PointerToRawData
         collumWidth = 18;
         printf(" 0x%x", sectionTable.entries[i].PointerToRawData);
         for(int h = 0; h < (collumWidth - 3) - FindHowManyHexDigits(sectionTable.entries[i].PointerToRawData); h++) printf(" ");
         printf("|");
         
+        // Characteristics
         collumWidth = 17;
-        printf(" 0x%x", sectionTable.entries[i].Characteristics);
-        for(int h = 0; h < (collumWidth - 3) - FindHowManyHexDigits(sectionTable.entries[i].Characteristics); h++) printf(" ");
-        printf("|");
+        printf(" ");
+        printSectionCharacteristics(sectionTable.entries[i].Characteristics);
+        // printf(" 0x%x", sectionTable.entries[i].Characteristics);
+        // for(int h = 0; h < (collumWidth - 3) - FindHowManyHexDigits(sectionTable.entries[i].Characteristics); h++) printf(" ");
+        // printf("|");
         printf("\n");
     }
 }
@@ -611,7 +658,7 @@ StringTable readStringTable(u8* fileBuffer, u32 offset, u32* nextByteAfter) {
         result.count = count;
 
         count = 1;
-        result.strings[0] = &stringTable[0];
+        result.strings[0] = &stringTable[4];
         for(int i = 5; i < stringTableSizeBytes; i++) {
             if (stringTable[i] == 0 && i < stringTableSizeBytes - 1) {
                 result.strings[count] = &stringTable[i + 1];
@@ -626,7 +673,7 @@ StringTable readStringTable(u8* fileBuffer, u32 offset, u32* nextByteAfter) {
 void printStringTable(StringTable stringTable, int limit) {
     printf("-------------- String Table (0x%x) --------------\n", stringTable.StringTableOffset);
     for(int i = 0; i < stringTable.count; i++){
-        if(i < limit) printf("%s\n", stringTable.strings[i]);
+        if(i < limit) printf("[%i] %s\n", i, stringTable.strings[i]);
     }
 }
 

@@ -193,11 +193,8 @@ int main(int argc, char** argv) {
     }
 
     // Read the section data, just to mark the sections as read
-    // for(int i = 0; i < peHeader.NumberOfSections; i++){
-    //     for(int h = 0; h < sections[i].SizeOfRawData; h++){
-    //         Read8(fileBuffer, sections[i].PointerToRawData + h);
-    //     }
-    // }
+    for(int h = 0; h < sectionTable.entries[0].SizeOfRawData; h++) Read8(fileBuffer, sectionTable.entries[0].PointerToRawData + h);
+    for(int h = 0; h < sectionTable.entries[1].SizeOfRawData; h++) Read8(fileBuffer, sectionTable.entries[1].PointerToRawData + h);
 
     // Symbol Table
     SymbolTable symbolTable = readSymbolTable(fileBuffer, peHeader);
@@ -208,7 +205,7 @@ int main(int argc, char** argv) {
     // Strings table
     int stringTableOffset = peHeader.PointerToSymbolTable + sizeOfSymbolTableEntry * peHeader.NumberOfSymbols;
     StringTable stringTable = readStringTable(fileBuffer, stringTableOffset, &nextSectionFirstByteAddr);
-    if(debugPrintStringTable) printStringTable(stringTable, stringTableLimit);
+    if(debugPrintStringTable) printStringTable(stringTable, stringTableLimit == -1 ? INT32_MAX : stringTableLimit);
 
     // .rdata common info
     u32 importDirectoryTableOffset = 0;
