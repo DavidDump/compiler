@@ -156,7 +156,7 @@ int main(int argc, char** argv){
     if(printAST) ASTPrint(globalScope);
 #endif // COMP_DEBUG
 
-#if 0 // NOTE: tmp while doig typechecking
+#if 0 // NOTE: tmp while doing typechecking
     GenContext genContext = GenContextInit(typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
     StringChain outRaw = Generate(&genContext, globalScope);
 
