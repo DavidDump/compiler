@@ -309,7 +309,7 @@ typedef struct Operand {
 // NOTE: These functions might be stupid if the encoding for individual instructions is simple,
 // we basically have a case for every operand type during encoding and then decoding,
 // which might be double work
-Operand gen_add(EmiterContext* ctx, Operand dest, Operand source) {
+void gen_add(EmiterContext* ctx, Operand dest, Operand source) {
     assert(dest.type != OPERAND_Immediate8 && "This case is not allowed");
     assert(dest.type != OPERAND_Immediate32 && "This case is not allowed");
 
@@ -434,6 +434,132 @@ Operand gen_add(EmiterContext* ctx, Operand dest, Operand source) {
     }
 }
 
+void gen_mov(EmiterContext* ctx, Operand dest, Operand source) {
+    assert(dest.type != OPERAND_Immediate8 && "This case is not allowed");
+    assert(dest.type != OPERAND_Immediate32 && "This case is not allowed");
+
+    u8 opcode = 0x8B;
+    if(source.type == OPERAND_Register && dest.type != OPERAND_Register) {
+        Operand tmp = dest;
+        dest = source;
+        source = tmp;
+        opcode = 0x89;
+    }
+
+    switch(source.type) {
+        case OPERAND_Register: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            Emit8(ctx, opcode);
+            EmitDirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
+        } break;
+        case OPERAND_AddrInReg: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            Emit8(ctx, opcode);
+            EmitIndirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
+        } break;
+        case OPERAND_AddrInRegOffset8: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET8.reg);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced8(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET8.reg, source.REGISTER_OFFSET8.offset);
+        } break;
+        case OPERAND_AddrInRegOffset32: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET32.reg);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced32(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET32.reg, source.REGISTER_OFFSET32.offset);
+        } break;
+        case OPERAND_SIB: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB.index, source.SIB.base);
+            Emit8(ctx, opcode);
+            EmitIndirectSIB(ctx, dest.REGISTER.reg, source.SIB.base, source.SIB.index, source.SIB.scale);
+        } break;
+        case OPERAND_SIBOffset8: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.index, source.SIB_OFFSET8.base);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced8SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.base, source.SIB_OFFSET8.index, source.SIB_OFFSET8.scale, source.SIB_OFFSET8.offset);
+        } break;
+        case OPERAND_SIBOffset32: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.index, source.SIB_OFFSET32.base);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced32SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.base, source.SIB_OFFSET32.index, source.SIB_OFFSET32.scale, source.SIB_OFFSET32.offset);
+        } break;
+        case OPERAND_RIP: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplacedRip(ctx, dest.REGISTER.reg, source.RIP.offset);
+        } break;
+        case OPERAND_AbsoluteAddr: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            Emit8(ctx, opcode);
+            EmitIndirectAbsolute(ctx, dest.REGISTER.reg, source.ABSOLUTE_ADDR.addr);
+        } break;
+        case OPERAND_Immediate8:
+        case OPERAND_Immediate32: {
+            // u8 opcode = source.type == OPERAND_Immediate8 ? 0xC6 : 0xC7;
+            u8 opcode = 0xC7;
+            
+            switch(dest.type) {
+                case OPERAND_Register: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    Emit8(ctx, opcode);
+                    EmitDirect(ctx, 0, dest.REGISTER.reg);
+                } break;
+                case OPERAND_AddrInReg: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    Emit8(ctx, opcode);
+                    EmitIndirect(ctx, 0, dest.REGISTER.reg);
+                } break;
+                case OPERAND_AddrInRegOffset8: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET8.reg);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced8(ctx, 0, dest.REGISTER_OFFSET8.reg, dest.REGISTER_OFFSET8.offset);
+                } break;
+                case OPERAND_AddrInRegOffset32: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET32.reg);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced32(ctx, 0, dest.REGISTER_OFFSET32.reg, dest.REGISTER_OFFSET32.offset);
+                } break;
+                case OPERAND_SIB: {
+                    EmitRexByte(ctx, 0, dest.SIB.index, dest.SIB.base);
+                    Emit8(ctx, opcode);
+                    EmitIndirectSIB(ctx, 0, dest.SIB.base, dest.SIB.index, dest.SIB.scale);
+                } break;
+                case OPERAND_SIBOffset8: {
+                    EmitRexByte(ctx, 0, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.base);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced8SIB(ctx, 0, dest.SIB_OFFSET8.base, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.scale, dest.SIB_OFFSET8.offset);
+                } break;
+                case OPERAND_SIBOffset32: {
+                    EmitRexByte(ctx, 0, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.base);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced32SIB(ctx, 0, dest.SIB_OFFSET32.base, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.scale, dest.SIB_OFFSET32.offset);
+                } break;
+                case OPERAND_RIP: {
+                    EmitRexByte(ctx, 0, 0, 0);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplacedRip(ctx, 0, dest.RIP.offset);
+                } break;
+                case OPERAND_AbsoluteAddr: {
+                    EmitRexByte(ctx, 0, 0, 0);
+                    Emit8(ctx, opcode);
+                    EmitIndirectAbsolute(ctx, 0, dest.ABSOLUTE_ADDR.addr);
+                } break;
+            }
+            
+            if(source.type == OPERAND_Immediate8) Emit32(ctx, source.IMMEDIATE8.immediate);
+            else Emit32(ctx, source.IMMEDIATE32.immediate);
+        } break;
+    }
+}
+
 // -------------------------------------------
 
 void InitializeFreeRegisters(EmiterContext* ctx) {
@@ -463,6 +589,18 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
     ctx->freeRegisterMask |= 1 << registerToFree;
 }
 
+#define OP_REG(r) (Operand){.type = OPERAND_Register, .REGISTER = {.reg = (r)}}
+#define OP_INDIRECT(r) (Operand){.type = OPERAND_AddrInReg, .REGISTER = {.reg = (r)}}
+#define OP_INDIRECT_OFFSET8(r, disp) (Operand){.type = OPERAND_AddrInRegOffset8, .REGISTER_OFFSET8 = {.reg = (r), .offset = (disp)}}
+#define OP_INDIRECT_OFFSET32(r, disp) (Operand){.type = OPERAND_AddrInRegOffset32, .REGISTER_OFFSET32 = {.reg = (r), .offset = (disp)}}
+#define OP_INDIRECT_SIB(b, s, i) (Operand){.type = OPERAND_SIB, .SIB = {.base = (b), .scale = (s), .index = (i)}}
+#define OP_INDIRECT_SIB_OFFSET8(b, s, i, disp) (Operand){.type = OPERAND_SIBOffset8, .SIB_OFFSET8 = {.base = (b), .scale = (s), .index = (i), .offset = (disp)}}
+#define OP_INDIRECT_SIB_OFFSET32(b, s, i, disp) (Operand){.type = OPERAND_SIBOffset32, .SIB_OFFSET32 = {.base = (b), .scale = (s), .index = (i), .offset = (disp)}}
+#define OP_RIP(disp) (Operand){.type = OPERAND_RIP, .RIP = {.offset = (disp)}}
+#define OP_ABSOLUTE(disp) (Operand){.type = OPERAND_AbsoluteAddr, .ABSOLUTE_ADDR = {.addr = (disp)}}
+#define OP_IMM8(imm) (Operand){.type = OPERAND_Immediate8, .IMMEDIATE8 = {.immediate = (imm)}}
+#define OP_IMM32(imm) (Operand){.type = OPERAND_Immediate32, .IMMEDIATE32 = {.immediate = (imm)}}
+
 int main() {
     FILE* f = fopen("test.bin", "wb");
 
@@ -477,6 +615,167 @@ int main() {
     EmiterContext ctx = {0};
     #endif
     
+    // mov RAX, RBX
+    gen_mov(&ctx, OP_REG(RAX), OP_REG(RBX));
+    // mov RAX, [RBX]
+    gen_mov(&ctx, OP_REG(RAX), OP_INDIRECT(RBX));
+    // mov RAX, [RBX + 0x12]
+    gen_mov(&ctx, OP_REG(RAX), OP_INDIRECT_OFFSET8(RBX, 0x12));
+    // mov RAX, [RBX + 0x12345678]
+    gen_mov(&ctx, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBX, 0x12345678));
+    // mov RAX, [RBX + X2 * RCX]
+    gen_mov(&ctx, OP_REG(RAX), OP_INDIRECT_SIB(RBX, X2, RCX));
+    // mov RAX, [RBX + X2 * RCX + 0x12]
+    gen_mov(&ctx, OP_REG(RAX), OP_INDIRECT_SIB_OFFSET8(RBX, X2, RCX, 0x12));
+    // mov RAX, [RBX + X2 * RCX + 0x12345678]
+    gen_mov(&ctx, OP_REG(RAX), OP_INDIRECT_SIB_OFFSET32(RBX, X2, RCX, 0x12345678));
+    // mov RAX, [rip + 0x12345678]
+    gen_mov(&ctx, OP_REG(RAX), OP_RIP(0x12345678));
+    // mov RAX, [0x12345678]
+    gen_mov(&ctx, OP_REG(RAX), OP_ABSOLUTE(0x12345678));
+    // mov RAX, 0x12
+    gen_mov(&ctx, OP_REG(RAX), OP_IMM8(0x12));
+    // mov RAX, 0x12345678
+    gen_mov(&ctx, OP_REG(RAX), OP_IMM32(0x12345678));
+
+    // mov R8, R9
+    gen_mov(&ctx, OP_REG(R8), OP_REG(R9));
+    // mov R8, [R9]
+    gen_mov(&ctx, OP_REG(R8), OP_INDIRECT(R9));
+    // mov R8, [R9 + 0x12]
+    gen_mov(&ctx, OP_REG(R8), OP_INDIRECT_OFFSET8(R9, 0x12));
+    // mov R8, [R9 + 0x12345678]
+    gen_mov(&ctx, OP_REG(R8), OP_INDIRECT_OFFSET32(R9, 0x12345678));
+    // mov R8, [R9 + X2 * R10]
+    gen_mov(&ctx, OP_REG(R8), OP_INDIRECT_SIB(R9, X2, R10));
+    // mov R8, [R9 + X2 * R10 + 0x12]
+    gen_mov(&ctx, OP_REG(R8), OP_INDIRECT_SIB_OFFSET8(R9, X2, R10, 0x12));
+    // mov R8, [R9 + X2 * R10 + 0x12345678]
+    gen_mov(&ctx, OP_REG(R8), OP_INDIRECT_SIB_OFFSET32(R9, X2, R10, 0x12345678));
+    // mov R8, [rip + 0x12345678]
+    gen_mov(&ctx, OP_REG(R8), OP_RIP(0x12345678));
+    // mov R8, [0x12345678]
+    gen_mov(&ctx, OP_REG(R8), OP_ABSOLUTE(0x12345678));
+    // mov R8, 0x12
+    gen_mov(&ctx, OP_REG(R8), OP_IMM8(0x12));
+    // mov R8, 0x12345678
+    gen_mov(&ctx, OP_REG(R8), OP_IMM32(0x12345678));
+
+    // swaped
+    // mov RBX, RAX
+    gen_mov(&ctx, OP_REG(RBX), OP_REG(RAX));
+    // mov [RBX], RAX
+    gen_mov(&ctx, OP_INDIRECT(RBX), OP_REG(RAX));
+    // mov [RBX + 0x12], RAX
+    gen_mov(&ctx, OP_INDIRECT_OFFSET8(RBX, 0x12), OP_REG(RAX));
+    // mov [RBX + 0x12345678], RAX
+    gen_mov(&ctx, OP_INDIRECT_OFFSET32(RBX, 0x12345678), OP_REG(RAX));
+    // mov [RBX + X2 * RCX], RAX
+    gen_mov(&ctx, OP_INDIRECT_SIB(RBX, X2, RCX), OP_REG(RAX));
+    // mov [RBX + X2 * RCX + 0x12], RAX
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET8(RBX, X2, RCX, 0x12), OP_REG(RAX));
+    // mov [RBX + X2 * RCX + 0x12345678], RAX
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET32(RBX, X2, RCX, 0x12345678), OP_REG(RAX));
+    // mov [rip + 0x12345678], RAX
+    gen_mov(&ctx, OP_RIP(0x12345678), OP_REG(RAX));
+    // mov [0x12345678], RAX
+    gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_REG(RAX));
+
+    // mov R9, R8
+    gen_mov(&ctx, OP_REG(R9), OP_REG(R8));
+    // mov [R9], R8
+    gen_mov(&ctx, OP_INDIRECT(R9), OP_REG(R8));
+    // mov [R9 + 0x12], R8
+    gen_mov(&ctx, OP_INDIRECT_OFFSET8(R9, 0x12), OP_REG(R8));
+    // mov [R9 + 0x12345678], R8
+    gen_mov(&ctx, OP_INDIRECT_OFFSET32(R9, 0x12345678), OP_REG(R8));
+    // mov [R9 + X2 * R10], R8
+    gen_mov(&ctx, OP_INDIRECT_SIB(R9, X2, R10), OP_REG(R8));
+    // mov [R9 + X2 * R10 + 0x12], R8
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET8(R9, X2, R10, 0x12), OP_REG(R8));
+    // mov [R9 + X2 * R10 + 0x12345678], R8
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET32(R9, X2, R10, 0x12345678), OP_REG(R8));
+    // mov [rip + 0x12345678], R8
+    gen_mov(&ctx, OP_RIP(0x12345678), OP_REG(R8));
+    // mov [0x12345678], R8
+    gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_REG(R8));
+
+    // imm as source insted of reg
+    // mov RBX, 0x12
+    gen_mov(&ctx, OP_REG(RBX), OP_IMM8(0x12));
+    // mov [RBX], 0x12
+    gen_mov(&ctx, OP_INDIRECT(RBX), OP_IMM8(0x12));
+    // mov [RBX + 0x12], 0x12
+    gen_mov(&ctx, OP_INDIRECT_OFFSET8(RBX, 0x12), OP_IMM8(0x12));
+    // mov [RBX + 0x12345678], 0x12
+    gen_mov(&ctx, OP_INDIRECT_OFFSET32(RBX, 0x12345678), OP_IMM8(0x12));
+    // mov [RBX + X2 * RCX], 0x12
+    gen_mov(&ctx, OP_INDIRECT_SIB(RBX, X2, RCX), OP_IMM8(0x12));
+    // mov [RBX + X2 * RCX + 0x12], 0x12
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET8(RBX, X2, RCX, 0x12), OP_IMM8(0x12));
+    // mov [RBX + X2 * RCX + 0x12345678], 0x12
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET32(RBX, X2, RCX, 0x12345678), OP_IMM8(0x12));
+    // mov [rip + 0x12345678], 0x12
+    gen_mov(&ctx, OP_RIP(0x12345678), OP_IMM8(0x12));
+    // mov [0x12345678], 0x12
+    gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_IMM8(0x12));
+
+    // mov R9, 0x12
+    gen_mov(&ctx, OP_REG(R9), OP_IMM8(0x12));
+    // mov [R9], 0x12
+    gen_mov(&ctx, OP_INDIRECT(R9), OP_IMM8(0x12));
+    // mov [R9 + 0x12], 0x12
+    gen_mov(&ctx, OP_INDIRECT_OFFSET8(R9, 0x12), OP_IMM8(0x12));
+    // mov [R9 + 0x12345678], 0x12
+    gen_mov(&ctx, OP_INDIRECT_OFFSET32(R9, 0x12345678), OP_IMM8(0x12));
+    // mov [R9 + X2 * R10], 0x12
+    gen_mov(&ctx, OP_INDIRECT_SIB(R9, X2, R10), OP_IMM8(0x12));
+    // mov [R9 + X2 * R10 + 0x12], 0x12
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET8(R9, X2, R10, 0x12), OP_IMM8(0x12));
+    // mov [R9 + X2 * R10 + 0x12345678], 0x12
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET32(R9, X2, R10, 0x12345678), OP_IMM8(0x12));
+    // mov [rip + 0x12345678], 0x12
+    gen_mov(&ctx, OP_RIP(0x12345678), OP_IMM8(0x12));
+    // mov [0x12345678], 0x12
+    gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_IMM8(0x12));
+
+    // mov RBX, 0x12345678
+    gen_mov(&ctx, OP_REG(RBX), OP_IMM32(0x12345678));
+    // mov [RBX], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT(RBX), OP_IMM32(0x12345678));
+    // mov [RBX + 0x12], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_OFFSET8(RBX, 0x12), OP_IMM32(0x12345678));
+    // mov [RBX + 0x12345678], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_OFFSET32(RBX, 0x12345678), OP_IMM32(0x12345678));
+    // mov [RBX + X2 * RCX], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_SIB(RBX, X2, RCX), OP_IMM32(0x12345678));
+    // mov [RBX + X2 * RCX + 0x12], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET8(RBX, X2, RCX, 0x12), OP_IMM32(0x12345678));
+    // mov [RBX + X2 * RCX + 0x12345678], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET32(RBX, X2, RCX, 0x12345678), OP_IMM32(0x12345678));
+    // mov [rip + 0x12345678], 0x12345678
+    gen_mov(&ctx, OP_RIP(0x12345678), OP_IMM32(0x12345678));
+    // mov [0x12345678], 0x12345678
+    gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_IMM32(0x12345678));
+
+    // mov R9, 0x12345678
+    gen_mov(&ctx, OP_REG(R9), OP_IMM32(0x12345678));
+    // mov [R9], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT(R9), OP_IMM32(0x12345678));
+    // mov [R9 + 0x12], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_OFFSET8(R9, 0x12), OP_IMM32(0x12345678));
+    // mov [R9 + 0x12345678], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_OFFSET32(R9, 0x12345678), OP_IMM32(0x12345678));
+    // mov [R9 + X2 * R10], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_SIB(R9, X2, R10), OP_IMM32(0x12345678));
+    // mov [R9 + X2 * R10 + 0x12], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET8(R9, X2, R10, 0x12), OP_IMM32(0x12345678));
+    // mov [R9 + X2 * R10 + 0x12345678], 0x12345678
+    gen_mov(&ctx, OP_INDIRECT_SIB_OFFSET32(R9, X2, R10, 0x12345678), OP_IMM32(0x12345678));
+    // mov [rip + 0x12345678], 0x12345678
+    gen_mov(&ctx, OP_RIP(0x12345678), OP_IMM32(0x12345678));
+    // mov [0x12345678], 0x12345678
+    gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_IMM32(0x12345678));
 
     #if 0
     #include <windows.h>
