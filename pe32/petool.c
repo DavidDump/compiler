@@ -195,6 +195,7 @@ int main(int argc, char** argv) {
     // Read the section data, just to mark the sections as read
     for(int h = 0; h < sectionTable.entries[0].SizeOfRawData; h++) Read8(fileBuffer, sectionTable.entries[0].PointerToRawData + h);
     for(int h = 0; h < sectionTable.entries[1].SizeOfRawData; h++) Read8(fileBuffer, sectionTable.entries[1].PointerToRawData + h);
+    for(int j = 10; j < sectionTable.count; j++) for(int h = 0; h < sectionTable.entries[j].SizeOfRawData; h++) Read8(fileBuffer, sectionTable.entries[j].PointerToRawData + h);
 
     // Symbol Table
     SymbolTable symbolTable = readSymbolTable(fileBuffer, peHeader);
