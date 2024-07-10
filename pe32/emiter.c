@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <assert.h>
+#include <stdlib.h>
 
 // #define ARENA_IMPLEMENTATION
 // #include "../src/arena.h"
@@ -52,9 +53,9 @@ typedef enum Scale {
     X8 = 3,
 } Scale;
 
-#define KiB(x)   ((x) * 1024)
-#define MiB(x) (KB(x) * 1024)
-#define GiB(x) (MB(x) * 1024)
+#define KiB(x)    ((x) * 1024)
+#define MiB(x) (KiB(x) * 1024)
+#define GiB(x) (MiB(x) * 1024)
 
 #define KB(x)   ((x) * 1000)
 #define MB(x) (KB(x) * 1000)
@@ -64,6 +65,8 @@ typedef struct EmiterContext {
     u8* code;
     int count;
     int capacity;
+
+    u32 freeRegisterMask;
 } EmiterContext;
 
 void AppendCode(EmiterContext* ctx, u8 code) {
@@ -147,6 +150,9 @@ void EmitSIBByte(EmiterContext* ctx, Scale scale, Register index, Register base)
 // |  0  |  1  |  0  |  0  |  W  |  R  |  X  |  B  |
 // ------------------------|-----|-----|-----|------
 
+// r is the register in the reg field of the ModR/M byte
+// x is the register in the index field SIB byte
+// b can be the register in the rm field of the ModR/M, base field of the SIB byte or reg field of the ModR/M byte if it is used as an opcode
 void EmitRexByte(EmiterContext* ctx, Register r, Register x, Register b) {
     assert(r < 16); // 1 bit number, but 16 registers, only the top bit is extracted
     assert(x < 16); // 1 bit number, but 16 registers, only the top bit is extracted
@@ -157,70 +163,70 @@ void EmitRexByte(EmiterContext* ctx, Register r, Register x, Register b) {
 // ModR/M and SIB byte emiters
 
 // op rax, rcx
-// rx = RAX, reg = RCX
-void EmitDirect(EmiterContext* ctx, u8 rx, Register reg) {
-    EmitModRMByte(ctx, DIRECT, rx, reg);
+// reg = RAX, rm = RCX
+void EmitDirect(EmiterContext* ctx, Register reg, Register rm) {
+    EmitModRMByte(ctx, DIRECT, reg, rm);
 }
 
 // op rax, [rcx]
-// rx = RAX, base = RCX
-void EmitIndirect(EmiterContext* ctx, u8 rx, Register reg) {
+// reg = RAX, rm = RCX
+void EmitIndirect(EmiterContext* ctx, Register reg, Register rm) {
     assert((reg & 7) != RSP);
     assert((reg & 7) != RBP);
-    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, reg);
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, reg, rm);
 }
 
 // op rax, [rcx + 0x12]
-// rx = RAX, base = RCX, displacement = 0x12
-void EmitIndirectDisplaced8(EmiterContext* ctx, u8 rx, Register base, u8 displacement) {
-    assert((base & 7) != RSP);
-    EmitModRMByte(ctx, INDIRECT_08_DISPLACE, rx, base);
+// reg = RAX, rm = RCX, displacement = 0x12
+void EmitIndirectDisplaced8(EmiterContext* ctx, Register reg, Register rm, u8 displacement) {
+    assert((rm & 7) != RSP);
+    EmitModRMByte(ctx, INDIRECT_08_DISPLACE, reg, rm);
     Emit8(ctx, displacement);
 }
 
 // op rax, [rcx + 0x12345678]
-// rx = RAX, base = RCX, displacement = 0x12345678
-void EmitIndirectDisplaced32(EmiterContext* ctx, u8 rx, Register base, u32 displacement) {
-    assert((base & 7) != RSP);
-    EmitModRMByte(ctx, INDIRECT_32_DISPLACE, rx, base);
+// reg = RAX, rm = RCX, displacement = 0x12345678
+void EmitIndirectDisplaced32(EmiterContext* ctx, u8 reg, Register rm, u32 displacement) {
+    assert((rm & 7) != RSP);
+    EmitModRMByte(ctx, INDIRECT_32_DISPLACE, reg, rm);
     Emit32(ctx, displacement);
 }
 
 // op rax, [rcx + 4*rdx]
-// rx = RAX, base = RCX, index = RDX, scale = X4
-void EmitIndirectSIB(EmiterContext* ctx, u8 rx, Register base, Register index, Scale scale) {
-    assert((base & 7) != RBP);
-    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, RSP);
-    EmitSIBByte(ctx, scale, index, base);
+// reg = RAX, rm = RCX, index = RDX, scale = X4
+void EmitIndirectSIB(EmiterContext* ctx, u8 reg, Register rm, Register index, Scale scale) {
+    assert((rm & 7) != RBP);
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, reg, RSP);
+    EmitSIBByte(ctx, scale, index, rm);
 }
 
 // op rax, [rcx + 4*rdx + 0x12]
-// rx = RAX, base = RCX, index = RDX, scale = X4, displacement = 0x12
-void EmitIndirectDisplaced8SIB(EmiterContext* ctx, u8 rx, Register base, Register index, Scale scale, u8 displacement) {
-    EmitModRMByte(ctx, INDIRECT_08_DISPLACE, rx, RSP);
-    EmitSIBByte(ctx, scale, index, base);
+// reg = RAX, rm = RCX, index = RDX, scale = X4, displacement = 0x12
+void EmitIndirectDisplaced8SIB(EmiterContext* ctx, u8 reg, Register rm, Register index, Scale scale, u8 displacement) {
+    EmitModRMByte(ctx, INDIRECT_08_DISPLACE, reg, RSP);
+    EmitSIBByte(ctx, scale, index, rm);
     Emit8(ctx, displacement);
 }
 
 // op rax, [rcx + 4*rdx + 0x12345678]
-// rx = RAX, base = RCX, index = RDX, scale = X4, displacement = 0x12345678
-void EmitIndirectDisplaced32SIB(EmiterContext* ctx, u8 rx, Register base, Register index, Scale scale, u32 displacement) {
-    EmitModRMByte(ctx, INDIRECT_32_DISPLACE, rx, RSP);
-    EmitSIBByte(ctx, scale, index, base);
+// reg = RAX, rm = RCX, index = RDX, scale = X4, displacement = 0x12345678
+void EmitIndirectDisplaced32SIB(EmiterContext* ctx, u8 reg, Register rm, Register index, Scale scale, u32 displacement) {
+    EmitModRMByte(ctx, INDIRECT_32_DISPLACE, reg, RSP);
+    EmitSIBByte(ctx, scale, index, rm);
     Emit32(ctx, displacement);
 }
 
 // op rax, [rip + 0x12345678]
-// rx = RAX, displacement = 0x12345678
-void EmitIndirectDisplacedRip(EmiterContext* ctx, u8 rx, s32 displacement) {
-    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, RBP);
+// reg = RAX, displacement = 0x12345678
+void EmitIndirectDisplacedRip(EmiterContext* ctx, u8 reg, u32 displacement) {
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, reg, RBP);
     Emit32(ctx, displacement);
 }
 
 // op rax, [0x12345678]
-// rx = RAX, displacement = 0x12345678
-void EmitIndirectAbsolute(EmiterContext* ctx, u8 rx, int32_t displacement) {
-    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, rx, RSP);
+// reg = RAX, displacement = 0x12345678
+void EmitIndirectAbsolute(EmiterContext* ctx, u8 reg, u32 displacement) {
+    EmitModRMByte(ctx, INDIRECT_NO_DISPLACE, reg, RSP);
     EmitSIBByte(ctx, X0, RSP, RBP);
     Emit32(ctx, displacement);
 }
@@ -228,24 +234,234 @@ void EmitIndirectAbsolute(EmiterContext* ctx, u8 rx, int32_t displacement) {
 // --------------------------------------------------
 
 typedef enum OperandType {
-    OPERAND_NULL,
-    OPERAND_REGISTER,
-    OPERAND_IMMEDIATE,
-    OPERAND_ADDRESS,
-    // OPERAND_FRAME_OFFSET,
+    OPERAND_NONE,
+    // regA
+    OPERAND_Register,
+    // [regA]
+    OPERAND_AddrInReg,
+    // [regA + 0x12]
+    OPERAND_AddrInRegOffset8,
+    // [regA + 0x1234]
+    OPERAND_AddrInRegOffset32,
+    // [regA + X0 * regB]
+    OPERAND_SIB,
+    // [regA + X0 * regB + 0x12]
+    OPERAND_SIBOffset8,
+    // [regA + X0 * regB + 0x1234]
+    OPERAND_SIBOffset32,
+    // [RIP + 0x1234]
+    OPERAND_RIP,
+    // [0x1234]
+    OPERAND_AbsoluteAddr,
+    // 0x12
+    OPERAND_Immediate8,
+    // 0x1234
+    OPERAND_Immediate32,
 } OperandType;
 
 typedef struct Operand {
     OperandType type;
     union {
-        Register REGISTER;
-        u32 IMMEDIATE;
-        u32 ADDRESS;
+        // Used for OPERAND_Register and OPERAND_AddrInReg
+        struct {
+            Register reg;
+        } REGISTER;
+        struct {
+            Register reg;
+            u8 offset;
+        } REGISTER_OFFSET8;
+        struct {
+            Register reg;
+            u32 offset;
+        } REGISTER_OFFSET32;
+        struct {
+            Register base;
+            Register index;
+            Scale scale;
+        } SIB;
+        struct {
+            Register base;
+            Register index;
+            Scale scale;
+            u8 offset;
+        } SIB_OFFSET8;
+        struct {
+            Register base;
+            Register index;
+            Scale scale;
+            u32 offset;
+        } SIB_OFFSET32;
+        struct {
+            u32 offset;
+        } RIP;
+        struct {
+            u32 addr;
+        } ABSOLUTE_ADDR;
+        struct {
+            u8 immediate;
+        } IMMEDIATE8;
+        struct {
+            u32 immediate;
+        } IMMEDIATE32;
     };
 } Operand;
 
-// asm: add lhs, rhs
-void gen_add(Operand lhs, Operand rhs);
+// NOTE: These functions might be stupid if the encoding for individual instructions is simple,
+// we basically have a case for every operand type during encoding and then decoding,
+// which might be double work
+Operand gen_add(EmiterContext* ctx, Operand dest, Operand source) {
+    assert(dest.type != OPERAND_Immediate8 && "This case is not allowed");
+    assert(dest.type != OPERAND_Immediate32 && "This case is not allowed");
+
+    u8 opcode = 0x03;
+    if(source.type == OPERAND_Register && dest.type != OPERAND_Register) {
+        Operand tmp = dest;
+        dest = source;
+        source = tmp;
+        opcode = 0x01;
+    }
+
+    switch(source.type) {
+        case OPERAND_Register: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            Emit8(ctx, opcode);
+            EmitDirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
+        } break;
+        case OPERAND_AddrInReg: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            Emit8(ctx, opcode);
+            EmitIndirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
+        } break;
+        case OPERAND_AddrInRegOffset8: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET8.reg);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced8(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET8.reg, source.REGISTER_OFFSET8.offset);
+        } break;
+        case OPERAND_AddrInRegOffset32: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET32.reg);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced32(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET32.reg, source.REGISTER_OFFSET32.offset);
+        } break;
+        case OPERAND_SIB: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB.index, source.SIB.base);
+            Emit8(ctx, opcode);
+            EmitIndirectSIB(ctx, dest.REGISTER.reg, source.SIB.base, source.SIB.index, source.SIB.scale);
+        } break;
+        case OPERAND_SIBOffset8: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.index, source.SIB_OFFSET8.base);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced8SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.base, source.SIB_OFFSET8.index, source.SIB_OFFSET8.scale, source.SIB_OFFSET8.offset);
+        } break;
+        case OPERAND_SIBOffset32: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.index, source.SIB_OFFSET32.base);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplaced32SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.base, source.SIB_OFFSET32.index, source.SIB_OFFSET32.scale, source.SIB_OFFSET32.offset);
+        } break;
+        case OPERAND_RIP: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            Emit8(ctx, opcode);
+            EmitIndirectDisplacedRip(ctx, dest.REGISTER.reg, source.RIP.offset);
+        } break;
+        case OPERAND_AbsoluteAddr: {
+            assert(dest.type == OPERAND_Register);
+            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            Emit8(ctx, opcode);
+            EmitIndirectAbsolute(ctx, dest.REGISTER.reg, source.ABSOLUTE_ADDR.addr);
+        } break;
+        case OPERAND_Immediate8:
+        case OPERAND_Immediate32: {
+            u8 opcode = source.type == OPERAND_Immediate8 ? 0x83 : 0x81;
+            
+            switch(dest.type) {
+                case OPERAND_Register: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    Emit8(ctx, opcode);
+                    EmitDirect(ctx, 0, dest.REGISTER.reg);
+                } break;
+                case OPERAND_AddrInReg: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    Emit8(ctx, opcode);
+                    EmitIndirect(ctx, 0, dest.REGISTER.reg);
+                } break;
+                case OPERAND_AddrInRegOffset8: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET8.reg);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced8(ctx, 0, dest.REGISTER_OFFSET8.reg, dest.REGISTER_OFFSET8.offset);
+                } break;
+                case OPERAND_AddrInRegOffset32: {
+                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET32.reg);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced32(ctx, 0, dest.REGISTER_OFFSET32.reg, dest.REGISTER_OFFSET32.offset);
+                } break;
+                case OPERAND_SIB: {
+                    EmitRexByte(ctx, 0, dest.SIB.index, dest.SIB.base);
+                    Emit8(ctx, opcode);
+                    EmitIndirectSIB(ctx, 0, dest.SIB.base, dest.SIB.index, dest.SIB.scale);
+                } break;
+                case OPERAND_SIBOffset8: {
+                    EmitRexByte(ctx, 0, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.base);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced8SIB(ctx, 0, dest.SIB_OFFSET8.base, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.scale, dest.SIB_OFFSET8.offset);
+                } break;
+                case OPERAND_SIBOffset32: {
+                    EmitRexByte(ctx, 0, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.base);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplaced32SIB(ctx, 0, dest.SIB_OFFSET32.base, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.scale, dest.SIB_OFFSET32.offset);
+                } break;
+                case OPERAND_RIP: {
+                    EmitRexByte(ctx, 0, 0, 0);
+                    Emit8(ctx, opcode);
+                    EmitIndirectDisplacedRip(ctx, 0, dest.RIP.offset);
+                } break;
+                case OPERAND_AbsoluteAddr: {
+                    EmitRexByte(ctx, 0, 0, 0);
+                    Emit8(ctx, opcode);
+                    EmitIndirectAbsolute(ctx, 0, dest.ABSOLUTE_ADDR.addr);
+                } break;
+            }
+            
+            if(source.type == OPERAND_Immediate8) Emit8(ctx, source.IMMEDIATE8.immediate);
+            else Emit32(ctx, source.IMMEDIATE32.immediate);
+        } break;
+    }
+}
+
+// -------------------------------------------
+
+void InitializeFreeRegisters(EmiterContext* ctx) {
+    Register available_registers[] = {RCX, RBX, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15};
+    for (size_t i = 0; i < sizeof(available_registers) / sizeof(*available_registers); i++) {
+        ctx->freeRegisterMask |= 1 << available_registers[i];
+    }
+}
+
+u32 BitScanForward(u64 mask) {
+    u32 i;
+    for(i = 0; i < 64; i++){
+        if (mask & (1 << i) == 1) break;
+    }
+    return i;
+}
+
+Register AllocateRegister(EmiterContext* ctx) {
+    assert(ctx->freeRegisterMask != 0);
+    u32 free_register = BitScanForward(ctx->freeRegisterMask);
+    ctx->freeRegisterMask &= ~(1 << free_register);
+    return (Register)free_register;
+}
+
+void FreeRegister(EmiterContext* ctx, Register registerToFree) {
+    assert((ctx->freeRegisterMask & (1 << registerToFree)) == 0);
+    ctx->freeRegisterMask |= 1 << registerToFree;
+}
 
 int main() {
     FILE* f = fopen("test.bin", "wb");
@@ -254,62 +470,31 @@ int main() {
     // Emit8(0x48);
     // Emit8(0x8b);
     // Emit8(0xc3);
-
+    
+    #if 0
+    EmiterContext ctx = test();
+    #else
     EmiterContext ctx = {0};
+    #endif
+    
 
-    for(Register dest = RAX; dest <= R15; dest++){
-        for(Register source = RAX; source <= R15; source++){
-            EmitRexByte(&ctx, 0, 0, 0);
-            Emit8(&ctx, 0x8b);
-            EmitDirect(&ctx, dest, source);
-            
-            if((source & 7) != RSP && (source & 7) != RBP){
-                EmitRexByte(&ctx, 0, 0, 0);
-                Emit8(&ctx, 0x8b);
-                EmitIndirect(&ctx, dest, source);
-            }
-            
-            if((source & 7) != RSP){
-                EmitRexByte(&ctx, 0, 0, 0);
-                Emit8(&ctx, 0x8b);
-                EmitIndirectDisplaced8(&ctx, dest, source, 0x12);
-                
-                EmitRexByte(&ctx, 0, 0, 0);
-                Emit8(&ctx, 0x8b);
-                EmitIndirectDisplaced32(&ctx, dest, source, 0x1234);
-            }
-            
-            for(Scale scale = X0; scale <= X8; scale++){
-                if((source & 7) != RBP){
-                    EmitRexByte(&ctx, 0, 0, 0);
-                    Emit8(&ctx, 0x8b);
-                    EmitIndirectSIB(&ctx, dest, source, dest, scale);
-                }
+    #if 0
+    #include <windows.h>
+    u8* code = (u8*)VirtualAlloc(NULL, MiB(1), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    ctx.code = code;
+    ctx.capacity = MiB(1);
 
-                EmitRexByte(&ctx, 0, 0, 0);
-                Emit8(&ctx, 0x8b);
-                EmitIndirectDisplaced8SIB(&ctx, dest, source, dest, scale, 0x12);
-                
-                EmitRexByte(&ctx, 0, 0, 0);
-                Emit8(&ctx, 0x8b);
-                EmitIndirectDisplaced32SIB(&ctx, dest, source, dest, scale, 0x1234);
-            }
-            
-            EmitRexByte(&ctx, 0, 0, 0);
-            Emit8(&ctx, 0x8b);
-            EmitIndirectDisplacedRip(&ctx, dest, 0x1234);
-            
-            EmitRexByte(&ctx, 0, 0, 0);
-            Emit8(&ctx, 0x8b);
-            EmitIndirectAbsolute(&ctx, dest, 0x1234);
-        }
-    }
+    u64 (*func)() = (u64(*)())ctx.code;
+    u64 foo = func();
+    printf("ret: %i\n", foo);
+    #endif
 
     fwrite(ctx.code, sizeof(*ctx.code), ctx.count, f);
     fclose(f);
     return 0;
 }
 
+// The different addressing modes for r/m:
 // rax
 // [rax]
 // [rax + 0x12]
@@ -319,3 +504,23 @@ int main() {
 // [base + scale * index + 0x1234]
 // [RIP + 0x1234]
 // [0x1234]
+
+// NOTE: These are all the instructions currently used by the code generator:
+// push
+// pop
+// call
+// ret
+// mov
+// add
+// sub
+// mul
+// div
+// cmp
+// jmp
+// all the conditional jumps
+// lea
+// inc
+// dec
+
+
+// NOTE: delayed register allocations
