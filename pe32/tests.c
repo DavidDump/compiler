@@ -327,6 +327,47 @@ void testMov() {
     gen_mov(&ctx, OP_ABSOLUTE(0x12345678), OP_IMM32(0x12345678));
 }
 
+void testPush() {
+    // push rax
+    gen_push(&ctx, OP_REG(RAX));
+    // push [rax]
+    gen_push(&ctx, OP_INDIRECT(RAX));
+    // push [rax + 0x12]
+    gen_push(&ctx, OP_INDIRECT_OFFSET8(RAX, 0x12));
+    // push [rax + 0x12345678]
+    gen_push(&ctx, OP_INDIRECT_OFFSET32(RAX, 0x12345678));
+    // push [rax + X2 * rbx]
+    gen_push(&ctx, OP_INDIRECT_SIB(RAX, X2, RBX));
+    // push [rax + X2 * rbx + 0x12]
+    gen_push(&ctx, OP_INDIRECT_SIB_OFFSET8(RAX, X2, RBX, 0x12));
+    // push [rax + X2 * rbx + 0x12345678]
+    gen_push(&ctx, OP_INDIRECT_SIB_OFFSET32(RAX, X2, RBX, 0x12345678));
+    // push [rip + 0x12345678]
+    gen_push(&ctx, OP_RIP(0x12345678));
+    // push [0x12345678]
+    gen_push(&ctx, OP_ABSOLUTE(0x12345678));
+    // push 0x12
+    gen_push(&ctx, OP_IMM8(0x12));
+    // push 0x12345678
+    gen_push(&ctx, OP_IMM32(0x12345678));
+
+    // extended registers
+    // push rax
+    gen_push(&ctx, OP_REG(R8));
+    // push [rax]
+    gen_push(&ctx, OP_INDIRECT(R8));
+    // push [rax + 0x12]
+    gen_push(&ctx, OP_INDIRECT_OFFSET8(R8, 0x12));
+    // push [rax + 0x12345678]
+    gen_push(&ctx, OP_INDIRECT_OFFSET32(R8, 0x12345678));
+    // push [rax + X2 * rbx]
+    gen_push(&ctx, OP_INDIRECT_SIB(R8, X2, R9));
+    // push [rax + X2 * rbx + 0x12]
+    gen_push(&ctx, OP_INDIRECT_SIB_OFFSET8(R8, X2, R9, 0x12));
+    // push [rax + X2 * rbx + 0x12345678]
+    gen_push(&ctx, OP_INDIRECT_SIB_OFFSET32(R8, X2, R9, 0x12345678));
+}
+
 // Testing the low level emmiters
 EmiterContext testEmmiters() {
     EmiterContext ctx = {0};
