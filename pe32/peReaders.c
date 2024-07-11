@@ -1,15 +1,5 @@
-#include <stdint.h>
 #include "sectionCharacteristics.h"
-
-typedef int8_t  s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
+#include "common.h"
 
 // 2 + 2 + 4 + 4 + 4 + 2 + 2
 int sizeOfPeHeader = 20; // how much space this field takes up in the file
@@ -25,7 +15,7 @@ typedef struct PEHeader {
     u32 peHeaderOffset; // the offset to the begining of the header from the begining of the file
 } PEHeader;
 
-#define OPT_HEADR_MAGIC_PE 0x10b
+#define OPT_HEADR_MAGIC_PE      0x10b
 #define OPT_HEADR_MAGIC_PE_PLUS 0x20b
 
 // 2 + 1 + 1 + 4 + 4 + 4 + 4 + 4 + (4)
@@ -217,6 +207,21 @@ typedef struct ImportLookupTable {
     u32 ImportLookupTableOffset;
 } ImportLookupTable;
 
+typedef struct ReadResult {
+    PEHeader peHeader;
+    OptionalHeaderStandardFields optStandard;
+    union {
+        OptionalHeaderWindowsSpecificFields32 as_32;
+        OptionalHeaderWindowsSpecificFields64 as_64;
+    } optWinSpec;
+    OptionalHeaderDataDirectories optDataDirs;
+    SectionTable sectionTable;
+    SymbolTable symbolTable;
+    StringTable stringTable;
+    ImportDirectoryTable importDirsTable;
+    ImportLookupTable importLookupTable;
+} ReadResult;
+
 int FindHowManyNonNullBytes(u64 data) {
     int result = 0;
     u8 tmp = 0;
@@ -236,6 +241,7 @@ int FindHowManyHexDigits(u32 data) {
     return result;
 }
 
+int fileLen = 0;
 int bytesRead = 0;
 
 u8 Read8(u8* buffer, u64 offset) {
@@ -709,7 +715,7 @@ ImportDirectoryTable readImportTableDirectory(u8* fileBuffer, u32 offset, u32 id
 void printImportDirectoryTable(ImportDirectoryTable dirs, u8* fileBuffer, SectionTableEntry section) {
     printf("------------------ Import Directory Table (0x%x) ------------------\n", dirs.ImportDirectoryTableOffset);
     for(int i = 0; i < dirs.count; i++){
-        printf("[%i]: Import Directory Entry (0x%x) ------------------\n", dirs.ImportDirectoryTableOffset + i * sizeOfImportDirectoryTableEntry);
+        printf("[%i]: Import Directory Entry (0x%x) ------------------\n", i, dirs.ImportDirectoryTableOffset + i * sizeOfImportDirectoryTableEntry);
         int nameAddr = section.PointerToRawData + (dirs.entries[i].NameRVA - section.VirtualAddress);
         printf("  ImportLookupTableRVA:  0x%x\n", dirs.entries[i].ImportLookupTableRVA);
         printf("  DateTimeStamp:         0x%x\n", dirs.entries[i].DateTimeStamp);
@@ -746,10 +752,10 @@ ImportLookupTable readImportLookupTable(u8* fileBuffer, u32 offset, int bytesPer
         u64 data = 0;
         if(bytesPerEntry == 4) {
             data = Read32(fileBuffer, offset + (i * sizeof(u32)));
-            result.entries[i].NameFlag = data & 0x80000000;
+            result.entries[i].NameFlag = (data & 0x80000000) ? 1 : 0;
         } else if(bytesPerEntry == 8) {
             data = Read64(fileBuffer, offset + (i * sizeof(u64)));
-            result.entries[i].NameFlag = data & 0x8000000000000000;
+            result.entries[i].NameFlag = (data & 0x8000000000000000) ? 1 : 0;
         } else {
             assert(0 && "Unreachable");
         }
@@ -760,6 +766,10 @@ ImportLookupTable readImportLookupTable(u8* fileBuffer, u32 offset, int bytesPer
         int nameAddr = section.PointerToRawData + (result.entries[i].NameTableRVA - section.VirtualAddress);
         result.entries[i].Hint = Read16(fileBuffer, nameAddr); // hint is the index into the .dll file export table, used to lookup first
         result.entries[i].Name = fileBuffer + nameAddr + 2; // +2 to skip the hint
+
+        // for stats
+        int len = strlen(result.entries[i].Name);
+        bytesRead += len + 1; // +1 for the null byte
     }
     
     // NOTE: the +1 is for the entry at the end filled with all zeros
@@ -778,4 +788,117 @@ void printImportLookupTable(ImportLookupTable table) {
         printf("hint: %i", table.entries[i].Hint);
         printf("\n");
     }
+}
+
+ReadResult readFile(Args args) {
+    ReadResult result = {0};
+    u8* fileBuffer = EntireFileRead(args.filename, &fileLen);
+    if(fileBuffer[0] != 0x4d || fileBuffer[1] != 0x5a){
+        printf("[ERROR] Magic number not found\n");
+        exit(1);
+    }
+
+    int nextSectionFirstByteAddr = 0;
+
+    #define PE_HEADER_PTR_LOC 0x3c
+    u32 peHeaderOffset = Read32(fileBuffer, PE_HEADER_PTR_LOC);
+    printf("peHeaderOffset: 0x%x\n", peHeaderOffset);
+    u32 peMagic = Read32(fileBuffer, peHeaderOffset);
+    peHeaderOffset += 4;
+    printf("peMagic: 0x%x\n", peMagic);
+
+    // PE Header
+    result.peHeader = readPeHeader(fileBuffer, peHeaderOffset);
+    if(args.debugPrintPeHeader) printPeHeader(result.peHeader);
+    nextSectionFirstByteAddr = peHeaderOffset + sizeOfPeHeader;
+
+    // Optonal Standard Header
+    u32 optionalStandardOffset = nextSectionFirstByteAddr;
+    result.optStandard = readOptHeader(fileBuffer, optionalStandardOffset);
+    if(args.debugPrintOptStandardHeader) printOptHeader(result.optStandard);
+    nextSectionFirstByteAddr = optionalStandardOffset + sizeOfOptionalHeaderStandardFields;
+
+    // Optional Windows Specific Header
+    if(result.optStandard.Magic == OPT_HEADR_MAGIC_PE) {
+        // pe32
+        u32 optHeaderWinSpecOffset = nextSectionFirstByteAddr;
+        result.optWinSpec.as_32 = readOptHeaderWinSpec32(fileBuffer, optHeaderWinSpecOffset);
+        if(args.debugPrintOptSpecHeader) printOptHeaderWinSpec32(result.optWinSpec.as_32);
+        nextSectionFirstByteAddr = optHeaderWinSpecOffset + sizeOfOptionalHeaderWindowsSpecificFields32;
+    } else if(result.optStandard.Magic == OPT_HEADR_MAGIC_PE_PLUS) {
+        // pe32+
+        u32 optHeaderWinSpecOffset = nextSectionFirstByteAddr;
+        result.optWinSpec.as_64 = readOptHeaderWinSpec64(fileBuffer, optHeaderWinSpecOffset);
+        if(args.debugPrintOptSpecHeader) printOptHeaderWinSpec64(result.optWinSpec.as_64);
+        nextSectionFirstByteAddr = optHeaderWinSpecOffset + sizeOfOptionalHeaderWindowsSpecificFields64;
+    } else {
+        printf("optionalHeaderMagic is incorrect: 0x%x\n", result.optStandard.Magic);
+        exit(1);
+    }
+
+    // Optional Data Directory Header
+    u32 optDataHeaderOffset = nextSectionFirstByteAddr;
+    result.optDataDirs = readOptDataHeader(fileBuffer, optDataHeaderOffset);
+    if(args.debugPrintOptDataHeader) printOptDataHeader(result.optDataDirs);
+    nextSectionFirstByteAddr = optDataHeaderOffset + sizeOfOptionalHeaderDataDirectories;
+
+    // Section Table
+    // u32 sectionTableOffset = nextSectionFirstByteAddr;
+    u32 sectionTableOffset = (peHeaderOffset + sizeOfPeHeader) + result.peHeader.SizeOfOptionalHeader;
+    result.sectionTable = readSectionTable(fileBuffer, sectionTableOffset, result.peHeader);
+    if(args.debugPrintSectionTable) printSectionTable(result.sectionTable);
+    nextSectionFirstByteAddr = sectionTableOffset + (sizeOfSectionTableEntry * result.sectionTable.count);
+
+    if(args.dumpfilepath){
+        u8* codeBuffer = fileBuffer + result.sectionTable.entries[0].PointerToRawData;
+        FILE* f = fopen(args.dumpfilepath, "wb");
+        assert(f && "Failed to open file to dump data");
+        fwrite(codeBuffer, sizeof(u8), result.sectionTable.entries[0].SizeOfRawData, f);
+        fclose(f);
+    }
+
+    // Read the section data, just to mark the sections as read
+    for(int h = 0; h < result.sectionTable.entries[0].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[0].PointerToRawData + h);
+    for(int h = 0; h < result.sectionTable.entries[1].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[1].PointerToRawData + h);
+    for(int j = 10; j < result.sectionTable.count; j++) for(int h = 0; h < result.sectionTable.entries[j].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[j].PointerToRawData + h);
+
+    // Symbol Table
+    result.symbolTable = readSymbolTable(fileBuffer, result.peHeader);
+    if(args.debugPrintSymbolTable) printSymbolTable(result.symbolTable);
+    // NOTE: this isnt necesseceraly correct, because the symbol table doesnt have to follow the previous sections
+    nextSectionFirstByteAddr = result.symbolTable.SymbolTableOffset + (result.symbolTable.count * sizeOfSymbolTableEntry);
+
+    // Strings table
+    int stringTableOffset = result.peHeader.PointerToSymbolTable + sizeOfSymbolTableEntry * result.peHeader.NumberOfSymbols;
+    result.stringTable = readStringTable(fileBuffer, stringTableOffset, &nextSectionFirstByteAddr);
+    if(args.debugPrintStringTable) printStringTable(result.stringTable, args.stringTableLimit == -1 ? INT32_MAX : args.stringTableLimit);
+
+    // .idata common info
+    u32 importDirectoryTableOffset = 0;
+    u32 importTableSize = 0;
+    int importSectionIndex = 0;
+    for(int i = 0; i < result.peHeader.NumberOfSections; i++){
+        if(result.sectionTable.entries[i].VirtualAddress == result.optDataDirs.ImportTable.addr) {
+            importDirectoryTableOffset = result.sectionTable.entries[i].PointerToRawData;
+            importTableSize = result.sectionTable.entries[i].SizeOfRawData;
+            importSectionIndex = i;
+        }
+    }
+    
+    // Import Directory Table
+    result.importDirsTable = readImportTableDirectory(fileBuffer, importDirectoryTableOffset, importTableSize, &nextSectionFirstByteAddr);
+    if(args.debugPrintImportDirectoryTable) printImportDirectoryTable(result.importDirsTable, fileBuffer, result.sectionTable.entries[importSectionIndex]);
+
+    // Import Lookup Table
+    for(int i = 0; i < result.importDirsTable.count; i++) {
+        SectionTableEntry section = result.sectionTable.entries[importSectionIndex];
+        int offset = section.PointerToRawData + result.importDirsTable.entries[i].ImportLookupTableRVA - section.VirtualAddress;
+        
+        int importLookupTableOffset = offset;
+        int bytesPerEntry = result.optStandard.Magic == OPT_HEADR_MAGIC_PE ? 4 : 8;
+        result.importLookupTable = readImportLookupTable(fileBuffer, importLookupTableOffset, bytesPerEntry, section, &nextSectionFirstByteAddr);
+        if(args.debugPrintImportLookupTable) printImportLookupTable(result.importLookupTable);
+    }
+
+    return result;
 }
