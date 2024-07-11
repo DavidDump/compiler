@@ -405,6 +405,45 @@ void testPop() {
     gen_pop(&ctx, OP_INDIRECT_SIB_OFFSET32(R8, X2, R9, 0x12345678));
 }
 
+void testCall() {
+    // call rax
+    gen_call(&ctx, OP_REG(RAX));
+    // call [rax]
+    gen_call(&ctx, OP_INDIRECT(RAX));
+    // call [rax + 0x12]
+    gen_call(&ctx, OP_INDIRECT_OFFSET8(RAX, 0x12));
+    // call [rax + 0x12345678]
+    gen_call(&ctx, OP_INDIRECT_OFFSET32(RAX, 0x12345678));
+    // call [rax + X2 * rbx]
+    gen_call(&ctx, OP_INDIRECT_SIB(RAX, X2, RBX));
+    // call [rax + X2 * rbx + 0x12]
+    gen_call(&ctx, OP_INDIRECT_SIB_OFFSET8(RAX, X2, RBX, 0x12));
+    // call [rax + X2 * rbx + 0x12345678]
+    gen_call(&ctx, OP_INDIRECT_SIB_OFFSET32(RAX, X2, RBX, 0x12345678));
+    // call [rip + 0x12345678]
+    gen_call(&ctx, OP_RIP(0x12345678));
+    // call [0x12345678]
+    gen_call(&ctx, OP_ABSOLUTE(0x12345678));
+    // call 0x12345678
+    gen_call(&ctx, OP_IMM32(0x12345678));
+
+    // extended registers
+    // call rax
+    gen_call(&ctx, OP_REG(R8));
+    // call [rax]
+    gen_call(&ctx, OP_INDIRECT(R8));
+    // call [rax + 0x12]
+    gen_call(&ctx, OP_INDIRECT_OFFSET8(R8, 0x12));
+    // call [rax + 0x12345678]
+    gen_call(&ctx, OP_INDIRECT_OFFSET32(R8, 0x12345678));
+    // call [rax + X2 * rbx]
+    gen_call(&ctx, OP_INDIRECT_SIB(R8, X2, R9));
+    // call [rax + X2 * rbx + 0x12]
+    gen_call(&ctx, OP_INDIRECT_SIB_OFFSET8(R8, X2, R9, 0x12));
+    // call [rax + X2 * rbx + 0x12345678]
+    gen_call(&ctx, OP_INDIRECT_SIB_OFFSET32(R8, X2, R9, 0x12345678));
+}
+
 // Testing the low level emmiters
 EmiterContext testEmmiters() {
     EmiterContext ctx = {0};
