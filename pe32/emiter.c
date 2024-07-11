@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <windows.h>
 
 // #define ARENA_IMPLEMENTATION
 // #include "../src/arena.h"
@@ -724,6 +725,10 @@ void gen_call(EmiterContext* ctx, Operand op) {
     }
 }
 
+void gen_ret(EmiterContext* ctx) {
+    Emit8(ctx, 0xC3);
+}
+
 // -------------------------------------------
 
 void InitializeFreeRegisters(EmiterContext* ctx) {
@@ -733,7 +738,7 @@ void InitializeFreeRegisters(EmiterContext* ctx) {
     }
 }
 
-u32 BitScanForward(u64 mask) {
+u32 GetSetBits(u64 mask) {
     u32 i;
     for(i = 0; i < 64; i++){
         if (mask & (1 << i) == 1) break;
@@ -743,7 +748,7 @@ u32 BitScanForward(u64 mask) {
 
 Register AllocateRegister(EmiterContext* ctx) {
     assert(ctx->freeRegisterMask != 0);
-    u32 free_register = BitScanForward(ctx->freeRegisterMask);
+    u32 free_register = GetSetBits(ctx->freeRegisterMask);
     ctx->freeRegisterMask &= ~(1 << free_register);
     return (Register)free_register;
 }
@@ -765,20 +770,29 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
 #define OP_IMM8(imm) (Operand){.type = OPERAND_Immediate8, .IMMEDIATE8 = {.immediate = (imm)}}
 #define OP_IMM32(imm) (Operand){.type = OPERAND_Immediate32, .IMMEDIATE32 = {.immediate = (imm)}}
 
-int main() {
+int main(int argc, char** argv) {
+    if(argc < 2) return 0;
     FILE* f = fopen("test.bin", "wb");
 
     EmiterContext ctx = {0};
-    
 
-    #if 0
-    #include <windows.h>
+    #if 1
     u8* code = (u8*)VirtualAlloc(NULL, MiB(1), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     ctx.code = code;
     ctx.capacity = MiB(1);
+    
+    gen_push(&ctx, OP_REG(RBP));
+    gen_mov(&ctx, OP_REG(RBP), OP_REG(RSP));
 
-    u64 (*func)() = (u64(*)())ctx.code;
-    u64 foo = func();
+    gen_mov(&ctx, OP_REG(RAX), OP_REG(RCX));
+    // gen_add(&ctx, OP_REG(RAX), OP_REG(RDX));
+
+    gen_mov(&ctx, OP_REG(RSP), OP_REG(RBP));
+    gen_pop(&ctx, OP_REG(RBP));
+    gen_ret(&ctx);
+
+    u64 (*func)(u64) = (u64(*)(u64))ctx.code;
+    u64 foo = func(argv[1][0]);
     printf("ret: %i\n", foo);
     #endif
 
