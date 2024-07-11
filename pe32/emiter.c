@@ -615,6 +615,55 @@ void gen_push(EmiterContext* ctx, Operand op) {
     }
 }
 
+void gen_pop(EmiterContext* ctx, Operand op) {
+    assert(op.type != OPERAND_Immediate8  && "Operand type not allowed");
+    assert(op.type != OPERAND_Immediate32 && "Operand type not allowed");
+    switch(op.type) {
+        case OPERAND_Register: {
+            if(op.REGISTER.reg & 8) Emit8(ctx, 0x40 | 1);
+            Emit8(ctx, 0x58 | (op.REGISTER.reg & 7));
+        } break;
+        case OPERAND_AddrInReg: {
+            if(op.REGISTER.reg & 8) Emit8(ctx, 0x40 | 1);
+            Emit8(ctx, 0x8F);
+            EmitIndirect(ctx, 0, op.REGISTER.reg);
+        } break;
+        case OPERAND_AddrInRegOffset8: {
+            if(op.REGISTER_OFFSET8.reg & 8) Emit8(ctx, 0x40 | 1);
+            Emit8(ctx, 0x8F);
+            EmitIndirectDisplaced8(ctx, 0, op.REGISTER_OFFSET8.reg, op.REGISTER_OFFSET8.offset);
+        } break;
+        case OPERAND_AddrInRegOffset32: {
+            if(op.REGISTER_OFFSET32.reg & 8) Emit8(ctx, 0x40 | 1);
+            Emit8(ctx, 0x8F);
+            EmitIndirectDisplaced32(ctx, 0, op.REGISTER_OFFSET32.reg, op.REGISTER_OFFSET32.offset);
+        } break;
+        case OPERAND_SIB: {
+            if(op.SIB.index & 8 || op.SIB.base & 8) Emit8(ctx, 0x40 | ((op.SIB.index >> 3) << 1) | ((op.SIB.base >> 3) << 0));
+            Emit8(ctx, 0x8F);
+            EmitIndirectSIB(ctx, 0, op.SIB.base, op.SIB.index, op.SIB.scale);
+        } break;
+        case OPERAND_SIBOffset8: {
+            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) Emit8(ctx, 0x40 | ((op.SIB_OFFSET8.index >> 3) << 1) | ((op.SIB_OFFSET8.base >> 3) << 0));
+            Emit8(ctx, 0x8F);
+            EmitIndirectDisplaced8SIB(ctx, 0, op.SIB_OFFSET8.base, op.SIB_OFFSET8.index, op.SIB_OFFSET8.scale, op.SIB_OFFSET8.offset);
+        } break;
+        case OPERAND_SIBOffset32: {
+            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) Emit8(ctx, 0x40 | ((op.SIB_OFFSET32.index >> 3) << 1) | ((op.SIB_OFFSET32.base >> 3) << 0));
+            Emit8(ctx, 0x8F);
+            EmitIndirectDisplaced32SIB(ctx, 0, op.SIB_OFFSET32.base, op.SIB_OFFSET32.index, op.SIB_OFFSET32.scale, op.SIB_OFFSET32.offset);
+        } break;
+        case OPERAND_RIP: {
+            Emit8(ctx, 0x8F);
+            EmitIndirectDisplacedRip(ctx, 0, op.RIP.offset);
+        } break;
+        case OPERAND_AbsoluteAddr: {
+            Emit8(ctx, 0x8F);
+            EmitIndirectAbsolute(ctx, 0, op.ABSOLUTE_ADDR.addr);
+        } break;
+    }
+}
+
 // -------------------------------------------
 
 void InitializeFreeRegisters(EmiterContext* ctx) {
@@ -659,16 +708,7 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
 int main() {
     FILE* f = fopen("test.bin", "wb");
 
-    // mov rax, rbx
-    // Emit8(0x48);
-    // Emit8(0x8b);
-    // Emit8(0xc3);
-    
-    #if 0
-    EmiterContext ctx = test();
-    #else
     EmiterContext ctx = {0};
-    #endif
     
 
     #if 0
@@ -686,17 +726,6 @@ int main() {
     fclose(f);
     return 0;
 }
-
-// The different addressing modes for r/m:
-// rax
-// [rax]
-// [rax + 0x12]
-// [rax + 0x1234]
-// [base + scale * index]
-// [base + scale * index + 0x12]
-// [base + scale * index + 0x1234]
-// [RIP + 0x1234]
-// [0x1234]
 
 // NOTE: These are all the instructions currently used by the code generator:
 // push
