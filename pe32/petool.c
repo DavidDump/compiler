@@ -36,7 +36,7 @@ char* EntireFileRead(const char* filePath, int* len){
 
         return fileBuffer;
     }else{
-        printf("[ERROR] Failed to open file: %s\n", filePath);
+        fprintf(stderr, "[ERROR] Failed to open file: %s\n", filePath);
         return NULL;
     }
 }
@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
                 args.debugPrintImportLookupTable = 1;
                 i++;
             } else if(argv[i][0] == '-'){
-                printf("[ERROR] Unkown argument: %s\n", argv[i]);
+                fprintf(stderr, "[ERROR] Unkown argument: %s\n", argv[i]);
                 return 1;
             }
 
@@ -134,14 +134,14 @@ int main(int argc, char** argv) {
                 break;
             } else {
                 usage(argc, argv);
-                printf("[ERROR] Could not parse options\n");
+                fprintf(stderr, "[ERROR] Could not parse options\n");
                 return 1;
             }
         } else if(strcmp(argv[i], "write") == 0) {
             args.write = 1;
         } else {
             usage(argc, argv);
-            printf("[ERROR] Unkown argument: %s\n", argv[i]);
+            fprintf(stderr, "[ERROR] Unkown argument: %s\n", argv[i]);
             return 1;
         }
     }
