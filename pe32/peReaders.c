@@ -794,7 +794,7 @@ ReadResult readFile(Args args) {
     ReadResult result = {0};
     u8* fileBuffer = EntireFileRead(args.filename, &fileLen);
     if(fileBuffer[0] != 0x4d || fileBuffer[1] != 0x5a){
-        printf("[ERROR] Magic number not found\n");
+        fprintf(stderr, "[ERROR] Magic number not found\n");
         exit(1);
     }
 
@@ -858,30 +858,37 @@ ReadResult readFile(Args args) {
     }
 
     // Read the section data, just to mark the sections as read
-    for(int h = 0; h < result.sectionTable.entries[0].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[0].PointerToRawData + h);
-    for(int h = 0; h < result.sectionTable.entries[1].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[1].PointerToRawData + h);
-    for(int j = 10; j < result.sectionTable.count; j++) for(int h = 0; h < result.sectionTable.entries[j].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[j].PointerToRawData + h);
+    // for(int h = 0; h < result.sectionTable.entries[0].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[0].PointerToRawData + h);
+    // for(int h = 0; h < result.sectionTable.entries[1].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[1].PointerToRawData + h);
+    // for(int j = 10; j < result.sectionTable.count; j++) for(int h = 0; h < result.sectionTable.entries[j].SizeOfRawData; h++) Read8(fileBuffer, result.sectionTable.entries[j].PointerToRawData + h);
 
     // Symbol Table
-    result.symbolTable = readSymbolTable(fileBuffer, result.peHeader);
-    if(args.debugPrintSymbolTable) printSymbolTable(result.symbolTable);
-    // NOTE: this isnt necesseceraly correct, because the symbol table doesnt have to follow the previous sections
-    nextSectionFirstByteAddr = result.symbolTable.SymbolTableOffset + (result.symbolTable.count * sizeOfSymbolTableEntry);
+    if(result.peHeader.NumberOfSymbols) {
+        result.symbolTable = readSymbolTable(fileBuffer, result.peHeader);
+        if(args.debugPrintSymbolTable) printSymbolTable(result.symbolTable);
+        // NOTE: this isnt necesseceraly correct, because the symbol table doesnt have to follow the previous sections
+        nextSectionFirstByteAddr = result.symbolTable.SymbolTableOffset + (result.symbolTable.count * sizeOfSymbolTableEntry);
+    }
 
     // Strings table
-    int stringTableOffset = result.peHeader.PointerToSymbolTable + sizeOfSymbolTableEntry * result.peHeader.NumberOfSymbols;
-    result.stringTable = readStringTable(fileBuffer, stringTableOffset, &nextSectionFirstByteAddr);
-    if(args.debugPrintStringTable) printStringTable(result.stringTable, args.stringTableLimit == -1 ? INT32_MAX : args.stringTableLimit);
+    // TODO: find out how to confirm if the file has string table, and where it is located if no symbol table is present
+    if(result.peHeader.NumberOfSymbols) {
+        int stringTableOffset = result.peHeader.PointerToSymbolTable + sizeOfSymbolTableEntry * result.peHeader.NumberOfSymbols;
+        result.stringTable = readStringTable(fileBuffer, stringTableOffset, &nextSectionFirstByteAddr);
+        if(args.debugPrintStringTable) printStringTable(result.stringTable, args.stringTableLimit == -1 ? INT32_MAX : args.stringTableLimit);
+    }
 
     // .idata common info
-    u32 importDirectoryTableOffset = 0;
-    u32 importTableSize = 0;
+    // if not in sections, just use absolute address
+    u32 importDirectoryTableOffset = result.optDataDirs.ImportTable.addr;
+    u32 importTableSize = result.optDataDirs.ImportTable.size;
     int importSectionIndex = 0;
     for(int i = 0; i < result.peHeader.NumberOfSections; i++){
         if(result.sectionTable.entries[i].VirtualAddress == result.optDataDirs.ImportTable.addr) {
             importDirectoryTableOffset = result.sectionTable.entries[i].PointerToRawData;
             importTableSize = result.sectionTable.entries[i].SizeOfRawData;
             importSectionIndex = i;
+            break;
         }
     }
     
