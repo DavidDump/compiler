@@ -5,6 +5,7 @@
 #include <winnt.h>
 #include <stdbool.h>
 #include <math.h>
+#include <time.h>
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*x))
 
@@ -13,6 +14,12 @@ typedef struct Buffer {
     u64 size;
     u64 capacity;
 } Buffer;
+
+typedef struct NamesToPatch {
+    u8* name;
+    u64 len;
+    u64 offset;
+} NamesToPatch;
 
 Buffer make_buffer(u64 capacity, u32 permission_flags) {
     Buffer result = {0};
@@ -66,7 +73,20 @@ typedef struct {
     s32 function_count;
 } Import_Library;
 
-void write_executable() {
+u32 getFunctionRVA(Import_Library* libs, u64 libsCount, u8* name, u64 nameLen) {
+    for (u64 i = 0; i < libsCount; ++i) {
+        Import_Library *lib = &libs[i];
+        for (s32 i = 0; i < lib->function_count; ++i) {
+            Import_Name_To_Rva *fn = &lib->functions[i];
+            // TODO: remove strcmp and use sized strings
+            if (strcmp(fn->name, name) == 0) return fn->iat_rva;
+        }
+    }
+}
+
+Buffer write_executable(Import_Library* libs, u64 libsCount, Buffer code, Buffer names) {
+    u32 fileAlignment = 0x200;
+    
     Buffer exe_buffer = make_buffer(1024 * 1024, PAGE_READWRITE);
     IMAGE_DOS_HEADER *dos_header = buffer_allocate(&exe_buffer, IMAGE_DOS_HEADER);
 
@@ -80,8 +100,8 @@ void write_executable() {
 
     *file_header = (IMAGE_FILE_HEADER){
         .Machine = IMAGE_FILE_MACHINE_AMD64,
-        .NumberOfSections = 2,
-        .TimeDateStamp = 0x5EF48E56, // FIXME: generate ourselves
+        .NumberOfSections = 2,       // TODO: this can be hardcoded but depends on the writer architecture
+        .TimeDateStamp = time(NULL),
         .SizeOfOptionalHeader = sizeof(IMAGE_OPTIONAL_HEADER64),
         .Characteristics = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE,
     };
@@ -108,18 +128,18 @@ void write_executable() {
 
     *optional_header = (IMAGE_OPTIONAL_HEADER64){
         .Magic = IMAGE_NT_OPTIONAL_HDR64_MAGIC,
-        .SizeOfCode = 0x200,             // FIXME: calculate based on the amount of machine code
-        .SizeOfInitializedData = 0x200,  // FIXME: calculate based on the amount of global data
-        .AddressOfEntryPoint = 0x2000,   // FIXME: resolve to the entry point in the machine code
-        .BaseOfCode = 0x2000,            // FIXME: resolve to the right section containing code
-        .ImageBase = 0x0000000140000000, // Does not matter as we are using dynamic base
+        .SizeOfCode = 0x200,             // TODO: should be the same as the size (misc) of the .text section
+        .SizeOfInitializedData = 0x200,  // TODO: calculate based on the amount of global data
+        .AddressOfEntryPoint = 0x2000,   // TODO: resolve to the entry point in the machine code
+        .BaseOfCode = 0x2000,            // TODO: resolve to the right section containing code
+        .ImageBase = 0,                  // NOTE: Does not matter as we are using dynamic base
         .SectionAlignment = 0x1000,
-        .FileAlignment = 0x200,
-        .MajorOperatingSystemVersion = 6, // FIXME: figure out if can be not hard coded
+        .FileAlignment = fileAlignment,
+        .MajorOperatingSystemVersion = 6,
         .MinorOperatingSystemVersion = 0,
-        .MajorSubsystemVersion = 6, // FIXME: figure out if can be not hard coded
+        .MajorSubsystemVersion = 6,
         .MinorSubsystemVersion = 0,
-        .SizeOfImage = 0x3000, // FIXME: calculate based on the sizes of the sections
+        .SizeOfImage = 0x3000,            // FIXME: calculate based on the sizes of the sections
         .SizeOfHeaders = 0,
         .Subsystem = IMAGE_SUBSYSTEM_WINDOWS_CUI, // TODO: allow user to specify this
         .DllCharacteristics =
@@ -173,44 +193,19 @@ void write_executable() {
         section_offset += sections[i]->SizeOfRawData;
     }
 
+#define INVALID_ADDRESS 0xCAFEBABE
 #define file_offset_to_rva(_section_header_) \
     ((s32)exe_buffer.size -                  \
      (_section_header_)->PointerToRawData +  \
      (_section_header_)->VirtualAddress)
 
     // .rdata segment
-    Import_Name_To_Rva kernel32_functions[] = {
-        // @MachineCodePatch
-        {.name = "ExitProcess", .name_rva = 0xCCCCCCCC, .iat_rva = 0xCCCCCCCC},
-
-        {.name = "GetStdHandle", .name_rva = 0xCCCCCCCC, .iat_rva = 0xCCCCCCCC},
-        {.name = "ReadConsoleA", .name_rva = 0xCCCCCCCC, .iat_rva = 0xCCCCCCCC},
-    };
-
-    Import_Name_To_Rva user32_functions[] = {
-        {.name = "ShowWindow", .name_rva = 0xCCCCCCCC, .iat_rva = 0xCCCCCCCC},
-    };
-
-    Import_Library import_libraries[] = {
-        {
-            .dll = {.name = "kernel32.dll", .name_rva = 0xCCCCCCCC, .iat_rva = 0xCCCCCCCC},
-            .image_thunk_rva = 0xCCCCCCCC,
-            .functions = kernel32_functions,
-            .function_count = ARRAY_SIZE(kernel32_functions),
-        },
-        {
-            .dll = {.name = "user32.dll", .name_rva = 0xCCCCCCCC, .iat_rva = 0xCCCCCCCC},
-            .image_thunk_rva = 0xCCCCCCCC,
-            .functions = user32_functions,
-            .function_count = ARRAY_SIZE(user32_functions),
-        },
-    };
 
     // IAT
     exe_buffer.size = rdata_section_header->PointerToRawData;
 
-    for (u64 i = 0; i < ARRAY_SIZE(import_libraries); ++i) {
-        Import_Library *lib = &import_libraries[i];
+    for (u64 i = 0; i < libsCount; ++i) {
+        Import_Library *lib = &libs[i];
         for (s32 i = 0; i < lib->function_count; ++i) {
             lib->functions[i].name_rva = file_offset_to_rva(rdata_section_header);
             buffer_append_s16(&exe_buffer, 0); // Ordinal Hint, value not required
@@ -226,8 +221,8 @@ void write_executable() {
 
     optional_header->DataDirectory[IAT_DIRECTORY_INDEX].VirtualAddress = file_offset_to_rva(rdata_section_header);
     
-    for (u64 i = 0; i < ARRAY_SIZE(import_libraries); ++i) {
-        Import_Library *lib = &import_libraries[i];
+    for (u64 i = 0; i < libsCount; ++i) {
+        Import_Library *lib = &libs[i];
         lib->dll.iat_rva = file_offset_to_rva(rdata_section_header);
 
         for (s32 i = 0; i < lib->function_count; ++i) {
@@ -242,8 +237,8 @@ void write_executable() {
         (s32)(exe_buffer.size - rdata_section_header->PointerToRawData);
 
     // Image thunks
-    for (u64 i = 0; i < ARRAY_SIZE(import_libraries); ++i) {
-        Import_Library *lib = &import_libraries[i];
+    for (u64 i = 0; i < libsCount; ++i) {
+        Import_Library *lib = &libs[i];
         lib->image_thunk_rva = file_offset_to_rva(rdata_section_header);
 
         for (s32 i = 0; i < lib->function_count; ++i) {
@@ -257,8 +252,8 @@ void write_executable() {
 
     // Library Names
 
-    for (u64 i = 0; i < ARRAY_SIZE(import_libraries); ++i) {
-        Import_Library *lib = &import_libraries[i];
+    for (u64 i = 0; i < libsCount; ++i) {
+        Import_Library *lib = &libs[i];
         lib->dll.name_rva = file_offset_to_rva(rdata_section_header);
         size_t name_size = strlen(lib->dll.name) + 1;
         s32 aligned_name_size = align((s32)name_size, 2);
@@ -273,8 +268,8 @@ void write_executable() {
     s32 import_directory_rva = file_offset_to_rva(rdata_section_header);
     optional_header->DataDirectory[IMPORT_DIRECTORY_INDEX].VirtualAddress = import_directory_rva;
 
-    for (u64 i = 0; i < ARRAY_SIZE(import_libraries); ++i) {
-        Import_Library *lib = &import_libraries[i];
+    for (u64 i = 0; i < libsCount; ++i) {
+        Import_Library *lib = &libs[i];
 
         IMAGE_IMPORT_DESCRIPTOR *image_import_descriptor =
             buffer_allocate(&exe_buffer, IMAGE_IMPORT_DESCRIPTOR);
@@ -297,46 +292,82 @@ void write_executable() {
     // .text segment
     exe_buffer.size = text_section_header->PointerToRawData;
 
-    buffer_append_s8(&exe_buffer, 0x48); // sub rsp 28
-    buffer_append_s8(&exe_buffer, 0x83);
-    buffer_append_s8(&exe_buffer, 0xEC);
-    buffer_append_s8(&exe_buffer, 0x28);
+    u32 begingIndex = exe_buffer.size;
+    u8* beginnigOfCode = buffer_allocate_size(&exe_buffer, code.size);
+    memcpy(beginnigOfCode, code.mem, code.size);
 
-    buffer_append_s8(&exe_buffer, 0xB9); // mov rcx, 42
-    buffer_append_s8(&exe_buffer, 0x2A);
-    buffer_append_s8(&exe_buffer, 0x00);
-    buffer_append_s8(&exe_buffer, 0x00);
-    buffer_append_s8(&exe_buffer, 0x00);
-
-    buffer_append_s8(&exe_buffer, 0xFF); // call ExitProcess
-    buffer_append_s8(&exe_buffer, 0x15);
-    {
-        s32 *ExitProcess_rip_relative_address = buffer_allocate(&exe_buffer, s32);
-        s32 ExitProcess_call_rva = file_offset_to_rva(text_section_header);
-
-        bool match_found = false;
-        for (u64 i = 0; !match_found && i < ARRAY_SIZE(import_libraries); ++i) {
-            Import_Library *lib = &import_libraries[i];
-            if (strcmp(lib->dll.name, "kernel32.dll") != 0) continue;
-
-            for (s32 i = 0; i < lib->function_count; ++i) {
-                Import_Name_To_Rva *fn = &lib->functions[i];
-                if (strcmp(fn->name, "ExitProcess") == 0) {
-                    *ExitProcess_rip_relative_address = fn->iat_rva - ExitProcess_call_rva;
-                    match_found = true;
-                    break;
-                }
-            }
-        }
-        assert(match_found);
+    // patch the funcion call locations
+    for(int i = 0; i < names.size/sizeof(NamesToPatch); ++i) {
+        NamesToPatch* castNames = (NamesToPatch*)names.mem;
+        u8* addrLoc = &beginnigOfCode[castNames[i].offset];
+        u32 nextInstructonAddr = (begingIndex + castNames[i].offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+        u32 funcRVA = getFunctionRVA(libs, libsCount, castNames[i].name, castNames[i].len);
+        
+        addrLoc[0] = ((funcRVA - nextInstructonAddr) >> (8 * 0)) & 0xff;
+        addrLoc[1] = ((funcRVA - nextInstructonAddr) >> (8 * 1)) & 0xff;
+        addrLoc[2] = ((funcRVA - nextInstructonAddr) >> (8 * 2)) & 0xff;
+        addrLoc[3] = ((funcRVA - nextInstructonAddr) >> (8 * 3)) & 0xff;
     }
-
-    buffer_append_s8(&exe_buffer, 0xCC); // int3
     
     exe_buffer.size = text_section_header->PointerToRawData + text_section_header->SizeOfRawData;
 
     /////////
+    return exe_buffer;
+}
 
+#ifndef LIB_ONLY
+int main(void) {
+    Import_Name_To_Rva kernel32_functions[] = {
+        {.name = "ExitProcess", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+
+        {.name = "GetStdHandle", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+        {.name = "ReadConsoleA", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+    };
+
+    Import_Name_To_Rva user32_functions[] = {
+        {.name = "ShowWindow", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+    };
+
+    Import_Library import_libraries[] = {
+        {
+            .dll = {.name = "kernel32.dll", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+            .image_thunk_rva = INVALID_ADDRESS,
+            .functions = kernel32_functions,
+            .function_count = ARRAY_SIZE(kernel32_functions),
+        },
+        {
+            .dll = {.name = "user32.dll", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+            .image_thunk_rva = INVALID_ADDRESS,
+            .functions = user32_functions,
+            .function_count = ARRAY_SIZE(user32_functions),
+        },
+    };
+
+    Buffer code = make_buffer(1024, PAGE_READWRITE);
+    Buffer names = make_buffer(1024, PAGE_READWRITE);
+
+    buffer_append_s8(&code, 0x48); // sub rsp 28
+    buffer_append_s8(&code, 0x83);
+    buffer_append_s8(&code, 0xEC);
+    buffer_append_s8(&code, 0x28);
+
+    buffer_append_s8(&code, 0xB9); // mov rcx, 42
+    buffer_append_s8(&code, 0x2A);
+    buffer_append_s8(&code, 0x00);
+    buffer_append_s8(&code, 0x00);
+    buffer_append_s8(&code, 0x00);
+
+    buffer_append_s8(&code, 0xFF); // call ExitProcess
+    buffer_append_s8(&code, 0x15);
+    NamesToPatch* foo = buffer_allocate(&names, NamesToPatch);
+    foo->name = "ExitProcess";
+    foo->len = strlen("ExitProcess");
+    foo->offset = code.size;
+    buffer_append_s32(&code, 0);
+
+    buffer_append_s8(&code, 0xCC); // int3
+
+    Buffer outBuff = write_executable(import_libraries, ARRAY_SIZE(import_libraries), code, names);
     HANDLE file = CreateFile(
         "testExecutable.exe",  // name of the write
         GENERIC_WRITE,         // open for writing
@@ -346,22 +377,18 @@ void write_executable() {
         FILE_ATTRIBUTE_NORMAL, // normal file
         0                      // no attr. template
     );
-
     assert(file != INVALID_HANDLE_VALUE);
 
-    DWORD bytes_written = 0;
+    DWORD bytesWritten;
     WriteFile(
         file,                   // open file handle
-        exe_buffer.mem,         // start of data to write
-        (DWORD)exe_buffer.size, // number of bytes to write
-        &bytes_written,         // number of bytes that were written
-        0
+        outBuff.mem,          // start of data to write
+        (DWORD)outBuff.size,  // number of bytes to write
+        &bytesWritten,                   // number of bytes that were written
+        NULL
     );
 
     CloseHandle(file);
-}
-
-int main(void) {
-    write_executable();
     return 0;
 }
+#endif // LIB_ONLY
