@@ -1,3 +1,9 @@
 gcc -o emiter.exe emiter.c
 ./emiter.exe
-# Format-hex ./test.bin
+.\smallExe.exe
+echo $LASTEXITCODE
+
+# gcc -o .\write.exe .\write.c
+# .\write.exe
+# .\testExecutable.exe
+# echo $LASTEXITCODE
