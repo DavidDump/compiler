@@ -62,26 +62,18 @@ typedef enum Scale {
 #define MB(x) (KB(x) * 1000)
 #define GB(x) (MB(x) * 1000)
 
+#define LIB_ONLY 1
+#include "write.c"
+
 typedef struct EmiterContext {
-    u8* code;
-    int count;
-    int capacity;
+    Buffer code;
+    Buffer names;
 
     u32 freeRegisterMask;
 } EmiterContext;
 
-void AppendCode(EmiterContext* ctx, u8 code) {
-    if(ctx->count >= ctx->capacity){
-        unsigned int newCapacity = ctx->capacity * 2;
-        if(newCapacity == 0) newCapacity = 32;
-        ctx->code = realloc(ctx->code, newCapacity);
-        ctx->capacity = newCapacity;
-    }
-    ctx->code[ctx->count++] = code;
-}
-
 void Emit8(EmiterContext* ctx, u8 data) {
-    AppendCode(ctx, data);
+    buffer_append_u8(&ctx->code, data);
 }
 
 void Emit32(EmiterContext* ctx, u32 data) {
@@ -770,13 +762,23 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
 #define OP_IMM8(imm) (Operand){.type = OPERAND_Immediate8, .IMMEDIATE8 = {.immediate = (imm)}}
 #define OP_IMM32(imm) (Operand){.type = OPERAND_Immediate32, .IMMEDIATE32 = {.immediate = (imm)}}
 
+#define gen_callExtern(_ctx_, _name_) gen_callExtern_(_ctx_, _name_, strlen(_name_))
+void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
+    // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
+    gen_call(ctx, OP_RIP(0xDEADBEEF));
+    int offset = ctx->code.size - 4;
+    NamesToPatch* foo = buffer_allocate(&ctx->names, NamesToPatch);
+    foo->name = name;
+    foo->len = size;
+    foo->offset = offset;
+}
+
 int main(int argc, char** argv) {
-    if(argc < 2) return 0;
-    FILE* f = fopen("test.bin", "wb");
-
     EmiterContext ctx = {0};
+    ctx.code = make_buffer(0x200, PAGE_READWRITE);
+    ctx.names = make_buffer(0x200, PAGE_READWRITE);
 
-    #if 1
+    #if 0
     u8* code = (u8*)VirtualAlloc(NULL, MiB(1), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     ctx.code = code;
     ctx.capacity = MiB(1);
@@ -794,9 +796,79 @@ int main(int argc, char** argv) {
     u64 (*func)(u64) = (u64(*)(u64))ctx.code;
     u64 foo = func(argv[1][0]);
     printf("ret: %i\n", foo);
+    #else
+    
+    // Function prolog
+    gen_push(&ctx, OP_REG(RBP));
+    gen_mov(&ctx, OP_REG(RBP), OP_REG(RSP));
+    
+    // STR stack[0] = GetCommandLineA()
+    gen_callExtern(&ctx, "GetCommandLineA");
+    gen_push(&ctx, OP_REG(RAX)); // store GetCommandLineA return address
+    
+    // HANDLE stack[1] = GetStdHandle(STD_OUTPUT_HANDLE)
+    gen_mov(&ctx, OP_REG(RCX), OP_IMM32(STD_OUTPUT_HANDLE));
+    gen_callExtern(&ctx, "GetStdHandle");
+    gen_push(&ctx, OP_REG(RAX)); // store GetStdHandle return handle
+    
+    // WriteFile(stack[1], stack[0], 40, 0, 0)
+    gen_pop(&ctx, OP_REG(RCX)); // pop to rcx, first arg
+    gen_pop(&ctx, OP_REG(RDX)); // pop to rdx, second arg
+    gen_mov(&ctx, OP_REG(R8), OP_IMM32(40)); // str len 40, third arg
+    gen_mov(&ctx, OP_REG(R9), OP_IMM32(0)); // NULL for bytesWrittenPtr, fourth arg
+    gen_push(&ctx, OP_IMM32(0)); // NULL, fifth arg
+    gen_callExtern(&ctx, "WriteFile");
+    
+    // Function epilog
+    gen_mov(&ctx, OP_REG(RSP), OP_REG(RBP));
+    gen_pop(&ctx, OP_REG(RBP));
+    
+    // ExitProcess(0);
+    gen_mov(&ctx, OP_REG(RCX), OP_IMM32(0));
+    gen_callExtern(&ctx, "ExitProcess");
+    
+    // int3
+    buffer_append_u8(&ctx.code, 0xCC);
+
+    Import_Name_To_Rva kernel32_functions[] = {
+        {.name = "ExitProcess", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+        {.name = "GetStdHandle", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+        {.name = "WriteFile", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+        {.name = "GetCommandLineA", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+    };
+    Import_Library import_libraries[] = {
+        {
+            .dll = {.name = "kernel32.dll", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+            .image_thunk_rva = INVALID_ADDRESS,
+            .functions = kernel32_functions,
+            .function_count = ARRAY_SIZE(kernel32_functions),
+        },
+    };
+    Buffer outBuff = write_executable(import_libraries, ARRAY_SIZE(import_libraries), ctx.code, ctx.names);
+    HANDLE file = CreateFile(
+        "smallExe.exe",        // name of the write
+        GENERIC_WRITE,         // open for writing
+        0,                     // do not share
+        0,                     // default security
+        CREATE_ALWAYS,         // create new file only
+        FILE_ATTRIBUTE_NORMAL, // normal file
+        0                      // no attr. template
+    );
+    assert(file != INVALID_HANDLE_VALUE);
+
+    WriteFile(
+        file,                 // open file handle
+        outBuff.mem,          // start of data to write
+        (DWORD)outBuff.size,  // number of bytes to write
+        NULL,                 // number of bytes that were written
+        NULL
+    );
+
+    CloseHandle(file);
     #endif
 
-    fwrite(ctx.code, sizeof(*ctx.code), ctx.count, f);
+    FILE* f = fopen("test.bin", "wb");
+    fwrite(ctx.code.mem, sizeof(*ctx.code.mem), ctx.code.size, f);
     fclose(f);
     return 0;
 }

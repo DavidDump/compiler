@@ -82,6 +82,7 @@ u32 getFunctionRVA(Import_Library* libs, u64 libsCount, u8* name, u64 nameLen) {
             if (strcmp(fn->name, name) == 0) return fn->iat_rva;
         }
     }
+    assert(false && "Unreachable: a function was not imported");
 }
 
 Buffer write_executable(Import_Library* libs, u64 libsCount, Buffer code, Buffer names) {
