@@ -844,27 +844,7 @@ int main(int argc, char** argv) {
             .function_count = ARRAY_SIZE(kernel32_functions),
         },
     };
-    Buffer outBuff = write_executable(import_libraries, ARRAY_SIZE(import_libraries), ctx.code, ctx.names);
-    HANDLE file = CreateFile(
-        "smallExe.exe",        // name of the write
-        GENERIC_WRITE,         // open for writing
-        0,                     // do not share
-        0,                     // default security
-        CREATE_ALWAYS,         // create new file only
-        FILE_ATTRIBUTE_NORMAL, // normal file
-        0                      // no attr. template
-    );
-    assert(file != INVALID_HANDLE_VALUE);
-
-    WriteFile(
-        file,                 // open file handle
-        outBuff.mem,          // start of data to write
-        (DWORD)outBuff.size,  // number of bytes to write
-        NULL,                 // number of bytes that were written
-        NULL
-    );
-
-    CloseHandle(file);
+    write_executable("smallExe.exe", import_libraries, ARRAY_SIZE(import_libraries), ctx.code, ctx.names);
     #endif
 
     FILE* f = fopen("test.bin", "wb");

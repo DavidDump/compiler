@@ -242,7 +242,7 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, IMAGE_SE
     return result;
 }
 
-Buffer write_executable(Import_Library* libs, u64 libsCount, Buffer code, Buffer names) {
+void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer code, Buffer names) {
     // Sections
     IMAGE_SECTION_HEADER sections[] = {
         {
@@ -382,6 +382,20 @@ Buffer write_executable(Import_Library* libs, u64 libsCount, Buffer code, Buffer
     exe_buffer.size = text_section_header->PointerToRawData + text_section_header->SizeOfRawData;
 
     /////////
+    HANDLE file = CreateFile(
+        filepath,              // name of the write
+        GENERIC_WRITE,         // open for writing
+        0,                     // do not share
+        0,                     // default security
+        CREATE_ALWAYS,         // create new file only
+        FILE_ATTRIBUTE_NORMAL, // normal file
+        0                      // no attr. template
+    );
+    assert(file != INVALID_HANDLE_VALUE);
+    WriteFile(file, exe_buffer.mem, exe_buffer.size, NULL, NULL);
+
+    CloseHandle(file);
+    
     // TODO: free buffers
     return exe_buffer;
 }
@@ -438,28 +452,7 @@ int main(void) {
 
     buffer_append_s8(&code, 0xCC); // int3
 
-    Buffer outBuff = write_executable(import_libraries, ARRAY_SIZE(import_libraries), code, names);
-    HANDLE file = CreateFile(
-        "testExecutable.exe",  // name of the write
-        GENERIC_WRITE,         // open for writing
-        0,                     // do not share
-        0,                     // default security
-        CREATE_ALWAYS,         // create new file only
-        FILE_ATTRIBUTE_NORMAL, // normal file
-        0                      // no attr. template
-    );
-    assert(file != INVALID_HANDLE_VALUE);
-
-    DWORD bytesWritten;
-    WriteFile(
-        file,                   // open file handle
-        outBuff.mem,          // start of data to write
-        (DWORD)outBuff.size,  // number of bytes to write
-        &bytesWritten,                   // number of bytes that were written
-        NULL
-    );
-
-    CloseHandle(file);
+    write_executable("testExecutable.exe", import_libraries, ARRAY_SIZE(import_libraries), code, names);
     return 0;
 }
 #endif // LIB_ONLY
