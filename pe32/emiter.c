@@ -874,12 +874,12 @@ int main(int argc, char** argv) {
 }
 
 // NOTE: These are all the instructions currently used by the code generator:
-// push
-// pop
-// call
-// ret
-// mov
-// add
+// push - done
+// pop - done
+// call - done
+// ret - done
+// mov - done
+// add - done
 // sub
 // mul
 // div
@@ -889,6 +889,5 @@ int main(int argc, char** argv) {
 // lea
 // inc
 // dec
-
 
 // NOTE: delayed register allocations
