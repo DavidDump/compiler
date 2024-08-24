@@ -397,7 +397,6 @@ void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer 
     CloseHandle(file);
     
     // TODO: free buffers
-    return exe_buffer;
 }
 
 #ifndef LIB_ONLY

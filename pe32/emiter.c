@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <windows.h>
@@ -10,15 +9,8 @@
 // #define ARENA_IMPLEMENTATION
 // #include "../src/arena.h"
 
-typedef int8_t  s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
+#include "common.h"
+#include "instructions.c"
 
 // Register values used in the Mod/RM byte
 typedef enum Register {
@@ -74,6 +66,11 @@ typedef struct EmiterContext {
 
 void Emit8(EmiterContext* ctx, u8 data) {
     buffer_append_u8(&ctx->code, data);
+}
+
+void Emit16(EmiterContext* ctx, u16 data) {
+    Emit8(ctx, (data >> 0) & 0xFF);
+    Emit8(ctx, (data >> 8) & 0xFF);
 }
 
 void Emit32(EmiterContext* ctx, u32 data) {
@@ -132,7 +129,7 @@ void EmitSIBByte(EmiterContext* ctx, Scale scale, Register index, Register base)
 }
 
 // REX byte:
-// the top half of is always set to 0b0100
+// the top half is always set to 0b0100
 // in 64 bit mode the W bit is always set, so its safe to consider the base to be 0x48
 // if W = 1, the RXB bits are used to extend the ModR/M and SIB bytes
 // if W = 0, code segment is used to determine if the RXB bits are used
@@ -146,18 +143,12 @@ void EmitSIBByte(EmiterContext* ctx, Scale scale, Register index, Register base)
 // r is the register in the reg field of the ModR/M byte
 // x is the register in the index field SIB byte
 // b can be the register in the rm field of the ModR/M, base field of the SIB byte or reg field of the ModR/M byte if it is used as an opcode
-void EmitRexByte(EmiterContext* ctx, Register r, Register x, Register b) {
+void EmitRexByte(EmiterContext* ctx, u8 w, Register r, Register x, Register b) {
+    assert(w == 0 || w == 1);
     assert(r < 16); // 1 bit number, but 16 registers, only the top bit is extracted
     assert(x < 16); // 1 bit number, but 16 registers, only the top bit is extracted
     assert(b < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    Emit8(ctx, 0x48 | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0));
-}
-
-void EmitRexByteNoW(EmiterContext* ctx, Register r, Register x, Register b) {
-    assert(r < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    assert(x < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    assert(b < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    Emit8(ctx, 0x40 | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0));
+    Emit8(ctx, 0x40 | (w << 3) | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0));
 }
 
 // ModR/M and SIB byte emiters
@@ -257,7 +248,26 @@ typedef enum OperandType {
     OPERAND_Immediate8,
     // 0x1234
     OPERAND_Immediate32,
+
+    // NOTE: dont know if these are valid
+    OPERAND_Immediate16,
+    OPERAND_Immediate64,
 } OperandType;
+
+const u8* OperandTypeStr[] = {
+    [OPERAND_NONE]              = "NONE",
+    [OPERAND_Register]          = "r",
+    [OPERAND_AddrInReg]         = "r/m",
+    [OPERAND_AddrInRegOffset8]  = "r/m",
+    [OPERAND_AddrInRegOffset32] = "r/m",
+    [OPERAND_SIB]               = "r/m",
+    [OPERAND_SIBOffset8]        = "r/m",
+    [OPERAND_SIBOffset32]       = "r/m",
+    [OPERAND_RIP]               = "[RIP + addr]",
+    [OPERAND_AbsoluteAddr]      = "[addr]",
+    [OPERAND_Immediate8]        = "imm8",
+    [OPERAND_Immediate32]       = "imm32",
+};
 
 typedef struct Operand {
     OperandType type;
@@ -324,55 +334,55 @@ void gen_add(EmiterContext* ctx, Operand dest, Operand source) {
     switch(source.type) {
         case OPERAND_Register: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER.reg);
             Emit8(ctx, opcode);
             EmitDirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
         } break;
         case OPERAND_AddrInReg: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER.reg);
             Emit8(ctx, opcode);
             EmitIndirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
         } break;
         case OPERAND_AddrInRegOffset8: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET8.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER_OFFSET8.reg);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced8(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET8.reg, source.REGISTER_OFFSET8.offset);
         } break;
         case OPERAND_AddrInRegOffset32: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET32.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER_OFFSET32.reg);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced32(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET32.reg, source.REGISTER_OFFSET32.offset);
         } break;
         case OPERAND_SIB: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB.index, source.SIB.base);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, source.SIB.index, source.SIB.base);
             Emit8(ctx, opcode);
             EmitIndirectSIB(ctx, dest.REGISTER.reg, source.SIB.base, source.SIB.index, source.SIB.scale);
         } break;
         case OPERAND_SIBOffset8: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.index, source.SIB_OFFSET8.base);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, source.SIB_OFFSET8.index, source.SIB_OFFSET8.base);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced8SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.base, source.SIB_OFFSET8.index, source.SIB_OFFSET8.scale, source.SIB_OFFSET8.offset);
         } break;
         case OPERAND_SIBOffset32: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.index, source.SIB_OFFSET32.base);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, source.SIB_OFFSET32.index, source.SIB_OFFSET32.base);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced32SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.base, source.SIB_OFFSET32.index, source.SIB_OFFSET32.scale, source.SIB_OFFSET32.offset);
         } break;
         case OPERAND_RIP: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, 0);
             Emit8(ctx, opcode);
             EmitIndirectDisplacedRip(ctx, dest.REGISTER.reg, source.RIP.offset);
         } break;
         case OPERAND_AbsoluteAddr: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, 0);
             Emit8(ctx, opcode);
             EmitIndirectAbsolute(ctx, dest.REGISTER.reg, source.ABSOLUTE_ADDR.addr);
         } break;
@@ -382,47 +392,47 @@ void gen_add(EmiterContext* ctx, Operand dest, Operand source) {
             
             switch(dest.type) {
                 case OPERAND_Register: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER.reg);
                     Emit8(ctx, opcode);
                     EmitDirect(ctx, 0, dest.REGISTER.reg);
                 } break;
                 case OPERAND_AddrInReg: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER.reg);
                     Emit8(ctx, opcode);
                     EmitIndirect(ctx, 0, dest.REGISTER.reg);
                 } break;
                 case OPERAND_AddrInRegOffset8: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET8.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER_OFFSET8.reg);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced8(ctx, 0, dest.REGISTER_OFFSET8.reg, dest.REGISTER_OFFSET8.offset);
                 } break;
                 case OPERAND_AddrInRegOffset32: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET32.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER_OFFSET32.reg);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced32(ctx, 0, dest.REGISTER_OFFSET32.reg, dest.REGISTER_OFFSET32.offset);
                 } break;
                 case OPERAND_SIB: {
-                    EmitRexByte(ctx, 0, dest.SIB.index, dest.SIB.base);
+                    EmitRexByte(ctx, 1, 0, dest.SIB.index, dest.SIB.base);
                     Emit8(ctx, opcode);
                     EmitIndirectSIB(ctx, 0, dest.SIB.base, dest.SIB.index, dest.SIB.scale);
                 } break;
                 case OPERAND_SIBOffset8: {
-                    EmitRexByte(ctx, 0, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.base);
+                    EmitRexByte(ctx, 1, 0, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.base);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced8SIB(ctx, 0, dest.SIB_OFFSET8.base, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.scale, dest.SIB_OFFSET8.offset);
                 } break;
                 case OPERAND_SIBOffset32: {
-                    EmitRexByte(ctx, 0, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.base);
+                    EmitRexByte(ctx, 1, 0, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.base);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced32SIB(ctx, 0, dest.SIB_OFFSET32.base, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.scale, dest.SIB_OFFSET32.offset);
                 } break;
                 case OPERAND_RIP: {
-                    EmitRexByte(ctx, 0, 0, 0);
+                    EmitRexByte(ctx, 1, 0, 0, 0);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplacedRip(ctx, 0, dest.RIP.offset);
                 } break;
                 case OPERAND_AbsoluteAddr: {
-                    EmitRexByte(ctx, 0, 0, 0);
+                    EmitRexByte(ctx, 1, 0, 0, 0);
                     Emit8(ctx, opcode);
                     EmitIndirectAbsolute(ctx, 0, dest.ABSOLUTE_ADDR.addr);
                 } break;
@@ -449,55 +459,55 @@ void gen_mov(EmiterContext* ctx, Operand dest, Operand source) {
     switch(source.type) {
         case OPERAND_Register: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER.reg);
             Emit8(ctx, opcode);
             EmitDirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
         } break;
         case OPERAND_AddrInReg: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER.reg);
             Emit8(ctx, opcode);
             EmitIndirect(ctx, dest.REGISTER.reg, source.REGISTER.reg);
         } break;
         case OPERAND_AddrInRegOffset8: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET8.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER_OFFSET8.reg);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced8(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET8.reg, source.REGISTER_OFFSET8.offset);
         } break;
         case OPERAND_AddrInRegOffset32: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, source.REGISTER_OFFSET32.reg);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, source.REGISTER_OFFSET32.reg);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced32(ctx, dest.REGISTER.reg, source.REGISTER_OFFSET32.reg, source.REGISTER_OFFSET32.offset);
         } break;
         case OPERAND_SIB: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB.index, source.SIB.base);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, source.SIB.index, source.SIB.base);
             Emit8(ctx, opcode);
             EmitIndirectSIB(ctx, dest.REGISTER.reg, source.SIB.base, source.SIB.index, source.SIB.scale);
         } break;
         case OPERAND_SIBOffset8: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.index, source.SIB_OFFSET8.base);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, source.SIB_OFFSET8.index, source.SIB_OFFSET8.base);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced8SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET8.base, source.SIB_OFFSET8.index, source.SIB_OFFSET8.scale, source.SIB_OFFSET8.offset);
         } break;
         case OPERAND_SIBOffset32: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.index, source.SIB_OFFSET32.base);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, source.SIB_OFFSET32.index, source.SIB_OFFSET32.base);
             Emit8(ctx, opcode);
             EmitIndirectDisplaced32SIB(ctx, dest.REGISTER.reg, source.SIB_OFFSET32.base, source.SIB_OFFSET32.index, source.SIB_OFFSET32.scale, source.SIB_OFFSET32.offset);
         } break;
         case OPERAND_RIP: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, 0);
             Emit8(ctx, opcode);
             EmitIndirectDisplacedRip(ctx, dest.REGISTER.reg, source.RIP.offset);
         } break;
         case OPERAND_AbsoluteAddr: {
             assert(dest.type == OPERAND_Register);
-            EmitRexByte(ctx, dest.REGISTER.reg, 0, 0);
+            EmitRexByte(ctx, 1, dest.REGISTER.reg, 0, 0);
             Emit8(ctx, opcode);
             EmitIndirectAbsolute(ctx, dest.REGISTER.reg, source.ABSOLUTE_ADDR.addr);
         } break;
@@ -508,52 +518,52 @@ void gen_mov(EmiterContext* ctx, Operand dest, Operand source) {
             
             switch(dest.type) {
                 case OPERAND_Register: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER.reg);
                     Emit8(ctx, opcode);
                     EmitDirect(ctx, 0, dest.REGISTER.reg);
                 } break;
                 case OPERAND_AddrInReg: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER.reg);
                     Emit8(ctx, opcode);
                     EmitIndirect(ctx, 0, dest.REGISTER.reg);
                 } break;
                 case OPERAND_AddrInRegOffset8: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET8.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER_OFFSET8.reg);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced8(ctx, 0, dest.REGISTER_OFFSET8.reg, dest.REGISTER_OFFSET8.offset);
                 } break;
                 case OPERAND_AddrInRegOffset32: {
-                    EmitRexByte(ctx, 0, 0, dest.REGISTER_OFFSET32.reg);
+                    EmitRexByte(ctx, 1, 0, 0, dest.REGISTER_OFFSET32.reg);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced32(ctx, 0, dest.REGISTER_OFFSET32.reg, dest.REGISTER_OFFSET32.offset);
                 } break;
                 case OPERAND_SIB: {
-                    EmitRexByte(ctx, 0, dest.SIB.index, dest.SIB.base);
+                    EmitRexByte(ctx, 1, 0, dest.SIB.index, dest.SIB.base);
                     Emit8(ctx, opcode);
                     EmitIndirectSIB(ctx, 0, dest.SIB.base, dest.SIB.index, dest.SIB.scale);
                 } break;
                 case OPERAND_SIBOffset8: {
-                    EmitRexByte(ctx, 0, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.base);
+                    EmitRexByte(ctx, 1, 0, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.base);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced8SIB(ctx, 0, dest.SIB_OFFSET8.base, dest.SIB_OFFSET8.index, dest.SIB_OFFSET8.scale, dest.SIB_OFFSET8.offset);
                 } break;
                 case OPERAND_SIBOffset32: {
-                    EmitRexByte(ctx, 0, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.base);
+                    EmitRexByte(ctx, 1, 0, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.base);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplaced32SIB(ctx, 0, dest.SIB_OFFSET32.base, dest.SIB_OFFSET32.index, dest.SIB_OFFSET32.scale, dest.SIB_OFFSET32.offset);
                 } break;
                 case OPERAND_RIP: {
-                    EmitRexByte(ctx, 0, 0, 0);
+                    EmitRexByte(ctx, 1, 0, 0, 0);
                     Emit8(ctx, opcode);
                     EmitIndirectDisplacedRip(ctx, 0, dest.RIP.offset);
                 } break;
                 case OPERAND_AbsoluteAddr: {
-                    EmitRexByte(ctx, 0, 0, 0);
+                    EmitRexByte(ctx, 1, 0, 0, 0);
                     Emit8(ctx, opcode);
                     EmitIndirectAbsolute(ctx, 0, dest.ABSOLUTE_ADDR.addr);
                 } break;
             }
-            
+
             if(source.type == OPERAND_Immediate8) Emit32(ctx, source.IMMEDIATE8.immediate);
             else Emit32(ctx, source.IMMEDIATE32.immediate);
         } break;
@@ -563,36 +573,36 @@ void gen_mov(EmiterContext* ctx, Operand dest, Operand source) {
 void gen_push(EmiterContext* ctx, Operand op) {
     switch(op.type) {
         case OPERAND_Register: {
-            if(op.REGISTER.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER.reg);
+            if(op.REGISTER.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER.reg);
             Emit8(ctx, 0x50 | (op.REGISTER.reg & 7));
         } break;
         case OPERAND_AddrInReg: {
-            if(op.REGISTER.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER.reg);
+            if(op.REGISTER.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER.reg);
             Emit8(ctx, 0xFF);
             EmitIndirect(ctx, 6, op.REGISTER.reg);
         } break;
         case OPERAND_AddrInRegOffset8: {
-            if(op.REGISTER_OFFSET8.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER_OFFSET8.reg);
+            if(op.REGISTER_OFFSET8.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER_OFFSET8.reg);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced8(ctx, 6, op.REGISTER_OFFSET8.reg, op.REGISTER_OFFSET8.offset);
         } break;
         case OPERAND_AddrInRegOffset32: {
-            if(op.REGISTER_OFFSET32.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER_OFFSET32.reg);
+            if(op.REGISTER_OFFSET32.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER_OFFSET32.reg);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced32(ctx, 6, op.REGISTER_OFFSET32.reg, op.REGISTER_OFFSET32.offset);
         } break;
         case OPERAND_SIB: {
-            if(op.SIB.index & 8 || op.SIB.base & 8) EmitRexByteNoW(ctx, 0, op.SIB.index, op.SIB.base);
+            if(op.SIB.index & 8 || op.SIB.base & 8) EmitRexByte(ctx, 0, 0, op.SIB.index, op.SIB.base);
             Emit8(ctx, 0xFF);
             EmitIndirectSIB(ctx, 6, op.SIB.base, op.SIB.index, op.SIB.scale);
         } break;
         case OPERAND_SIBOffset8: {
-            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) EmitRexByteNoW(ctx, 0, op.SIB_OFFSET8.index, op.SIB_OFFSET8.base);
+            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) EmitRexByte(ctx, 0, 0, op.SIB_OFFSET8.index, op.SIB_OFFSET8.base);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced8SIB(ctx, 6, op.SIB_OFFSET8.base, op.SIB_OFFSET8.index, op.SIB_OFFSET8.scale, op.SIB_OFFSET8.offset);
         } break;
         case OPERAND_SIBOffset32: {
-            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) EmitRexByteNoW(ctx, 0, op.SIB_OFFSET32.index, op.SIB_OFFSET32.base);
+            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) EmitRexByte(ctx, 0, 0, op.SIB_OFFSET32.index, op.SIB_OFFSET32.base);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced32SIB(ctx, 6, op.SIB_OFFSET32.base, op.SIB_OFFSET32.index, op.SIB_OFFSET32.scale, op.SIB_OFFSET32.offset);
         } break;
@@ -620,36 +630,36 @@ void gen_pop(EmiterContext* ctx, Operand op) {
     assert(op.type != OPERAND_Immediate32 && "Operand type not allowed");
     switch(op.type) {
         case OPERAND_Register: {
-            if(op.REGISTER.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER.reg);
+            if(op.REGISTER.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER.reg);
             Emit8(ctx, 0x58 | (op.REGISTER.reg & 7));
         } break;
         case OPERAND_AddrInReg: {
-            if(op.REGISTER.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER.reg);
+            if(op.REGISTER.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER.reg);
             Emit8(ctx, 0x8F);
             EmitIndirect(ctx, 0, op.REGISTER.reg);
         } break;
         case OPERAND_AddrInRegOffset8: {
-            if(op.REGISTER_OFFSET8.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER_OFFSET8.reg);
+            if(op.REGISTER_OFFSET8.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER_OFFSET8.reg);
             Emit8(ctx, 0x8F);
             EmitIndirectDisplaced8(ctx, 0, op.REGISTER_OFFSET8.reg, op.REGISTER_OFFSET8.offset);
         } break;
         case OPERAND_AddrInRegOffset32: {
-            if(op.REGISTER_OFFSET32.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER_OFFSET32.reg);
+            if(op.REGISTER_OFFSET32.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER_OFFSET32.reg);
             Emit8(ctx, 0x8F);
             EmitIndirectDisplaced32(ctx, 0, op.REGISTER_OFFSET32.reg, op.REGISTER_OFFSET32.offset);
         } break;
         case OPERAND_SIB: {
-            if(op.SIB.index & 8 || op.SIB.base & 8) EmitRexByteNoW(ctx, 0, op.SIB.index, op.SIB.base);
+            if(op.SIB.index & 8 || op.SIB.base & 8) EmitRexByte(ctx, 0, 0, op.SIB.index, op.SIB.base);
             Emit8(ctx, 0x8F);
             EmitIndirectSIB(ctx, 0, op.SIB.base, op.SIB.index, op.SIB.scale);
         } break;
         case OPERAND_SIBOffset8: {
-            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) EmitRexByteNoW(ctx, 0, op.SIB_OFFSET8.index, op.SIB_OFFSET8.base);
+            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) EmitRexByte(ctx, 0, 0, op.SIB_OFFSET8.index, op.SIB_OFFSET8.base);
             Emit8(ctx, 0x8F);
             EmitIndirectDisplaced8SIB(ctx, 0, op.SIB_OFFSET8.base, op.SIB_OFFSET8.index, op.SIB_OFFSET8.scale, op.SIB_OFFSET8.offset);
         } break;
         case OPERAND_SIBOffset32: {
-            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) EmitRexByteNoW(ctx, 0, op.SIB_OFFSET32.index, op.SIB_OFFSET32.base);
+            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) EmitRexByte(ctx, 0, 0, op.SIB_OFFSET32.index, op.SIB_OFFSET32.base);
             Emit8(ctx, 0x8F);
             EmitIndirectDisplaced32SIB(ctx, 0, op.SIB_OFFSET32.base, op.SIB_OFFSET32.index, op.SIB_OFFSET32.scale, op.SIB_OFFSET32.offset);
         } break;
@@ -668,37 +678,37 @@ void gen_call(EmiterContext* ctx, Operand op) {
     assert(op.type != OPERAND_Immediate8 && "Operand type not allowed");
     switch(op.type) {
         case OPERAND_Register: {
-            if(op.REGISTER.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER.reg);
+            if(op.REGISTER.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER.reg);
             Emit8(ctx, 0xFF);
             EmitDirect(ctx, 2, op.REGISTER.reg);
         } break;
         case OPERAND_AddrInReg: {
-            if(op.REGISTER.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER.reg);
+            if(op.REGISTER.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER.reg);
             Emit8(ctx, 0xFF);
             EmitIndirect(ctx, 2, op.REGISTER.reg);
         } break;
         case OPERAND_AddrInRegOffset8: {
-            if(op.REGISTER_OFFSET8.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER_OFFSET8.reg);
+            if(op.REGISTER_OFFSET8.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER_OFFSET8.reg);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced8(ctx, 2, op.REGISTER_OFFSET8.reg, op.REGISTER_OFFSET8.offset);
         } break;
         case OPERAND_AddrInRegOffset32: {
-            if(op.REGISTER_OFFSET32.reg & 8) EmitRexByteNoW(ctx, 0, 0, op.REGISTER_OFFSET32.reg);
+            if(op.REGISTER_OFFSET32.reg & 8) EmitRexByte(ctx, 0, 0, 0, op.REGISTER_OFFSET32.reg);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced32(ctx, 2, op.REGISTER_OFFSET32.reg, op.REGISTER_OFFSET32.offset);
         } break;
         case OPERAND_SIB: {
-            if(op.SIB.index & 8 || op.SIB.base & 8) EmitRexByteNoW(ctx, 0, op.SIB.index, op.SIB.base);
+            if(op.SIB.index & 8 || op.SIB.base & 8) EmitRexByte(ctx, 0, 0, op.SIB.index, op.SIB.base);
             Emit8(ctx, 0xFF);
             EmitIndirectSIB(ctx, 2, op.SIB.base, op.SIB.index, op.SIB.scale);
         } break;
         case OPERAND_SIBOffset8: {
-            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) EmitRexByteNoW(ctx, 0, op.SIB_OFFSET8.index, op.SIB_OFFSET8.base);
+            if(op.SIB_OFFSET8.index & 8 || op.SIB_OFFSET8.base & 8) EmitRexByte(ctx, 0, 0, op.SIB_OFFSET8.index, op.SIB_OFFSET8.base);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced8SIB(ctx, 2, op.SIB_OFFSET8.base, op.SIB_OFFSET8.index, op.SIB_OFFSET8.scale, op.SIB_OFFSET8.offset);
         } break;
         case OPERAND_SIBOffset32: {
-            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) EmitRexByteNoW(ctx, 0, op.SIB_OFFSET32.index, op.SIB_OFFSET32.base);
+            if(op.SIB_OFFSET32.index & 8 || op.SIB_OFFSET32.base & 8) EmitRexByte(ctx, 0, 0, op.SIB_OFFSET32.index, op.SIB_OFFSET32.base);
             Emit8(ctx, 0xFF);
             EmitIndirectDisplaced32SIB(ctx, 2, op.SIB_OFFSET32.base, op.SIB_OFFSET32.index, op.SIB_OFFSET32.scale, op.SIB_OFFSET32.offset);
         } break;
@@ -719,6 +729,235 @@ void gen_call(EmiterContext* ctx, Operand op) {
 
 void gen_ret(EmiterContext* ctx) {
     Emit8(ctx, 0xC3);
+}
+
+typedef struct Operand2 {
+    OperandType type;
+    Register reg;
+    u32 displacement;
+    Register base;
+    Scale scale;
+    Register index;
+    u32 immediate;
+
+    // NOTE: maybe having isReg and isIndirect can be conbined?
+    bool isReg;
+    bool isIndirect;
+    bool isSIB;
+    bool isImm;
+    bool isRIPorAbs;
+} Operand2;
+
+typedef struct Instruction {
+    Mnemonic name;
+    Operand2 ops[INSTRUCTION_MAX_OPERANDS];
+} Instruction;
+
+bool isZeroStruct(InstructionEncoding* enc) {
+    u8* testValBuffer = (u8*)&(InstructionEncoding){0};
+    u64 size = sizeof(*enc);
+    u8* encBuff = (u8*)enc;
+    return memcmp(encBuff, testValBuffer, size) == 0;
+}
+
+bool checkTypesMatch(OperandType operandType, OpType encodingOperandType) {
+    switch(encodingOperandType) {
+        case OpType_NONE: {
+            if(operandType != OPERAND_NONE) return false;
+        } break;
+        case OpType_REG: {
+            if(operandType != OPERAND_Register) return false;
+        } break;
+        case OpType_RM: {
+            if(!(
+                operandType == OPERAND_Register ||
+                operandType == OPERAND_AddrInReg ||
+                operandType == OPERAND_AddrInRegOffset8 ||
+                operandType == OPERAND_AddrInRegOffset32 ||
+                operandType == OPERAND_SIB ||
+                operandType == OPERAND_SIBOffset8 ||
+                operandType == OPERAND_SIBOffset32 ||
+                operandType == OPERAND_RIP ||
+                operandType == OPERAND_AbsoluteAddr
+            )) return false;
+        } break;
+        case OpType_IMM8: {
+            if(operandType != OPERAND_Immediate8) return false;
+        } break;
+        case OpType_IMM16: {
+            if(!(
+                operandType == OPERAND_Immediate8 ||
+                operandType == OPERAND_Immediate16
+            )) return false;
+        } break;
+        case OpType_IMM32: {
+            if(!(
+                operandType == OPERAND_Immediate8 ||
+                operandType == OPERAND_Immediate16 ||
+                operandType == OPERAND_Immediate32
+            )) return false;
+        } break;
+        case OpType_IMM64: {
+            if(!(
+                operandType == OPERAND_Immediate8 ||
+                operandType == OPERAND_Immediate16 ||
+                operandType == OPERAND_Immediate32 ||
+                operandType == OPERAND_Immediate64
+            )) return false;
+        } break;
+    }
+    return true;
+}
+
+void genInstruction(EmiterContext* ctx, Instruction inst) {
+    InstructionEncoding* instructionEncodings =  encodings[inst.name];
+    for(u64 i = 0; i < MAX_ENCODING_FOR_INSTRUCTION; i++) {
+        InstructionEncoding encoding = instructionEncodings[i];
+        if(isZeroStruct(&encoding)) break;
+        if(!checkTypesMatch(inst.ops[0].type, encoding.opTypes[0]) || !checkTypesMatch(inst.ops[1].type, encoding.opTypes[1])) continue;
+
+        // NOTE: what about instructions with no operands?
+        u8 rexR = 0;
+        u8 rexX = 0;
+        u8 rexB = 0;
+        Register dstReg = 0; // NOTE: maybe need better invalid here
+        OperandType emitType = OPERAND_Register;
+        u8 immOpIndex = 255; // NOTE: better invalid
+        u32 disspl = 0;
+        Register base = 0; // NOTE: maybe need better invalid here
+        Scale scale = X0;
+        Register index = 0; // NOTE: maybe need better invalid here
+        Register rmReg = 0; // NOTE: maybe need better invalid here
+        u8 regOrExt = 0;
+        for(u64 h = 0; h < INSTRUCTION_MAX_OPERANDS; h++) {
+            Operand2 op = inst.ops[h];
+            OpType encodingOp = encoding.opTypes[h];
+
+            switch(encodingOp) {
+                case OpType_NONE: break;
+                case OpType_REG: {
+                    // emitType = OPERAND_Register;
+                    if(encoding.regInOpcode) {
+                        rexB = op.reg;
+                    } else {
+                        rexR = op.reg;
+                    }
+                    dstReg = op.reg;
+                    // NOTE: probably redundant if
+                    if(encoding.modRMType == ModRMType_REG) {
+                        regOrExt = op.reg;
+                    }
+                } break;
+                case OpType_RM: {
+                    switch(op.type) {
+                        case OPERAND_Register:
+                        case OPERAND_AddrInReg: {
+                            emitType = op.type;
+                            rmReg = op.reg;
+                            rexB = op.reg;
+                        } break;
+                        case OPERAND_AddrInRegOffset8:
+                        case OPERAND_AddrInRegOffset32: {
+                            emitType = op.type;
+                            rmReg = op.reg;
+                            disspl = op.displacement;
+                            rexB = op.reg;
+                        } break;
+                        case OPERAND_SIB: {
+                            emitType = op.type;
+                            base = op.base;
+                            scale = op.scale;
+                            index = op.index;
+                            rexB = op.base;
+                            rexX = op.index;
+                        } break;
+                        case OPERAND_SIBOffset8:
+                        case OPERAND_SIBOffset32: {
+                            emitType = op.type;
+                            base = op.base;
+                            scale = op.scale;
+                            index = op.index;
+                            disspl = op.displacement;
+                            rexB = op.base;
+                            rexX = op.index;
+                        } break;
+                        case OPERAND_RIP:
+                        case OPERAND_AbsoluteAddr: {
+                            emitType = op.type;
+                            disspl = op.displacement;
+                        } break;
+                    }
+                } break;
+                case OpType_IMM8:
+                case OpType_IMM16:
+                case OpType_IMM32:
+                case OpType_IMM64: {
+                    immOpIndex = h;
+                } break;
+            }
+        }
+
+        if(encoding.modRMType == ModRMType_EXT) {
+            regOrExt = encoding.opcodeExtension;
+        }
+
+        // Rex byte
+        // TODO: support for 16 and 8 bit prefixes
+        u8 rexW = 0;
+        if(encoding.rexType == RexByte_W) rexW = 1;
+        if(encoding.rexType != RexByte_NONE && (rexW || (rexR & 8) || (rexX & 8) || (rexB & 8))) EmitRexByte(ctx, rexW, rexR, rexX, rexB);
+
+        // Opcode
+        if(encoding.regInOpcode) Emit8(ctx, encoding.opcode | (dstReg & 7));
+        else Emit8(ctx, encoding.opcode);
+
+        // ModR/M and SIB bytes and dissplacement
+        if(encoding.modRMType != ModRMType_NONE) {
+            switch(emitType) {
+                case OPERAND_Register: {
+                    EmitDirect(ctx, regOrExt, rmReg);
+                } break;
+                case OPERAND_AddrInReg: {
+                    EmitIndirect(ctx, regOrExt, rmReg);
+                } break;
+                case OPERAND_AddrInRegOffset8: {
+                    EmitIndirectDisplaced8(ctx, regOrExt, rmReg, (u8)disspl);
+                } break;
+                case OPERAND_AddrInRegOffset32: {
+                    EmitIndirectDisplaced32(ctx, regOrExt, rmReg, disspl);
+                } break;
+                case OPERAND_SIB: {
+                    EmitIndirectSIB(ctx, regOrExt, base, index, scale);
+                } break;
+                case OPERAND_SIBOffset8: {
+                    EmitIndirectDisplaced8SIB(ctx, regOrExt, base, index, scale, (u8)disspl);
+                } break;
+                case OPERAND_SIBOffset32: {
+                    EmitIndirectDisplaced32SIB(ctx, regOrExt, base, index, scale, disspl);
+                } break;
+                case OPERAND_RIP: {
+                    EmitIndirectDisplacedRip(ctx, regOrExt, disspl);
+                } break;
+                case OPERAND_AbsoluteAddr: {
+                    EmitIndirectAbsolute(ctx, regOrExt, disspl);
+                } break;
+            }
+        }
+
+        // Immediates
+        if(immOpIndex < INSTRUCTION_MAX_OPERANDS) {
+            switch(encoding.opTypes[immOpIndex]) {
+                case OpType_IMM8:  Emit8(ctx, inst.ops[immOpIndex].immediate); break;
+                case OpType_IMM16: Emit16(ctx, inst.ops[immOpIndex].immediate); break;
+                case OpType_IMM32: Emit32(ctx, inst.ops[immOpIndex].immediate); break;
+                case OpType_IMM64: Emit64(ctx, inst.ops[immOpIndex].immediate); break;
+            }
+        }
+        
+        return;
+    }
+    printf("[ERROR] Could not find encoding for instruction: %s %s %s\n", MnemonicStr[inst.name], OperandTypeStr[inst.ops[0].type], OperandTypeStr[inst.ops[1].type]);
+    assert(false);
 }
 
 // -------------------------------------------
@@ -750,17 +989,42 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
     ctx->freeRegisterMask |= 1 << registerToFree;
 }
 
-#define OP_REG(r) (Operand){.type = OPERAND_Register, .REGISTER = {.reg = (r)}}
-#define OP_INDIRECT(r) (Operand){.type = OPERAND_AddrInReg, .REGISTER = {.reg = (r)}}
-#define OP_INDIRECT_OFFSET8(r, disp) (Operand){.type = OPERAND_AddrInRegOffset8, .REGISTER_OFFSET8 = {.reg = (r), .offset = (disp)}}
-#define OP_INDIRECT_OFFSET32(r, disp) (Operand){.type = OPERAND_AddrInRegOffset32, .REGISTER_OFFSET32 = {.reg = (r), .offset = (disp)}}
-#define OP_INDIRECT_SIB(b, s, i) (Operand){.type = OPERAND_SIB, .SIB = {.base = (b), .scale = (s), .index = (i)}}
-#define OP_INDIRECT_SIB_OFFSET8(b, s, i, disp) (Operand){.type = OPERAND_SIBOffset8, .SIB_OFFSET8 = {.base = (b), .scale = (s), .index = (i), .offset = (disp)}}
-#define OP_INDIRECT_SIB_OFFSET32(b, s, i, disp) (Operand){.type = OPERAND_SIBOffset32, .SIB_OFFSET32 = {.base = (b), .scale = (s), .index = (i), .offset = (disp)}}
-#define OP_RIP(disp) (Operand){.type = OPERAND_RIP, .RIP = {.offset = (disp)}}
-#define OP_ABSOLUTE(disp) (Operand){.type = OPERAND_AbsoluteAddr, .ABSOLUTE_ADDR = {.addr = (disp)}}
-#define OP_IMM8(imm) (Operand){.type = OPERAND_Immediate8, .IMMEDIATE8 = {.immediate = (imm)}}
-#define OP_IMM32(imm) (Operand){.type = OPERAND_Immediate32, .IMMEDIATE32 = {.immediate = (imm)}}
+#define OP_REG(_r_) (Operand){.type = OPERAND_Register, .REGISTER = {.reg = (_r_)}}
+#define OP_INDIRECT(_r_) (Operand){.type = OPERAND_AddrInReg, .REGISTER = {.reg = (_r_)}}
+#define OP_INDIRECT_OFFSET8(_r_, _disp_) (Operand){.type = OPERAND_AddrInRegOffset8, .REGISTER_OFFSET8 = {.reg = (_r_), .offset = (_disp_)}}
+#define OP_INDIRECT_OFFSET32(_r_, _disp_) (Operand){.type = OPERAND_AddrInRegOffset32, .REGISTER_OFFSET32 = {.reg = (_r_), .offset = (_disp_)}}
+#define OP_INDIRECT_SIB(_b_, _s_, _i_) (Operand){.type = OPERAND_SIB, .SIB = {.base = (_b_), .scale = (_s_), .index = (_i_)}}
+#define OP_INDIRECT_SIB_OFFSET8(_b_, _s_, _i_, _disp_) (Operand){.type = OPERAND_SIBOffset8, .SIB_OFFSET8 = {.base = (_b_), .scale = (_s_), .index = (_i_), .offset = (_disp_)}}
+#define OP_INDIRECT_SIB_OFFSET32(_b_, _s_, _i_, _disp_) (Operand){.type = OPERAND_SIBOffset32, .SIB_OFFSET32 = {.base = (_b_), .scale = (_s_), .index = (_i_), .offset = (_disp_)}}
+#define OP_RIP(_disp_) (Operand){.type = OPERAND_RIP, .RIP = {.offset = (_disp_)}}
+#define OP_ABSOLUTE(_disp_) (Operand){.type = OPERAND_AbsoluteAddr, .ABSOLUTE_ADDR = {.addr = (_disp_)}}
+#define OP_IMM8(_imm_) (Operand){.type = OPERAND_Immediate8, .IMMEDIATE8 = {.immediate = (_imm_)}}
+#define OP_IMM32(_imm_) (Operand){.type = OPERAND_Immediate32, .IMMEDIATE32 = {.immediate = (_imm_)}}
+
+#define OP2_REG(_r_) \
+    (Operand2){.type = OPERAND_Register, .reg = (_r_), .isReg = true}
+#define OP2_INDIRECT(_r_) \
+    (Operand2){.type = OPERAND_AddrInReg, .reg = (_r_), .isIndirect = true}
+#define OP2_INDIRECT_OFFSET8(_r_, _disp_) \
+    (Operand2){.type = OPERAND_AddrInRegOffset8, .reg = (_r_), .displacement = (_disp_), .isIndirect = true}
+#define OP2_INDIRECT_OFFSET32(_r_, _disp_) \
+    (Operand2){.type = OPERAND_AddrInRegOffset32, .reg = (_r_), .displacement = (_disp_), .isIndirect = true}
+#define OP2_INDIRECT_SIB(_b_, _s_, _i_) \
+    (Operand2){.type = OPERAND_SIB, .base = (_b_), .scale = (_s_), .index = (_i_), .isSIB = true}
+#define OP2_INDIRECT_SIB_OFFSET8(_b_, _s_, _i_, _disp_) \
+    (Operand2){.type = OPERAND_SIBOffset8, .base = (_b_), .scale = (_s_), .index = (_i_), .displacement = (_disp_), .isSIB = true}
+#define OP2_INDIRECT_SIB_OFFSET32(_b_, _s_, _i_, _disp_) \
+    (Operand2){.type = OPERAND_SIBOffset32, .base = (_b_), .scale = (_s_), .index = (_i_), .displacement = (_disp_), .isSIB = true}
+#define OP2_RIP(_disp_) \
+    (Operand2){.type = OPERAND_RIP, .displacement = (_disp_), .isRIPorAbs = true}
+#define OP2_ABSOLUTE(_disp_) \
+    (Operand2){.type = OPERAND_AbsoluteAddr, .displacement = (_disp_), .isRIPorAbs = true}
+#define OP2_IMM8(_imm_) \
+    (Operand2){.type = OPERAND_Immediate8, .immediate = (_imm_), .isImm = true}
+#define OP2_IMM32(_imm_) \
+    (Operand2){.type = OPERAND_Immediate32, .immediate = (_imm_), .isImm = true}
+
+#define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
 #define gen_callExtern(_ctx_, _name_) gen_callExtern_(_ctx_, _name_, strlen(_name_))
 void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
@@ -773,15 +1037,19 @@ void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
     foo->offset = offset;
 }
 
+#define TEST_IN_MEM_EXECUTION 0
+#define TEST_EXE_GENERATION 0
+#define TEST_INSTRUCION_ENCODING 1
+
+#include "tests.c"
+
 int main(int argc, char** argv) {
     EmiterContext ctx = {0};
     ctx.code = make_buffer(0x200, PAGE_READWRITE);
     ctx.names = make_buffer(0x200, PAGE_READWRITE);
 
-    #if 0
-    u8* code = (u8*)VirtualAlloc(NULL, MiB(1), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    ctx.code = code;
-    ctx.capacity = MiB(1);
+    #if TEST_IN_MEM_EXECUTION
+    ctx.code = make_buffer(MiB(1), PAGE_EXECUTE_READWRITE);
     
     gen_push(&ctx, OP_REG(RBP));
     gen_mov(&ctx, OP_REG(RBP), OP_REG(RSP));
@@ -796,8 +1064,13 @@ int main(int argc, char** argv) {
     u64 (*func)(u64) = (u64(*)(u64))ctx.code;
     u64 foo = func(argv[1][0]);
     printf("ret: %i\n", foo);
-    #else
     
+    FILE* f = fopen("test.bin", "wb");
+    fwrite(ctx.code.mem, sizeof(*ctx.code.mem), ctx.code.size, f);
+    fclose(f);
+    #endif // TEST_IN_MEM_EXECUTION
+
+    #if TEST_EXE_GENERATION
     // Function prolog
     gen_push(&ctx, OP_REG(RBP));
     gen_mov(&ctx, OP_REG(RBP), OP_REG(RSP));
@@ -814,9 +1087,9 @@ int main(int argc, char** argv) {
     // WriteFile(stack[1], stack[0], 40, 0, 0)
     gen_pop(&ctx, OP_REG(RCX)); // pop to rcx, first arg
     gen_pop(&ctx, OP_REG(RDX)); // pop to rdx, second arg
-    gen_mov(&ctx, OP_REG(R8), OP_IMM32(40)); // str len 40, third arg
-    gen_mov(&ctx, OP_REG(R9), OP_IMM32(0)); // NULL for bytesWrittenPtr, fourth arg
-    gen_push(&ctx, OP_IMM32(0)); // NULL, fifth arg
+    gen_mov(&ctx, OP_REG(R8), OP_IMM8(40)); // str len 40, third arg
+    gen_mov(&ctx, OP_REG(R9), OP_IMM8(0)); // NULL for bytesWrittenPtr, fourth arg
+    gen_push(&ctx, OP_IMM8(0)); // NULL, fifth arg
     gen_callExtern(&ctx, "WriteFile");
     
     // Function epilog
@@ -824,7 +1097,7 @@ int main(int argc, char** argv) {
     gen_pop(&ctx, OP_REG(RBP));
     
     // ExitProcess(0);
-    gen_mov(&ctx, OP_REG(RCX), OP_IMM32(0));
+    gen_mov(&ctx, OP_REG(RCX), OP_IMM8(0));
     gen_callExtern(&ctx, "ExitProcess");
     
     // int3
@@ -845,11 +1118,35 @@ int main(int argc, char** argv) {
         },
     };
     write_executable("smallExe.exe", import_libraries, ARRAY_SIZE(import_libraries), ctx.code, ctx.names);
-    #endif
+    #endif // TEST_EXE_GENERATION
 
-    FILE* f = fopen("test.bin", "wb");
-    fwrite(ctx.code.mem, sizeof(*ctx.code.mem), ctx.code.size, f);
-    fclose(f);
+    #if TEST_INSTRUCION_ENCODING
+    #define GEN_TEST(_name_)                                               \
+        do{                                                                \
+            EmiterContext ctx = {0};                                       \
+            ctx.code = make_buffer(MiB(1), PAGE_READWRITE);                \
+            ctx.names = make_buffer(0x200, PAGE_READWRITE);                \
+            test##_name_(&ctx);                                            \
+            FILE *f = fopen("dump" #_name_ ".bin", "wb");                  \
+            fwrite(ctx.code.mem, sizeof(*ctx.code.mem), ctx.code.size, f); \
+            fclose(f);                                                     \
+            printf("Done generating dump" #_name_ ".bin\n");               \
+            VirtualFree(ctx.code.mem, 0, MEM_RELEASE);                     \
+            VirtualFree(ctx.names.mem, 0, MEM_RELEASE);                    \
+        }while(0)
+
+    GEN_TEST(OldAdd);
+    GEN_TEST(NewAdd);
+    GEN_TEST(OldMov);
+    GEN_TEST(NewMov);
+    GEN_TEST(OldPush);
+    GEN_TEST(NewPush);
+    GEN_TEST(OldPop);
+    GEN_TEST(NewPop);
+    GEN_TEST(OldCall);
+    GEN_TEST(NewCall);
+    #endif // TEST_INSTRUCION_ENCODING
+
     return 0;
 }
 
