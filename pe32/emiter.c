@@ -1029,7 +1029,7 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
 #define gen_callExtern(_ctx_, _name_) gen_callExtern_(_ctx_, _name_, strlen(_name_))
 void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
-    gen_call(ctx, OP_RIP(0xDEADBEEF));
+    genInstruction(ctx, INST(call, OP2_RIP(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
     NamesToPatch* foo = buffer_allocate(&ctx->names, NamesToPatch);
     foo->name = name;
@@ -1037,9 +1037,9 @@ void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
     foo->offset = offset;
 }
 
-#define TEST_IN_MEM_EXECUTION 0
+#define TEST_IN_MEM_EXECUTION 1
 #define TEST_EXE_GENERATION 0
-#define TEST_INSTRUCION_ENCODING 1
+#define TEST_INSTRUCION_ENCODING 0
 
 #include "tests.c"
 
@@ -1051,17 +1051,22 @@ int main(int argc, char** argv) {
     #if TEST_IN_MEM_EXECUTION
     ctx.code = make_buffer(MiB(1), PAGE_EXECUTE_READWRITE);
     
-    gen_push(&ctx, OP_REG(RBP));
-    gen_mov(&ctx, OP_REG(RBP), OP_REG(RSP));
+    genInstruction(&ctx, INST(push, OP2_REG(RBP)));
+    genInstruction(&ctx, INST(mov, OP2_REG(RBP), OP2_REG(RSP)));
+    
+    genInstruction(&ctx, INST(mov, OP2_REG(RAX), OP2_REG(RCX)));
+    // genInstruction(&ctx, INST(add, OP2_REG(RAX), OP2_REG(RDX)));
 
-    gen_mov(&ctx, OP_REG(RAX), OP_REG(RCX));
-    // gen_add(&ctx, OP_REG(RAX), OP_REG(RDX));
+    genInstruction(&ctx, INST(mov, OP2_REG(RSP), OP2_REG(RBP)));
+    genInstruction(&ctx, INST(pop, OP2_REG(RBP)));
+    genInstruction(&ctx, INST(ret, 0));
 
-    gen_mov(&ctx, OP_REG(RSP), OP_REG(RBP));
-    gen_pop(&ctx, OP_REG(RBP));
-    gen_ret(&ctx);
+    if(argc < 2){
+        printf("[ERROR] Needs at least one argument\n");
+        exit(1);
+    }
 
-    u64 (*func)(u64) = (u64(*)(u64))ctx.code;
+    u64 (*func)(u64) = (u64(*)(u64))ctx.code.mem;
     u64 foo = func(argv[1][0]);
     printf("ret: %i\n", foo);
     
@@ -1072,32 +1077,32 @@ int main(int argc, char** argv) {
 
     #if TEST_EXE_GENERATION
     // Function prolog
-    gen_push(&ctx, OP_REG(RBP));
-    gen_mov(&ctx, OP_REG(RBP), OP_REG(RSP));
+    genInstruction(&ctx, INST(push, OP2_REG(RBP)));
+    genInstruction(&ctx, INST(mov, OP2_REG(RBP), OP2_REG(RSP)));
     
     // STR stack[0] = GetCommandLineA()
     gen_callExtern(&ctx, "GetCommandLineA");
-    gen_push(&ctx, OP_REG(RAX)); // store GetCommandLineA return address
+    genInstruction(&ctx, INST(push, OP2_REG(RAX))); // store GetCommandLineA return address
     
     // HANDLE stack[1] = GetStdHandle(STD_OUTPUT_HANDLE)
-    gen_mov(&ctx, OP_REG(RCX), OP_IMM32(STD_OUTPUT_HANDLE));
+    genInstruction(&ctx, INST(mov, OP2_REG(RCX), OP2_IMM32(STD_OUTPUT_HANDLE)));
     gen_callExtern(&ctx, "GetStdHandle");
-    gen_push(&ctx, OP_REG(RAX)); // store GetStdHandle return handle
+    genInstruction(&ctx, INST(push, OP2_REG(RAX))); // store GetStdHandle return handle
     
     // WriteFile(stack[1], stack[0], 40, 0, 0)
-    gen_pop(&ctx, OP_REG(RCX)); // pop to rcx, first arg
-    gen_pop(&ctx, OP_REG(RDX)); // pop to rdx, second arg
-    gen_mov(&ctx, OP_REG(R8), OP_IMM8(40)); // str len 40, third arg
-    gen_mov(&ctx, OP_REG(R9), OP_IMM8(0)); // NULL for bytesWrittenPtr, fourth arg
-    gen_push(&ctx, OP_IMM8(0)); // NULL, fifth arg
+    genInstruction(&ctx, INST(pop, OP2_REG(RCX))); // pop to rcx, first arg
+    genInstruction(&ctx, INST(pop, OP2_REG(RDX))); // pop to rdx, second arg
+    genInstruction(&ctx, INST(mov, OP2_REG(R8), OP2_IMM8(40))); // str len 40, third arg
+    genInstruction(&ctx, INST(mov, OP2_REG(R9), OP2_IMM8(0))); // NULL for bytesWrittenPtr, fourth arg
+    genInstruction(&ctx, INST(push, OP2_IMM8(0))); // NULL, fifth arg
     gen_callExtern(&ctx, "WriteFile");
     
     // Function epilog
-    gen_mov(&ctx, OP_REG(RSP), OP_REG(RBP));
-    gen_pop(&ctx, OP_REG(RBP));
+    genInstruction(&ctx, INST(mov, OP2_REG(RSP), OP2_REG(RBP)));
+    genInstruction(&ctx, INST(pop, OP2_REG(RBP)));
     
     // ExitProcess(0);
-    gen_mov(&ctx, OP_REG(RCX), OP_IMM8(0));
+    genInstruction(&ctx, INST(mov, OP2_REG(RCX), OP2_IMM8(0)));
     gen_callExtern(&ctx, "ExitProcess");
     
     // int3
@@ -1117,6 +1122,7 @@ int main(int argc, char** argv) {
             .function_count = ARRAY_SIZE(kernel32_functions),
         },
     };
+    printf("Finished generating bytecode.\n");
     write_executable("smallExe.exe", import_libraries, ARRAY_SIZE(import_libraries), ctx.code, ctx.names);
     #endif // TEST_EXE_GENERATION
 
@@ -1149,22 +1155,5 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-
-// NOTE: These are all the instructions currently used by the code generator:
-// push - done
-// pop - done
-// call - done
-// ret - done
-// mov - done
-// add - done
-// sub
-// mul
-// div
-// cmp
-// jmp
-// all the conditional jumps
-// lea
-// inc
-// dec
 
 // NOTE: delayed register allocations
