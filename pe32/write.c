@@ -19,11 +19,11 @@ typedef struct Buffer {
     u64 capacity;
 } Buffer;
 
-typedef struct NamesToPatch {
+typedef struct AddrToPatch {
     u8* name;
     u64 len;
     u64 offset;
-} NamesToPatch;
+} AddrToPatch;
 
 Buffer make_buffer(u64 capacity, u32 permission_flags) {
     Buffer result = {0};
@@ -364,8 +364,8 @@ void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer 
     memcpy(beginnigOfCode, code.mem, code.size);
 
     // patch the funcion call locations
-    for(int i = 0; i < names.size/sizeof(NamesToPatch); ++i) {
-        NamesToPatch* castNames = (NamesToPatch*)names.mem;
+    for(int i = 0; i < names.size/sizeof(AddrToPatch); ++i) {
+        AddrToPatch* castNames = (AddrToPatch*)names.mem;
         u8* addrLoc = &beginnigOfCode[castNames[i].offset];
         u32 nextInstructonAddr = (begingIndex + castNames[i].offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
         u32 funcRVA = getFunctionRVA(libs, libsCount, castNames[i].name, castNames[i].len);
@@ -443,7 +443,7 @@ int main(void) {
 
     buffer_append_s8(&code, 0xFF); // call ExitProcess
     buffer_append_s8(&code, 0x15);
-    NamesToPatch* foo = buffer_allocate(&names, NamesToPatch);
+    AddrToPatch* foo = buffer_allocate(&names, AddrToPatch);
     foo->name = "ExitProcess";
     foo->len = strlen("ExitProcess");
     foo->offset = code.size;

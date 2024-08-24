@@ -557,7 +557,7 @@ void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
-    NamesToPatch* foo = buffer_allocate(&ctx->names, NamesToPatch);
+    AddrToPatch* foo = buffer_allocate(&ctx->names, AddrToPatch);
     foo->name = name;
     foo->len = size;
     foo->offset = offset;
