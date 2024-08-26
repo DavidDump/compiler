@@ -81,7 +81,7 @@ const u8* MnemonicStr[Mnemonic_COUNT] = {
     [dec_]  = "dec",
 };
 
-// NOTE: when needing to iterate all the encodings fot one instruction,
+// NOTE: when needing to iterate all the encodings for one instruction,
 // it should be safe to assume that there wont be MAX_ENCODING_FOR_INSTRUCTION number of encodings,
 // so the loop can safely break on an empty encoding
 #define MAX_ENCODING_FOR_INSTRUCTION 255

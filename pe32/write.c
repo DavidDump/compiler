@@ -25,6 +25,15 @@ typedef struct AddrToPatch {
     u64 offset;
 } AddrToPatch;
 
+typedef struct UserDataEntry {
+    u8* data;
+    u64 dataLen;
+    const char* name;
+
+    // Known after the data is writen to the file
+    u64 dataRVA;
+} UserDataEntry;
+
 Buffer make_buffer(u64 capacity, u32 permission_flags) {
     Buffer result = {0};
     result.mem = VirtualAlloc(0, capacity, MEM_COMMIT | MEM_RESERVE, permission_flags);
@@ -112,6 +121,15 @@ u32 getFunctionRVA(Import_Library* libs, u64 libsCount, u8* name, u64 nameLen) {
     assert(false && "Unreachable: a function was not imported");
 }
 
+u32 genDataRVA(UserDataEntry* dataEntries, u64 dataEntryCount, u8* name, u64 nameLen) {
+    // TODO: instead of iterating all the import use a hashmap
+    for (u64 i = 0; i < dataEntryCount; ++i) {
+        UserDataEntry *entry = &dataEntries[i];
+        if(strcmp(entry->name, name) == 0) return entry->dataRVA;
+    }
+    assert(false && "Unreachable: a data entry could not be found");
+}
+
 typedef struct ParsedDataSection {
     Buffer buffer;
     s32 iat_rva;
@@ -120,7 +138,7 @@ typedef struct ParsedDataSection {
     s32 import_directory_size;
 } ParsedDataSection;
 
-ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, IMAGE_SECTION_HEADER *header) {
+ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, UserDataEntry* dataEntries, u64 dataEntryCount, IMAGE_SECTION_HEADER *header) {
     #define get_rva() (s32)(header->VirtualAddress + buffer->size)
 
     // NOTE: is it better to precalculate this or just use a dynamic array?
@@ -129,8 +147,8 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, IMAGE_SE
         Import_Library *lib = &libs[i];
         // Aligned to 2 bytes c string of library name
         expected_encoded_size += align((s32)strlen(lib->dll.name) + 1, 2);
-        for (s32 i = 0; i < lib->function_count; ++i) {
-            Import_Name_To_Rva *fn = &lib->functions[i];
+        for (s32 h = 0; h < lib->function_count; ++h) {
+            Import_Name_To_Rva *fn = &lib->functions[h];
 
             // Ordinal Hint, value not required
             expected_encoded_size += sizeof(s16);
@@ -152,6 +170,12 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, IMAGE_SE
         expected_encoded_size += sizeof(u64);
         // Image Thunk zero-termination
         expected_encoded_size += sizeof(IMAGE_IMPORT_DESCRIPTOR);
+
+        // Data section
+        for(s32 h = 0; h < dataEntryCount; ++h) {
+            UserDataEntry* dataEntry = &dataEntries[h];
+            expected_encoded_size += dataEntry->dataLen + sizeof(u64);
+        }
     }
 
     ParsedDataSection result = {
@@ -232,6 +256,16 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, IMAGE_SE
     result.import_directory_size = get_rva() - result.import_directory_rva;
     *buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR) = (IMAGE_IMPORT_DESCRIPTOR) {0};
 
+    // Data Section
+    for(s32 i = 0; i < dataEntryCount; ++i) {
+        UserDataEntry* dataEntry = &dataEntries[i];
+        dataEntry->dataRVA = get_rva();
+        
+        buffer_append_u64(buffer, dataEntry->dataLen);
+        u8* bufferMem = buffer_allocate_size(buffer, dataEntry->dataLen);
+        memcpy(bufferMem, dataEntry->data, dataEntry->dataLen);
+    }
+    
     assert(buffer->size == expected_encoded_size);
     assert(buffer->size < MAXINT32);
 
@@ -242,7 +276,7 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, IMAGE_SE
     return result;
 }
 
-void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer code, Buffer names) {
+void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer code, Buffer names, UserDataEntry* dataEntries, u64 dataEntryCount, Buffer dataToPatch) {
     // Sections
     IMAGE_SECTION_HEADER sections[] = {
         {
@@ -279,7 +313,7 @@ void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer 
     s32 virtual_size_of_headers = align(file_size_of_headers, PE32_SECTION_ALIGNMENT);
     rdata_section_header->PointerToRawData = file_size_of_headers;
     rdata_section_header->VirtualAddress = virtual_size_of_headers;
-    ParsedDataSection rdata_section = parseDataSection(libs, libsCount, rdata_section_header);
+    ParsedDataSection rdata_section = parseDataSection(libs, libsCount, dataEntries, dataEntryCount, rdata_section_header);
 
     // prepare .text
     u32 codeSizeAligned = align(code.size, PE32_FILE_ALIGNMENT);
@@ -376,6 +410,20 @@ void write_executable(u8* filepath, Import_Library* libs, u64 libsCount, Buffer 
         addrLoc[3] = ((funcRVA - nextInstructonAddr) >> (8 * 3)) & 0xff;
     }
     
+    // patch the data reference locations
+    for(int i = 0; i < dataToPatch.size/sizeof(AddrToPatch); ++i) {
+        AddrToPatch* castData = (AddrToPatch*)dataToPatch.mem;
+        u64 offset = castData[i].offset;
+        u8* name = castData[i].name;
+        u64 nameLen = castData[i].len;
+        
+        u8* addrLoc = &beginnigOfCode[offset];
+        u32 nextInstructonAddr = (begingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+        u32 dataRVA = genDataRVA(dataEntries, dataEntryCount, name, nameLen);
+
+        *(u32*)addrLoc += dataRVA - nextInstructonAddr;
+    }
+
     // patch entry point
     optional_header->AddressOfEntryPoint = text_section_header->VirtualAddress;
 

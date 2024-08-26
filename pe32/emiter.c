@@ -59,7 +59,8 @@ typedef enum Scale {
 
 typedef struct EmiterContext {
     Buffer code;
-    Buffer names;
+    Buffer symbolsToPatch; // AddrToPatch
+    Buffer dataToPatch;    // AddrToPatch
 
     u32 freeRegisterMask;
 } EmiterContext;
@@ -552,27 +553,113 @@ void FreeRegister(EmiterContext* ctx, Register registerToFree) {
 
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
-#define gen_callExtern(_ctx_, _name_) gen_callExtern_(_ctx_, _name_, strlen(_name_))
-void gen_callExtern_(EmiterContext* ctx, u8* name, u64 size) {
+#define gen_callExtern(_ctx_, _name_) _gen_callExtern(_ctx_, _name_, strlen(_name_))
+void _gen_callExtern(EmiterContext* ctx, u8* name, u64 size) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
-    AddrToPatch* foo = buffer_allocate(&ctx->names, AddrToPatch);
-    foo->name = name;
-    foo->len = size;
-    foo->offset = offset;
+    *buffer_allocate(&ctx->symbolsToPatch, AddrToPatch) = (AddrToPatch){
+        .name = name,
+        .len = size,
+        .offset = offset,
+    };
+}
+
+// lea rax, [rip + 0xdeadbeef + sizeof(u64)] ; load data
+// mov rax, [rip + 0xdeadbeef]               ; load size
+#define gen_DataInReg(_ctx_, _reg_, _name_) _gen_DataInReg(_ctx_, _reg_, _name_, strlen(_name_))
+void _gen_DataInReg(EmiterContext* ctx, Register reg, u8* name, u64 nameLen) {
+    // NOTE: the rip address get added to the patched address,
+    // so adding the size of u64 offsets the address by 8,
+    // meaning instead of reading from the data begining, where the size is stored,
+    // instead it read the data stored in the entry
+    genInstruction(ctx, INST(lea, OP_REG(reg), OP_RIP(sizeof(u64))));
+    int offset = ctx->code.size - 4;
+    *buffer_allocate(&ctx->dataToPatch, AddrToPatch) = (AddrToPatch){
+        .name = name,
+        .len = nameLen,
+        .offset = offset,
+    };
+}
+
+#define gen_SizeInReg(_ctx_, _reg_, _name_) _gen_SizeInReg(_ctx_, _reg_, _name_, strlen(_name_))
+void _gen_SizeInReg(EmiterContext* ctx, Register reg, u8* name, u64 nameLen) {
+    // NOTE: the rip address get added to the patched address,
+    // the address gets added to 0 so in this case we read the size field of the entry
+    genInstruction(ctx, INST(mov, OP_REG(reg), OP_RIP(0)));
+    int offset = ctx->code.size - 4;
+    *buffer_allocate(&ctx->dataToPatch, AddrToPatch) = (AddrToPatch){
+        .name = name,
+        .len = nameLen,
+        .offset = offset,
+    };
 }
 
 #define TEST_IN_MEM_EXECUTION 0
 #define TEST_EXE_GENERATION 0
 #define TEST_INSTRUCION_ENCODING 0
+#define TEST_DATA 1
 
 #include "tests.c"
 
 int main(int argc, char** argv) {
     EmiterContext ctx = {0};
     ctx.code = make_buffer(0x200, PAGE_READWRITE);
-    ctx.names = make_buffer(0x200, PAGE_READWRITE);
+    ctx.symbolsToPatch = make_buffer(0x200, PAGE_READWRITE);
+    ctx.dataToPatch = make_buffer(0x200, PAGE_READWRITE);
+
+    #if TEST_DATA
+    // Data section
+    // NOTE: the data is layed out the following way:
+    // the size of data (8 bytes), followed by the data (byte count given by the size field)
+    // the size does not include its own 8 bytes, meaning the total size of the data entry is size + 8 number of bytes
+    u8* foo_string = "Hello World\n";
+    u64 dataLen = strlen(foo_string);
+    UserDataEntry dataSection[] = {
+        {.name = "msg", .data = foo_string, .dataLen = dataLen, .dataRVA = INVALID_ADDRESS},
+    };
+    
+    // Import section
+    Import_Name_To_Rva kernel32_functions[] = {
+        {.name = "ExitProcess", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+        {.name = "GetStdHandle", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+        {.name = "WriteFile", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+    };
+    Import_Library import_libraries[] = {
+        {
+            .dll = {.name = "kernel32.dll", .name_rva = INVALID_ADDRESS, .iat_rva = INVALID_ADDRESS},
+            .image_thunk_rva = INVALID_ADDRESS,
+            .functions = kernel32_functions,
+            .function_count = ARRAY_SIZE(kernel32_functions),
+        },
+    };
+
+    // Function prolog
+    genInstruction(&ctx, INST(push, OP_REG(RBP)));
+    genInstruction(&ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
+
+    // HANDLE stack[0] = GetStdHandle(STD_OUTPUT_HANDLE)
+    genInstruction(&ctx, INST(mov, OP_REG(RCX), OP_IMM32(STD_OUTPUT_HANDLE)));
+    gen_callExtern(&ctx, "GetStdHandle");
+    genInstruction(&ctx, INST(push, OP_REG(RAX))); // store GetStdHandle return handle
+
+    // WriteFile(stack[0], [msg], msg.len, 0, 0)
+    genInstruction(&ctx, INST(pop, OP_REG(RCX))); // pop to rcx, first arg
+    gen_DataInReg(&ctx, RDX, "msg"); // load the address into rdx, second arg
+    gen_SizeInReg(&ctx, R8, "msg"); // load the value of the len into r8, third arg
+    genInstruction(&ctx, INST(mov, OP_REG(R9), OP_IMM8(0))); // NULL for bytesWrittenPtr, fourth arg
+    genInstruction(&ctx, INST(push, OP_IMM8(0))); // NULL, fifth arg
+    gen_callExtern(&ctx, "WriteFile");
+
+    // Function epilog
+    genInstruction(&ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
+    genInstruction(&ctx, INST(pop, OP_REG(RBP)));
+    // ExitProcess(0);
+    genInstruction(&ctx, INST(mov, OP_REG(RCX), OP_IMM8(0)));
+    gen_callExtern(&ctx, "ExitProcess");
+
+    write_executable("smallExe.exe", import_libraries, ARRAY_SIZE(import_libraries), ctx.code, ctx.symbolsToPatch, dataSection, ARRAY_SIZE(dataSection), ctx.dataToPatch);
+    #endif // TEST_DATA
 
     #if TEST_IN_MEM_EXECUTION
     ctx.code = make_buffer(MiB(1), PAGE_EXECUTE_READWRITE);
