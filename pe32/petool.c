@@ -1,8 +1,12 @@
+#include <windows.h>
+#include <winnt.h>
+
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 typedef struct Args {
     int read;
@@ -20,6 +24,7 @@ typedef struct Args {
     char* dumpfilepath;
 
     int write;
+    char* outfileName;
 } Args;
 
 char* EntireFileRead(const char* filePath, int* len){
@@ -46,23 +51,25 @@ char* EntireFileRead(const char* filePath, int* len){
 #include "peWriters.c"
 
 void usage(int argc, char** argv) {
-    printf("PE Tool v0.1\n");
-    printf("usage: %s <read|write> [options] <filepath>\n", argv[0]);
-    printf("    read mode: read the PE file contents and print the info to the screen\n");
-    printf("        read options:\n");
-    printf("        -o <filepath>          Output the read .text segment to the specified file\n");
-    printf("        -pe-header             Print out the PE header\n");
-    printf("        -opt-std-header        Print out the optional standard header\n");
-    printf("        -opt-spec-header       Print out the optional windowns specific header\n");
-    printf("        -opt-data-header       Print out the optional data directory header\n");
-    printf("        -section-table         Print out the section table\n");
-    printf("        -symbol-table          Print out the symbol table\n");
-    printf("        -string-table <limit>  Print out the strings stored in the string table of the file\n");
-    printf("                               limit is the number of strings you want to print, set to -1 for no limit\n");
-    printf("        -import-dirs           Print out the import directory table\n");
-    printf("        -import-names          Print out the symbols to import\n");
-    printf("        -all                   Print all the headers and tables\n");
-    printf("    write mode: use bytecode data to create a PE32 file\n");
+    fprintf(stderr, "PE Tool v0.1\n");
+    fprintf(stderr, "usage: %s <mode> [options] <filepath>\n", argv[0]);
+    fprintf(stderr, "    read mode: read the PE file contents and print the info to the screen\n");
+    fprintf(stderr, "        read options:\n");
+    fprintf(stderr, "        -o <filepath>          Output the read .text segment to the specified file\n");
+    fprintf(stderr, "        -pe-header             Print out the PE header\n");
+    fprintf(stderr, "        -opt-std-header        Print out the optional standard header\n");
+    fprintf(stderr, "        -opt-spec-header       Print out the optional windowns specific header\n");
+    fprintf(stderr, "        -opt-data-header       Print out the optional data directory header\n");
+    fprintf(stderr, "        -section-table         Print out the section table\n");
+    fprintf(stderr, "        -symbol-table          Print out the symbol table\n");
+    fprintf(stderr, "        -string-table <limit>  Print out the strings stored in the string table of the file\n");
+    fprintf(stderr, "                               limit is the number of strings you want to print, set to -1 for no limit\n");
+    fprintf(stderr, "        -import-dirs           Print out the import directory table\n");
+    fprintf(stderr, "        -import-names          Print out the symbols to import\n");
+    fprintf(stderr, "        -all                   Print all the headers and tables\n");
+    fprintf(stderr, "    write mode: use bytecode data to create a PE32 file\n");
+    fprintf(stderr, "        write options\n");
+    fprintf(stderr, "         -o <filepath>         Output the PE32 file to the specified file\n");
 }
 
 int main(int argc, char** argv) {
@@ -114,7 +121,7 @@ int main(int argc, char** argv) {
                 i++;
             } else if(strcmp(argv[i], "-all") == 0) {
                 args.debugPrintStringTable = 1;
-                args.stringTableLimit = 1;
+                args.stringTableLimit = -1;
                 args.debugPrintPeHeader = 1;
                 args.debugPrintOptStandardHeader = 1;
                 args.debugPrintOptSpecHeader = 1;
@@ -139,14 +146,38 @@ int main(int argc, char** argv) {
             }
         } else if(strcmp(argv[i], "write") == 0) {
             args.write = 1;
+            i++;
+
+            if(strcmp(argv[i], "-o") == 0){
+                i++;
+                
+                args.outfileName = argv[i];
+                i++;
+            }else if(argv[i][0] == '-'){
+                fprintf(stderr, "[ERROR] Unkown argument: %s\n", argv[i]);
+                return 1;
+            }
+
+            if(i == argc - 1){
+                args.filename = argv[i];
+                break;
+            } else {
+                usage(argc, argv);
+                fprintf(stderr, "[ERROR] Could not parse options\n");
+                return 1;
+            }
         } else {
             usage(argc, argv);
-            fprintf(stderr, "[ERROR] Unkown argument: %s\n", argv[i]);
+            fprintf(stderr, "[ERROR] Unkown mode: \"%s\", must be read or write\n", argv[i]);
             return 1;
         }
     }
 
-    ReadResult fileData = readFile(args);
+    if(args.read){
+        ReadResult fileData = readFile(args);
+    }else if(args.write){
+        
+    }
 
     printf("Number of bytes read: %i/%i (%.2f%%)\n", bytesRead, fileLen, ((float)bytesRead / (float)fileLen) * 100);
     return 0;

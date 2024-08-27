@@ -1,4 +1,3 @@
-#include "sectionCharacteristics.h"
 #include "common.h"
 
 // 2 + 2 + 4 + 4 + 4 + 2 + 2
