@@ -475,8 +475,11 @@ int main(void) {
         },
     };
 
+    UserDataEntry dataSection[] = {0};
+
     Buffer code = make_buffer(1024, PAGE_READWRITE);
     Buffer names = make_buffer(1024, PAGE_READWRITE);
+    Buffer data = {0};
 
     buffer_append_s8(&code, 0x48); // sub rsp 28
     buffer_append_s8(&code, 0x83);
@@ -499,7 +502,7 @@ int main(void) {
 
     buffer_append_s8(&code, 0xCC); // int3
 
-    write_executable("testExecutable.exe", import_libraries, ARRAY_SIZE(import_libraries), code, names);
+    write_executable("testExecutable.exe", import_libraries, ARRAY_SIZE(import_libraries), code, names, dataSection, ARRAY_SIZE(dataSection), data);
     return 0;
 }
 #endif // LIB_ONLY
