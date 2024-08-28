@@ -225,7 +225,7 @@ typedef struct TokenizeResult {
 
 TokenizeResult tokenize(Arena* mem, u8* str, u64 strLen) {
     TokenizeResult result = {0};
-    result.tokens = arena_alloc(mem, sizeof(Token) * 0x100);
+    result.tokens = arena_alloc(mem, sizeof(Token) * 0x200);
     
     for(u64 i = 0; i < strLen; ++i) {
         u8 c = str[i];
@@ -244,7 +244,7 @@ TokenizeResult tokenize(Arena* mem, u8* str, u64 strLen) {
         } else if(isNum(c)) {
             u64 startIndex = i;
             while(isNum(c) && i + 1 < strLen) c = str[++i];
-            if(i + 1 < strLen) --i;
+            if(!isNum(c)) --i;
             u64 endIndex = i;
             u64 len = (endIndex - startIndex) + 1;
             result.tokens[result.count++] = (Token){.type = TokenType_NUMBER, .value = (String){.str = &str[startIndex], .length = len}};
@@ -259,7 +259,17 @@ TokenizeResult tokenize(Arena* mem, u8* str, u64 strLen) {
     return result;
 }
 
+void tokensEncloseInParenthesis(TokenizeResult* tokens) {
+    for(s64 i = tokens->count; i >= 0; i--) {
+        tokens->tokens[i + 1] = tokens->tokens[i];
+    }
+    tokens->count += 2;
+    tokens->tokens[0] = (Token){.type = TokenType_OPEN_PAREN};
+    tokens->tokens[tokens->count - 1] = (Token){.type = TokenType_CLOSE_PAREN};
+}
+
 Expr* parseDecreasingPresedence(ParseContext* ctx, s64 min_prec);
+Expr* parseExpression(ParseContext* ctx);
 
 Operand toOperator(Token token) {
     return (Operand)token.type;
@@ -274,30 +284,33 @@ Expr* makeBinary(Arena* mem, Expr* left, Operand op, Expr* right) {
     return node;
 }
 
-Expr* makeNumber(Arena* mem, Token token) {
-    Expr* node = arena_alloc(mem, sizeof(Expr));
+Expr* makeNumber(ParseContext* ctx, Token token) {
+    parseNext(ctx);
+    Expr* node = arena_alloc(&ctx->mem, sizeof(Expr));
     node->type = ExprType_Number;
     node->primary = (Primary){.token = token};
     return node;
 }
 
-Expr* makeVariable(Arena* mem, Token token) {
-    Expr* node = arena_alloc(mem, sizeof(Expr));
+Expr* makeVariable(ParseContext* ctx, Token token) {
+    parseNext(ctx);
+    Expr* node = arena_alloc(&ctx->mem, sizeof(Expr));
     node->type = ExprType_Variable;
     node->primary = (Primary){.token = token};
     return node;
 }
 
 Expr* parseLeaf(ParseContext* ctx) {
-    Token next = parseNext(ctx);
+    Token next = parsePeek(ctx);
     
     // if is_string_literal(next) return make_string(next)
-    if(next.type == TokenType_NUMBER)          return makeNumber(&ctx->mem, next);
-    if(next.type == TokenType_IDENTIFIER)      return makeVariable(&ctx->mem, next);
-    // if is_open_paren(next)     return parse_expression(0) // NOTE: this is the final parse_expression func
+    if(next.type == TokenType_NUMBER)          return makeNumber(ctx, next);
+    if(next.type == TokenType_IDENTIFIER)      return makeVariable(ctx, next);
+    if(next.type == TokenType_OPEN_PAREN)      return parseExpression(ctx);
     // if is_function(next)       return make_function()
 
     printf("[ERROR] Unhandled input\n");
+    exit(EXIT_FAILURE);
 }
 
 Expr* parseIncreasingPresedence(ParseContext* ctx, Expr* left, s64 min_prec) {
@@ -326,28 +339,60 @@ Expr* parseDecreasingPresedence(ParseContext* ctx, s64 min_prec) {
 }
 
 Expr* parseExpression(ParseContext* ctx) {
-    return parseDecreasingPresedence(ctx, 0);
+    Token next = parsePeek(ctx);
+    if(next.type == TokenType_OPEN_PAREN) {
+        parseNext(ctx);
+    }
+    Expr* result = parseDecreasingPresedence(ctx, 0);
+    next = parsePeek(ctx);
+    if(next.type == TokenType_CLOSE_PAREN) {
+        parseNext(ctx);
+    }
+    return result;
 }
 
+#include "printTree.c"
+
 int main(void) {
-    u8* input = "1 - 1 / 2";
-    printf("parsing: %s\n", input);
-    u64 inputLen = strlen(input);
-    Arena mem = {0};
-    TokenizeResult tokens = tokenize(&mem, input, inputLen);
-
-    for(int i = 0; i < tokens.count; i++) {
-        printf("%s\n", TokenTypeStr[tokens.tokens[i].type]);
-    }
-
-    ParseContext ctx = {
-        .tokens = tokens.tokens,
-        .tokensCount = tokens.count,
+    u8* tests[] = {
+        "(8 + 4) * 2 - 6",
+        "12 / (3 + 1) + 5",
+        "(15 - 3) * (2 + 1)",
+        "20 - (4 * 3) + 6 / 2",
+        "(10 + 2) / 2 + (5 * 3)",
+        "18 - (6 / 2) + (4 * 2)",
+        "(7 + 5) * 2 - (9 / 3)",
+        "30 / (5 + 5) + (6 * 2)",
+        "(9 - 3) * (4 + 2) - 5",
+        "25 - (10 / 2) + (3 * 4)",
+        "1 / (1 + 2) + 3",
     };
-    // Expr* result = parseExpr(&ctx);
-    Expr* result = parseExpression(&ctx);
+    for(int i = 0; i < ARRAY_SIZE(tests); i++) {
+        u8* input = tests[i];
+        printf("parsing: %s\n", input);
+        u64 inputLen = strlen(input);
+        
+        Arena mem = {0};
+        TokenizeResult tokens = tokenize(&mem, input, inputLen);
+        tokensEncloseInParenthesis(&tokens);
 
-    // printExpr(result);
-    printTree(result, 0);
+        // for(int i = 0; i < tokens.count; i++) {
+        //     printf("%s\n", TokenTypeStr[tokens.tokens[i].type]);
+        // }
+
+        ParseContext ctx = {
+            .tokens = tokens.tokens,
+            .tokensCount = tokens.count,
+        };
+        // Expr* result = parseExpr(&ctx);
+        Expr* result = parseExpression(&ctx);
+
+        // printExpr(result);
+        // printTree(result, 0);
+        bst_print_tree(result);
+
+        arena_free(&mem);
+        arena_free(&ctx.mem);
+    }
     return 0;
 }
