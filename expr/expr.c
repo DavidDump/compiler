@@ -259,15 +259,6 @@ TokenizeResult tokenize(Arena* mem, u8* str, u64 strLen) {
     return result;
 }
 
-void tokensEncloseInParenthesis(TokenizeResult* tokens) {
-    for(s64 i = tokens->count; i >= 0; i--) {
-        tokens->tokens[i + 1] = tokens->tokens[i];
-    }
-    tokens->count += 2;
-    tokens->tokens[0] = (Token){.type = TokenType_OPEN_PAREN};
-    tokens->tokens[tokens->count - 1] = (Token){.type = TokenType_CLOSE_PAREN};
-}
-
 Expr* parseDecreasingPresedence(ParseContext* ctx, s64 min_prec);
 Expr* parseExpression(ParseContext* ctx);
 
@@ -285,7 +276,6 @@ Expr* makeBinary(Arena* mem, Expr* left, Operand op, Expr* right) {
 }
 
 Expr* makeNumber(ParseContext* ctx, Token token) {
-    parseNext(ctx);
     Expr* node = arena_alloc(&ctx->mem, sizeof(Expr));
     node->type = ExprType_Number;
     node->primary = (Primary){.token = token};
@@ -293,7 +283,6 @@ Expr* makeNumber(ParseContext* ctx, Token token) {
 }
 
 Expr* makeVariable(ParseContext* ctx, Token token) {
-    parseNext(ctx);
     Expr* node = arena_alloc(&ctx->mem, sizeof(Expr));
     node->type = ExprType_Variable;
     node->primary = (Primary){.token = token};
@@ -301,7 +290,7 @@ Expr* makeVariable(ParseContext* ctx, Token token) {
 }
 
 Expr* parseLeaf(ParseContext* ctx) {
-    Token next = parsePeek(ctx);
+    Token next = parseNext(ctx);
     
     // if is_string_literal(next) return make_string(next)
     if(next.type == TokenType_NUMBER)          return makeNumber(ctx, next);
@@ -339,12 +328,8 @@ Expr* parseDecreasingPresedence(ParseContext* ctx, s64 min_prec) {
 }
 
 Expr* parseExpression(ParseContext* ctx) {
-    Token next = parsePeek(ctx);
-    if(next.type == TokenType_OPEN_PAREN) {
-        parseNext(ctx);
-    }
     Expr* result = parseDecreasingPresedence(ctx, 0);
-    next = parsePeek(ctx);
+    Token next = parsePeek(ctx);
     if(next.type == TokenType_CLOSE_PAREN) {
         parseNext(ctx);
     }
@@ -374,7 +359,6 @@ int main(void) {
         
         Arena mem = {0};
         TokenizeResult tokens = tokenize(&mem, input, inputLen);
-        tokensEncloseInParenthesis(&tokens);
 
         // for(int i = 0; i < tokens.count; i++) {
         //     printf("%s\n", TokenTypeStr[tokens.tokens[i].type]);
