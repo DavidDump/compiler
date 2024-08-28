@@ -147,69 +147,6 @@ s64 getPresedence(Token token) {
     if(token.type == TokenType_MUL || token.type == TokenType_DIV) return 10;
 }
 
-Expr* parsePrimary(ParseContext* ctx) {
-    Expr* result = arena_alloc(&ctx->mem, sizeof(Expr));
-    
-    Token token = parsePeek(ctx);
-    if(token.type == TokenType_NUMBER) {
-        parseNext(ctx);
-        result->type = ExprType_Number;
-        result->primary = (Primary){.token = token};
-    } else {
-        result->type = ExprType_NONE;
-    }
-
-    return result;
-}
-
-Expr* parseExpr_rec(ParseContext* ctx, Expr* lhs, s64 presedence) {
-    Token token = parsePeek(ctx);
-    while(isOperator(token)) {
-        s64 tokenPresedence = getPresedence(token);
-        if(tokenPresedence >= presedence) {
-            Token op = token;
-            parseNext(ctx);
-            Expr* rhs = parsePrimary(ctx);
-            if(rhs->type == ExprType_NONE) {
-                printf("[ERROR] expresion error at: %i \"%.*s\"\n", ctx->tokensIndex, ctx->tokens[ctx->tokensIndex].value.length, ctx->tokens[ctx->tokensIndex].value.str);
-                exit(EXIT_FAILURE);
-            }
-            token = parsePeek(ctx);
-            while(isOperator(token)) {
-                s64 newPresedence = getPresedence(token);
-                if(newPresedence >= tokenPresedence) {
-                    rhs = parseExpr_rec(ctx, lhs, tokenPresedence + (newPresedence > tokenPresedence ? 1 : 0));
-                    if(rhs->type == ExprType_NONE) {
-                        printf("[ERROR] expresion error at: %i \"%.*s\"\n", ctx->tokensIndex, ctx->tokens[ctx->tokensIndex].value.length, ctx->tokens[ctx->tokensIndex].value.str);
-                        exit(EXIT_FAILURE);
-                    }
-                    token = parsePeek(ctx);
-                } else {
-                    break;
-                }
-            }
-            Expr* node = arena_alloc(&ctx->mem, sizeof(Expr));
-            node->type = ExprType_Expr;
-            node->expr.lhs = lhs;
-            node->expr.rhs = rhs;
-            node->expr.op = op.type;
-            lhs = node;
-        } else {
-            break;
-        }
-    }
-    return lhs;
-}
-
-Expr* parseExpr(ParseContext* ctx) {
-    Expr* lhs = parsePrimary(ctx);
-    if(lhs->type == ExprType_NONE) {
-        printf("[ERROR] expresion error at: %i \"%.*s\"\n", ctx->tokensIndex, ctx->tokens[ctx->tokensIndex].value.length, ctx->tokens[ctx->tokensIndex].value.str);
-        exit(EXIT_FAILURE);
-    }
-    return parseExpr_rec(ctx, lhs, 0);
-}
-
 bool isNum(u8 c) {
     return ('0' <= c && c <= '9');
 }
@@ -360,15 +297,11 @@ int main(void) {
         Arena mem = {0};
         TokenizeResult tokens = tokenize(&mem, input, inputLen);
 
-        // for(int i = 0; i < tokens.count; i++) {
-        //     printf("%s\n", TokenTypeStr[tokens.tokens[i].type]);
-        // }
-
         ParseContext ctx = {
             .tokens = tokens.tokens,
             .tokensCount = tokens.count,
         };
-        // Expr* result = parseExpr(&ctx);
+
         Expr* result = parseExpression(&ctx);
 
         // printExpr(result);
