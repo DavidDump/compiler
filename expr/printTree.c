@@ -20,7 +20,12 @@ void bst_print_node(Expr* node) {
     if(node->type == ExprType_Number) {
         printf("[%.*s]", node->primary.token.value.length, node->primary.token.value.str);
     } else if(node->type == ExprType_Variable) {
-        printf("[%.*s]", node->primary.token.value.length, node->primary.token.value.str);
+        printf("[%.*s]", node->variable.token.value.length, node->variable.token.value.str);
+    } else if(node->type == ExprType_Function) {
+        printf("[%.*s]", node->function.identifier.value.length, node->function.identifier.value.str);
+    } else {
+        printf("[ERROR] Cannot print unknown node type: %s\n", node->type);
+        exit(EXIT_FAILURE);
     }
 }
 

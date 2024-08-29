@@ -1,0 +1,88 @@
+parse_leaf() {
+    next = next_token()
+    
+    if is_string_literal(next) return make_string(next)
+    if is_number(next)         return make_number(next)
+    if is_identifier(next)     return make_variable(next)
+    if is_open_paren(next)     return parse_expression(0) // NOTE: this is the final parse_expression func
+    if is_function(next)       return make_function()
+
+    report_error("Unhandled input")
+}
+
+// right leaning version
+parse_single_binary() {
+    left = parse_leaf()
+    operator_token = next_token()
+    right = parse_leaf()
+
+    return make_binary(left, to_operator(operator_token), right)
+}
+
+// right leaning version
+parse_expression() {
+    left = parse_leaf()
+    next = next_token()
+    if is_binary_operator(next) {
+        right = parse_expression()
+        return make_binary(left, to_operator(next), right)
+    } else {
+        return left
+    }
+}
+
+// left leaning version
+parse_single_binary(left) {
+    next = next_token()
+    
+    if is_binary_operator(next) {
+        right = parse_leaf()
+        return make_binary(left, to_operator(next), right)
+    } else {
+        return left
+    }
+}
+
+// left leaning version
+parse_expression() {
+    left = parse_leaf()
+
+    while true {
+        next_tree = parse_single_binary(left)
+
+        // if it was only a leaf, no more operators, were done
+        if next_tree == left return left
+    }
+}
+
+// right leaning tree when presedence is increasing
+// left leaning tree when presedence is decreasing
+
+parse_increasing_presedence(left, min_prec) {
+    next = next_token()
+    if !is_binary_operator(next) return left
+    // test if parenthesis here if true call parse_expression(0)
+
+    next_prec = get_presedence(next)
+    if next_prec <= min_prec {
+        return left
+    } else {
+        right = parse_expression(next_prec)
+        return make_binary(left, to_operator(next), right)
+    }
+}
+
+parse_expression(min_prec) {
+    left = parse_leaf()
+    
+    while true {
+        node = parse_increasing_presedence(left, min_prec)
+        if node == left break
+        left = node
+    }
+    return left
+}
+
+// NOTE: right associative operators
+// left associative operators - left leaning tree
+// right associative operators - right leaning tree
