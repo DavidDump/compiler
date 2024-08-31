@@ -22,7 +22,15 @@ void bst_print_node(Expr* node) {
     } else if(node->type == ExprType_Variable) {
         printf("[%.*s]", node->variable.token.value.length, node->variable.token.value.str);
     } else if(node->type == ExprType_Function) {
-        printf("[%.*s]", node->function.identifier.value.length, node->function.identifier.value.str);
+        printf("[");
+        printf("%.*s ", node->function.identifier.value.length, node->function.identifier.value.str);
+        for(u64 i = 0; i < node->function.argCount; ++i) {
+            Expr* arg = node->function.args[i];
+            printf("arg%i: ", i + 1);
+            printExpr(arg);
+            if(i + 1 < node->function.argCount) printf(", ");
+        }
+        printf("]");
     } else {
         printf("[ERROR] Cannot print unknown node type: %s\n", node->type);
         exit(EXIT_FAILURE);

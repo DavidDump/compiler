@@ -11,15 +11,6 @@ typedef struct String {
     u64 length;
 } String;
 
-typedef enum Operand {
-    Operand_NONE,
-    Operand_RESERVED,
-    Operand_ADD,
-    Operand_SUB,
-    Operand_MUL,
-    Operand_DIV,
-} Operand;
-
 typedef enum TokenType {
     TokenType_NONE,
     TokenType_NUMBER,
@@ -31,6 +22,13 @@ typedef enum TokenType {
     TokenType_CLOSE_PAREN,
     TokenType_IDENTIFIER,
     TokenType_COMMA,
+    TokenType_LESS,
+    TokenType_LESS_EQ,
+    TokenType_GREATER,
+    TokenType_GREATER_EQ,
+    TokenType_EQUALS,
+    TokenType_NOT_EQUALS,
+    TokenType_ASSIGN,
 } TokenType;
 
 u8* TokenTypeStr[] = {
@@ -44,6 +42,13 @@ u8* TokenTypeStr[] = {
     [TokenType_CLOSE_PAREN] = "CLOSE_PAREN",
     [TokenType_IDENTIFIER] = "IDENTIFIER",
     [TokenType_COMMA] = "COMMA",
+    [TokenType_LESS] = "LESS",
+    [TokenType_LESS_EQ] = "LESS_EQ",
+    [TokenType_GREATER] = "GREATER",
+    [TokenType_GREATER_EQ] = "GREATER_EQ",
+    [TokenType_EQUALS] = "EQUALS",
+    [TokenType_NOT_EQUALS] = "NOT_EQUALS",
+    [TokenType_ASSIGN] = "ASSIGN",
 };
 
 typedef struct Token {
@@ -78,7 +83,7 @@ typedef struct Expr {
         Primary variable;
         Function function;
         struct {
-            Operand op;
+            Token op;
             struct Expr* lhs;
             struct Expr* rhs;
         } expr;
@@ -90,22 +95,8 @@ typedef struct TokenizeResult {
     u64 count;
 } TokenizeResult;
 
-void printOp(Operand op) {
-    switch(op) {
-        case Operand_NONE: break;
-        case Operand_ADD: {
-            printf("+");
-        } break;
-        case Operand_SUB: {
-            printf("-");
-        } break;
-        case Operand_MUL: {
-            printf("*");
-        } break;
-        case Operand_DIV: {
-            printf("/");
-        } break;
-    }
+void printOp(Token op) {
+    printf("%.*s", op.value.length, op.value.str);
 }
 
 void printExpr(Expr* value) {
@@ -160,19 +151,37 @@ Token parsePeek(ParseContext* ctx) {
     return ctx->tokens[ctx->tokensIndex];
 }
 
+typedef struct Operator {
+    TokenType type;
+    s64 presedence;
+} Operator;
+
+Operator operators[] = {
+    {.type = TokenType_LESS,       .presedence = 4},
+    {.type = TokenType_LESS_EQ,    .presedence = 4},
+    {.type = TokenType_GREATER,    .presedence = 4},
+    {.type = TokenType_GREATER_EQ, .presedence = 4},
+    {.type = TokenType_EQUALS,     .presedence = 4},
+    {.type = TokenType_NOT_EQUALS, .presedence = 4},
+    {.type = TokenType_ADD, .presedence = 5},
+    {.type = TokenType_ADD, .presedence = 5},
+    {.type = TokenType_SUB, .presedence = 5},
+    {.type = TokenType_MUL, .presedence = 10},
+    {.type = TokenType_DIV, .presedence = 10},
+};
+
 bool isOperator(Token token) {
-    if(
-        token.type == TokenType_ADD ||
-        token.type == TokenType_SUB ||
-        token.type == TokenType_MUL ||
-        token.type == TokenType_DIV
-    ) return TRUE;
+    for(u64 i = 0; i < ARRAY_SIZE(operators); ++i) {
+        if(token.type == operators[i].type) return TRUE;
+    }
     return FALSE;
 }
 
 s64 getPresedence(Token token) {
-    if(token.type == TokenType_ADD || token.type == TokenType_SUB) return 5;
-    if(token.type == TokenType_MUL || token.type == TokenType_DIV) return 10;
+    for(u64 i = 0; i < ARRAY_SIZE(operators); ++i) {
+        if(token.type == operators[i].type) return operators[i].presedence;
+    }
+    return 0;
 }
 
 bool isNum(u8 c) {
@@ -207,6 +216,54 @@ TokenizeResult tokenize(Arena* mem, u8* str, u64 strLen) {
             result.tokens[result.count++] = (Token){.type = TokenType_CLOSE_PAREN, .value = (String){.str = &str[i], .length = 1}};
         } else if(c == ',') {
             result.tokens[result.count++] = (Token){.type = TokenType_COMMA, .value = (String){.str = &str[i], .length = 1}};
+        } else if(c == '<') {
+            u64 startIndex = i;
+            do c = str[++i]; while(isWhitespace(c));
+            u64 endIndex = i;
+            u64 len = (endIndex - startIndex) + 1;
+
+            if(c == '=') {
+                result.tokens[result.count++] = (Token){.type = TokenType_LESS_EQ, .value = (String){.str = &str[startIndex], .length = len}};
+            } else {
+                --i;
+                result.tokens[result.count++] = (Token){.type = TokenType_LESS, .value = (String){.str = &str[startIndex], .length = 1}};
+            }
+        } else if(c == '>') {
+            u64 startIndex = i;
+            do c = str[++i]; while(isWhitespace(c));
+            u64 endIndex = i;
+            u64 len = (endIndex - startIndex) + 1;
+
+            if(c == '=') {
+                result.tokens[result.count++] = (Token){.type = TokenType_GREATER_EQ, .value = (String){.str = &str[startIndex], .length = len}};
+            } else {
+                --i;
+                result.tokens[result.count++] = (Token){.type = TokenType_GREATER, .value = (String){.str = &str[startIndex], .length = 1}};
+            }
+        } else if(c == '=') {
+            u64 startIndex = i;
+            do c = str[++i]; while(isWhitespace(c));
+            u64 endIndex = i;
+            u64 len = (endIndex - startIndex) + 1;
+
+            if(c == '=') {
+                result.tokens[result.count++] = (Token){.type = TokenType_EQUALS, .value = (String){.str = &str[startIndex], .length = len}};
+            } else {
+                --i;
+                result.tokens[result.count++] = (Token){.type = TokenType_ASSIGN, .value = (String){.str = &str[startIndex], .length = 1}};
+            }
+        } else if(c == '!') {
+            u64 startIndex = i;
+            do c = str[++i]; while(isWhitespace(c));
+            u64 endIndex = i;
+            u64 len = (endIndex - startIndex) + 1;
+
+            if(c == '=') {
+                result.tokens[result.count++] = (Token){.type = TokenType_NOT_EQUALS, .value = (String){.str = &str[startIndex], .length = len}};
+            } else {
+                printf("[ERROR] ! need to be followed by a =, found: \'%c\'\n", c);
+                exit(EXIT_FAILURE);
+            }
         } else if(isNum(c)) {
             u64 startIndex = i;
             while(isNum(c) && i + 1 < strLen) c = str[++i];
@@ -235,11 +292,7 @@ TokenizeResult tokenize(Arena* mem, u8* str, u64 strLen) {
 Expr* parseDecreasingPresedence(ParseContext* ctx, s64 min_prec);
 Expr* parseExpression(ParseContext* ctx);
 
-Operand toOperator(Token token) {
-    return (Operand)token.type;
-}
-
-Expr* makeBinary(Arena* mem, Expr* left, Operand op, Expr* right) {
+Expr* makeBinary(Arena* mem, Expr* left, Token op, Expr* right) {
     Expr* node = arena_alloc(mem, sizeof(Expr));
     node->type = ExprType_Expr;
     node->expr.lhs = left;
@@ -327,7 +380,7 @@ Expr* parseIncreasingPresedence(ParseContext* ctx, Expr* left, s64 min_prec) {
     } else {
         parseNext(ctx);
         Expr* right = parseDecreasingPresedence(ctx, next_prec);
-        return makeBinary(&ctx->mem, left, toOperator(next), right);
+        return makeBinary(&ctx->mem, left, next, right);
     }
 }
 
@@ -365,6 +418,17 @@ int main(void) {
         #else
         "asd + foo + dsa",
         "f()",
+
+        "max((8 + 4) * 2, 20) - 6",
+        "min(12 / (3 + 1), 5) + 1",
+        "(15 - 3) * (2 + 1) > 30",
+        "20 - (4 * 3) + 6 / 2 <= 10",
+        "(10 + 2) / 2 + (5 * 3) == 21",
+        "18 - (6 / 2) + (4 * 2) != 20",
+        "(7 + 5) * 2 - (9 / 3) < 20",
+        "30 / (5 + 5) + (6 * 2) >= 12",
+        "(9 - 3) * (4 + 2) - 5 == 19",
+        "25 - (10 / 2) + (3 * 4) > 30",
         #endif
     };
     for(int i = 0; i < ARRAY_SIZE(tests); i++) {
