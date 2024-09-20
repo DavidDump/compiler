@@ -454,3 +454,8 @@ int main(void) {
     }
     return 0;
 }
+
+// TODO: string literals
+// TODO: float literals
+// TODO: boolean literals
+// TODO: unary operators, ex.: minus, not
