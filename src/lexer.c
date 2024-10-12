@@ -4,18 +4,6 @@
 #include <stdio.h> // printf()
 #include <string.h> // strlen()
 
-// Tokenizer TokenizerInit(String source, String filename, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize){
-//     Tokenizer tokenizer = {
-//         .filename = filename,
-//         .source = source,
-//         .typeMappings = typeMappings,
-//         .typeMappingsSize = typeMappingsSize,
-//         .opInfo = opInfo,
-//         .opInfoSize = opInfoSize,
-//     };
-//     return tokenizer;
-// }
-
 bool isLetter(u8 c) {
     return (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'));
 }
@@ -69,31 +57,29 @@ TokenArray Tokenize(String source, String filenameCstring) {
     TokenArray result = {0};
     u64 lineNum = 1;
     u64 collumNum = 1;
-    
-    for(u64 i = 0; i < source.length; ++i) {
+    String value = {0};
+    TokenType type = 0;
+
+    for(u64 i = 0; (int)i < source.length; ++i) {
         u8 c = source.str[i];
         
         // special case: line comment
         if(c == '/') {
             u8 next = source.str[i + 1];
             if(next == '/'){
-                do c = source.str[++i]; while(c != '\n' && i < source.length);
-                if(i >= source.length) break; // in case the file is only one line
+                do c = source.str[++i]; while(c != '\n' && (int)i < source.length);
+                if((int)i >= source.length) break; // in case the file is only one line
             }
         }
 
         if(isLetter(c)) {
             // keywords and identifiers
             u64 startIndex = i;
-            do c = source.str[++i]; while(isLetter(c) || isNumber(c)); // TODO: add special characters that can be in the middle of a identifier
-            if(i >= source.length) break;
-            u64 len = i - startIndex;
+            u64 endIndex = i;
+            do c = source.str[++endIndex]; while(isLetter(c) || isNumber(c)); // TODO: add special characters that can be in the middle of a identifier
+            if((int)endIndex >= source.length) break;
+            u64 len = endIndex - startIndex;
             
-            // NOTE: when the loop ends i will point to the char after the keyword/identifier, so back up by one so when the for loop increments it it will not skip a char 
-            i--;
-
-            String value = {.str = &source.str[startIndex], .length = len};
-            TokenType type = TokenType_NONE;
             // compare keywords and types
             if(StringEqualsCstr(value, "return"))     type = TokenType_RETURN;
             else if(StringEqualsCstr(value, "if"))    type = TokenType_IF;
@@ -104,166 +90,156 @@ TokenArray Tokenize(String source, String filenameCstring) {
             else if(isType(value))                    type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
 
-            TokenArrayAddToken(&result, value, type, filenameCstring, lineNum, collumNum);
-
-            collumNum += len - 1;
+            value.str = &source.str[startIndex];
+            value.length = len;
         } else if(isNumber(c)) {
             // numbers
             u64 startIndex = i;
-            do c = source.str[++i]; while(isNumber(c));
-            if(i >= source.length) break;
-            u64 len = i - startIndex;
+            u64 endIndex = i;
+            do c = source.str[++endIndex]; while(isNumber(c));
+            if((int)endIndex >= source.length) break;
+            u64 len = endIndex - startIndex;
 
-            // NOTE: when the loop ends i will point to the char after the number, so back up by one so when the for loop increments it, it will not skip a char 
-            i--;
-
-            String str = {.str = &source.str[startIndex], .length = len};
-            TokenArrayAddToken(&result, str, TokenType_INT_LITERAL, filenameCstring, lineNum, collumNum);
-
-            collumNum += len - 1;
+            value.str = &source.str[startIndex];
+            value.length = len;
+            type = TokenType_INT_LITERAL;
         } else if(c == '<') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            if(next == '=') {
-                len = 2;
-                i++;
-                collumNum++;
-            }
-            String str = {.str = &source.str[i], .length = len};
-            TokenArrayAddToken(&result, str, TokenType_OPERATOR, filenameCstring, lineNum, collumNum);
+            if(next == '=') len = 2;
+            
+            value.str = &source.str[i];
+            value.length = len;
+            type = TokenType_OPERATOR;
         } else if(c == '>') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            if(next == '=') {
-                len = 2;
-                i++;
-                collumNum++;
-            }
-            String str = {.str = &source.str[i], .length = len};
-            TokenArrayAddToken(&result, str, TokenType_OPERATOR, filenameCstring, lineNum, collumNum);
+            if(next == '=') len = 2;
+            
+            value.str = &source.str[i];
+            value.length = len;
+            type = TokenType_OPERATOR;
         } else if(c == '=') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            TokenType type = TokenType_ASSIGNMENT;
+            type = TokenType_ASSIGNMENT;
             if(next == '=') {
                 len = 2;
                 type = TokenType_OPERATOR;
-                i++;
-                collumNum++;
             }
-            String str = {.str = &source.str[i], .length = len};
-            TokenArrayAddToken(&result, str, type, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = len;
         } else if(c == '!') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            if(next == '=') {
-                len = 2;
-                i++;
-                collumNum++;
-            }
+            if(next == '=') len = 2;
             assert(len == 2 && "! unary operator currently unsupported");
-            String str = {.str = &source.str[i], .length = len};
-            TokenArrayAddToken(&result, str, TokenType_OPERATOR, filenameCstring, lineNum, collumNum);
+            
+            value.str = &source.str[i];
+            value.length = len;
+            type = TokenType_OPERATOR;
         } else if(c == '+') {
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_OPERATOR, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_OPERATOR;
         } else if(c == '-') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            TokenType type = TokenType_OPERATOR;
+            type = TokenType_OPERATOR;
             if(next == '>') {
                 len = 2;
                 type = TokenType_RARROW;
-                i++;
-                collumNum++;
             }
-            String str = {.str = &source.str[i], .length = len};
-            TokenArrayAddToken(&result, str, type, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = len;
         } else if(c == '*') {
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_OPERATOR, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type  = TokenType_OPERATOR;
         } else if(c == '/') {
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_OPERATOR, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type  = TokenType_OPERATOR;
         } else if(c == ';') {
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_SEMICOLON, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type  = TokenType_SEMICOLON;
         } else if(c == ':') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            TokenType type = TokenType_COLON;
+            type = TokenType_COLON;
             if(next == ':') {
                 // :: operator
                 len = 2;
-                i++;
-                collumNum++;
                 type = TokenType_DOUBLECOLON;
             } else if(next == '=') {
                 // := operator
                 len = 2;
-                i++;
-                collumNum++;
                 type = TokenType_INITIALIZER;
             }
-            String str = {.str = &source.str[i], .length = len};
-            TokenArrayAddToken(&result, str, type, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = len;
         } else if(c == '(') {
             // left paren
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_LPAREN, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_LPAREN;
         } else if(c == ')') {
             // right paren
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_RPAREN, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_RPAREN;
         } else if(c == '{') {
             // open scope
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_LSCOPE, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_LSCOPE;
         } else if(c == '}') {
             // close scope
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_RSCOPE, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_RSCOPE;
         } else if(c == '[') {
             // left bracket
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_LBRACKET, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_LBRACKET;
         } else if(c == ']') {
             // right bracket
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_RBRACKET, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_RBRACKET;
         } else if(c == ',') {
             // comma
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_COMMA, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_COMMA;
         } else if(c == '.') {
             // dot, double dot, tripple dot
-            u8 next = &source.str[i + 1];
+            u8 next = source.str[i + 1];
             u64 len = 1;
-            TokenType type = TokenType_DOT;
+            type = TokenType_DOT;
             if(next == '.'){
-                next = next = &source.str[i + 2];
+                next = source.str[i + 2];
                 if(next == '.') {
                     // '...' operator
                     len = 3;
                     type = TokenType_TRIPLEDOT;
-                    i += 2;
-                    collumNum += 2;
                 } else {
                     // '..' operator
                     len = 2;
                     type = TokenType_DOUBLEDOT;
-                    i++;
-                    collumNum++;
                 }
             }
 
-            String str = {.str = &source.str[i], .length = 1};
-            TokenArrayAddToken(&result, str, TokenType_DOT, filenameCstring, lineNum, collumNum);
+            value.str = &source.str[i];
+            value.length = len;
         } else if(c == '\"') {
             // string literal
             // TODO: propper string literal parsing with escape characters
-            u8* start = &source.str[i];
-            u8* end = start + 1;
+            // TODO: old types
+            char* start = &source.str[i];
+            char* end = start + 1;
             while(*end && *end != '\"'){
                 if(*end == '\n') lineNum++;
                 end++;
@@ -271,16 +247,15 @@ TokenArray Tokenize(String source, String filenameCstring) {
             end++; // the second "
             u64 len = end - start;
 
-            String str = {.str = start, .length = len};
-            TokenArrayAddToken(&result, str, TokenType_STRING_LIT, filenameCstring, lineNum, collumNum);
-
-            collumNum += len - 1;
-            i += len - 1;
+            value.str = start;
+            value.length = len;
+            type = TokenType_STRING_LIT;
         } else if(c == '\n') {
             lineNum++;
             collumNum = 0;
+            continue;
         }
-        
+
         #ifdef COMP_DEBUG
         else if(isWhitespace(c)) {
             // NOTE: space is ignored but this case is needed here for debug print
@@ -289,6 +264,17 @@ TokenArray Tokenize(String source, String filenameCstring) {
             printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", *c, filenameCstring.length, filenameCstring.str, lineNum, collumNum);
         }
         #endif // COMP_DEBUG
+        
+        assert(value.length != 0);
+        assert(type != 0);
+        TokenArrayAddToken(&result, value, type, filenameCstring, lineNum, collumNum);
+        
+        collumNum += value.length - 1;
+        i += value.length - 1;
+        
+        value.str = 0;
+        value.length = 0;
+        type = 0;
     }
     return result;
 }
@@ -343,3 +329,5 @@ void TokensPrint(TokenArray* tokens){
     }
 }
 #endif // COMP_DEBUG
+
+// TODO: remove all the (int) casts when comparing u64s and ints once all the types are converted in the codebase

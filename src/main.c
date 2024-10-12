@@ -151,6 +151,7 @@ int main(int argc, char** argv){
     ParseContext parseContext = ParseContextInit(tokens, typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
 
     Scope* globalScope = Parse(&parseContext, &readFileMem);
+    UNUSED(globalScope);
 #ifdef COMP_DEBUG
     if(printAST) ASTPrint(globalScope);
 #endif // COMP_DEBUG
