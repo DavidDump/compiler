@@ -143,8 +143,7 @@ int main(int argc, char** argv){
 
     int filenameLen = strlen(inFilepath);
     String filename = {.str = inFilepath, .length = filenameLen};
-    Tokenizer tokenizer = TokenizerInit(sourceRaw, filename, typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
-    TokenArray tokens = Tokenize(&tokenizer);
+    TokenArray tokens = Tokenize(sourceRaw, filename);
 #ifdef COMP_DEBUG
     if(printTokens) TokensPrint(&tokens);
 #endif // COMP_DEBUG

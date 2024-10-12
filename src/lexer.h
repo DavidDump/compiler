@@ -5,17 +5,6 @@
 #include "string.h"
 #include "common.h"
 
-typedef struct Tokenizer{
-    String source;
-    String filename;
-    int index;
-
-    TypeMapping* typeMappings;
-    int typeMappingsSize;
-    OperatorInfo* opInfo;
-    int opInfoSize;
-} Tokenizer;
-
 typedef struct Location{
     String filename;
     int line;
@@ -105,17 +94,8 @@ typedef struct TokenArray{
     Arena mem;
 } TokenArray;
 
-TokenArray Tokenize(Tokenizer* tokenizer);
+TokenArray Tokenize(String source, String filenameCstring);
 void TokensPrint(TokenArray* tokens);
 void TokenPrint(Token t);
-Tokenizer TokenizerInit(String source, String filename, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize);
-
-char TokenizerPeek(Tokenizer* tokenizer, int offset);
-char* TokenizerConsume(Tokenizer* tokenizer);
-bool isLetter(char c);
-bool isNumber(char c);
-bool isWhitespace(char c);
-bool isOperator(Tokenizer* tokenizer, char* c, int* len);
-void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum);
 
 #endif // COMP_LEXER_H
