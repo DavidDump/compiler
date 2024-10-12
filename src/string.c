@@ -54,7 +54,7 @@ void StringChainPrependChain(StringChain* dest, Arena* mem, StringChain src){
     }
 }
 
-String StringFromCstr(Arena* mem, const char* cstr){
+String StringFromCstr(Arena* mem, char* cstr){
     String result = {0};
     int len = strlen(cstr);
     result.str = arena_alloc(mem, len * sizeof(char));
@@ -63,7 +63,7 @@ String StringFromCstr(Arena* mem, const char* cstr){
     return result;
 }
 
-String StringFromCstrLit(const char* cstr){
+String StringFromCstrLit(char* cstr){
     String result = {0};
     int len = strlen(cstr);
     result.str = cstr;
@@ -71,7 +71,7 @@ String StringFromCstrLit(const char* cstr){
     return result;
 }
 
-String StringFromArray(Arena* mem, const char* arr, int size){
+String StringFromArray(Arena* mem, char* arr, int size){
     String result = {0};
     result.str = arena_alloc(mem, size * sizeof(char));
     memcpy((char*)result.str, arr, size);
@@ -87,7 +87,7 @@ bool StringEquals(String str1, String str2){
     return TRUE;
 }
 
-bool StringEqualsCstr(String str1, const char* cstr){
+bool StringEqualsCstr(String str1, char* cstr){
     if(str1.length != (int)strlen(cstr)) return FALSE;
     for(int i = 0; i < str1.length; i++){
         if(str1.str[i] != cstr[i]) return FALSE;
@@ -95,7 +95,7 @@ bool StringEqualsCstr(String str1, const char* cstr){
     return TRUE;
 }
 
-bool StringContains(String str1, const char* cstr){
+bool StringContains(String str1, char* cstr){
     if(str1.length > (int)strlen(cstr)) return FALSE;
     for(int i = 0; i < str1.length; i++){
         if(str1.str[i] != cstr[i]) return FALSE;
