@@ -43,9 +43,9 @@ GenContext GenContextInit(TypeMapping* typeMappings, int typeMappingsSize, Opera
 void appendIdLoc(IdentifierLocations* idLoc, String key, int value);
 int findIdLoc(IdentifierLocations* idLoc, String key);
 int digitsCount(int value);
-void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...);
-void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, const char* reg);
-void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, const char* reg);
+void genChainPrintf(StringChain* result, Arena* mem, char* format, ...);
+void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, char* reg);
+void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg);
 void genSaveStack(GenContext* ctx);
 void genRestoreStack(GenContext* ctx);
 StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr);

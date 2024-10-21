@@ -206,5 +206,10 @@ ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
 void parseAddArg(Args* args, ASTNode* node);
 ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 ASTNode* parseType(ParseContext* ctx, Arena* mem);
+Scope* Parse(TokenArray tokens, Arena* mem);
+
+#if COMP_DEBUG
+void ASTPrint(Scope* root);
+#endif // COMP_DEBUG
 
 #endif // COMP_PARSER_NEW_H

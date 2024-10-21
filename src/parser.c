@@ -36,8 +36,9 @@ void ASTNodePrint(ASTNode* node, int indent){
             printf("INT LIT: %.*s\n", val.length, val.str);
         } break;
         case ASTNodeType_FLOAT_LIT: {
-            String val = node->node.FLOAT_LIT.value;
-            printf("FLOAT LIT: %.*s\n", val.length, val.str);
+            String wholePart = node->node.FLOAT_LIT.wholePart;
+            String fractPart = node->node.FLOAT_LIT.fractPart;
+            printf("FLOAT LIT: %.*s.%.*s\n", wholePart.length, wholePart.str, fractPart.length, fractPart.str);
         } break;
         case ASTNodeType_STRING_LIT: {
             String val = node->node.STRING_LIT.value;
@@ -184,8 +185,8 @@ void ASTNodePrint(ASTNode* node, int indent){
                 ASTNodePrint(scope->stmts.statements[i], indent + 1);
             }
         } break;
-        case ASTNodeType_SYMBOL_RVALUE: {
-            String id = node->node.SYMBOL_RVALUE.identifier;
+        case ASTNodeType_SYMBOL: {
+            String id = node->node.SYMBOL.identifier;
             printf("RVALUE: %.*s\n", id.length, id.str);
         } break;
         case ASTNodeType_FUNCTION_CALL: {

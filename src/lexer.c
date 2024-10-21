@@ -270,7 +270,7 @@ TokenArray Tokenize(String source, String filenameCstring) {
             // NOTE: space is ignored but this case is needed here for debug print
             continue;
         } else {
-            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%i:%i\n", *c, filenameCstring.length, filenameCstring.str, lineNum, collumNum);
+            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%lli:%lli\n", c, filenameCstring.length, filenameCstring.str, lineNum, collumNum);
         }
         #endif // COMP_DEBUG
         
@@ -315,7 +315,7 @@ void TokensPrint(TokenArray* tokens){
     int locWidth = 0;
     int symbolNameWidth = 0;
     int symbolWidth = 0;
-    for(int i = 0; i < tokens->size; i++){
+    for(u64 i = 0; i < tokens->size; i++){
         Token t = tokens->tokens[i];
         #define BUFFER_SIZE 1024
         char buffer[BUFFER_SIZE] = {0};
@@ -332,7 +332,7 @@ void TokensPrint(TokenArray* tokens){
     }
 
     // print the table
-    for(int i = 0; i < tokens->size; i++){
+    for(u64 i = 0; i < tokens->size; i++){
         Token t = tokens->tokens[i];
         TokenPrintAsTable(t, locWidth, symbolNameWidth, symbolWidth);
     }

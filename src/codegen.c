@@ -44,7 +44,7 @@ int digitsCount(int value){
 }
 
 // %s in the format string means String type instead of regular cstring
-void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...){
+void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
     va_list args;
     va_start(args, format);
 
@@ -87,12 +87,12 @@ void genChainPrintf(StringChain* result, Arena* mem, const char* format, ...){
     va_end(args);
 }
 
-void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, const char* reg){
+void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, char* reg){
     ctx->stack++;
     genChainPrintf(result, &ctx->mem, "    push %s\n", (String){.str = reg, .length = strlen(reg)});
 }
 
-void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, const char* reg){
+void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg){
     if(ctx->stack - 1 < 0){
         printf("[ERROR] Stack underflow\n");
         exit(EXIT_FAILURE);
@@ -178,8 +178,8 @@ StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
 
         StringChain funcCall = gen_win_x86_64_nasm_func_call(ctx, id, args);
         StringChainAppendChain(&result, &ctx->mem, funcCall);
-    }else if(expr->type == ASTNodeType_SYMBOL_RVALUE){
-        String id = expr->node.SYMBOL_RVALUE.identifier;
+    }else if(expr->type == ASTNodeType_SYMBOL){
+        String id = expr->node.SYMBOL.identifier;
         int loc = findIdLoc(&ctx->idLoc, id);
         if(loc == -1){
             genChainPrintf(&result, &ctx->mem, "    mov rax, [%s]\n", id);
@@ -535,7 +535,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             case ASTNodeType_FLOAT_LIT:
             case ASTNodeType_STRING_LIT:
             case ASTNodeType_BOOL_LIT:
-            case ASTNodeType_SYMBOL_RVALUE:
+            case ASTNodeType_SYMBOL:
             case ASTNodeType_TYPE:
                 printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);
                 break;
