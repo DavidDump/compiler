@@ -34,5 +34,7 @@ bool StringEquals(String str1, String str2);
 bool StringEqualsCstr(String str1, char* cstr);
 bool StringContains(String str1, char* cstr);
 int StringToInt(String str);
+u64 StringToU64(String value);
+u32 StringToU32(String value);
 
 #endif // COMP_STRING_H

@@ -102,3 +102,35 @@ bool StringContains(String str1, char* cstr){
     }
     return TRUE;
 }
+
+u64 StringToU64(String value) {
+    u64 result = 0;
+
+    // TODO: cast
+    for(u64 i = 0; i < (u64)value.length; ++i) {
+        u8 c = value.str[i];
+        assert('0' <= c && c <= '9' && "can only convert numbers");
+        // if(result > UINT64_MAX / 10); // overflow
+        result *= 10;
+        // if(result > UINT64_MAX - (c - '0')); // overflow
+        result += c - '0';
+    }
+
+    return result;
+}
+
+u32 StringToU32(String value) {
+    u32 result = 0;
+
+    // TODO: cast
+    for(u64 i = 0; i < (u64)value.length; ++i) {
+        u8 c = value.str[i];
+        assert('0' <= c && c <= '9' && "can only convert numbers");
+        // if(result > UINT32_MAX / 10); // overflow
+        result *= 10;
+        // if(result > UINT32_MAX - (c - '0')); // overflow
+        result += c - '0';
+    }
+
+    return result;
+}
