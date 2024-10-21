@@ -361,7 +361,7 @@ bool isFunction(ParseContext* ctx, Token next) {
     return TRUE;
 }
 
-bool isNumber(Token next) {
+bool parseIsNumber(Token next) {
     return (next.type == TokenType_INT_LITERAL || next.type == TokenType_DOT);
 }
 
@@ -369,7 +369,7 @@ ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
     
     if(isFunction(ctx, next))               return makeFunction(ctx, mem, next);
-    if(isNumber(next))                      return makeNumber(ctx, mem, next);
+    if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);
