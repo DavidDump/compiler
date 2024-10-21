@@ -148,9 +148,7 @@ int main(int argc, char** argv){
     if(printTokens) TokensPrint(&tokens);
 #endif // COMP_DEBUG
     
-    ParseContext parseContext = ParseContextInit(tokens, typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
-
-    Scope* globalScope = Parse(&parseContext, &readFileMem);
+    Scope* globalScope = Parse(tokens, &readFileMem);
     UNUSED(globalScope);
 #ifdef COMP_DEBUG
     if(printAST) ASTPrint(globalScope);

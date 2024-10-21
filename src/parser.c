@@ -16,17 +16,6 @@ void parseAddStatement(StmtList* list, ASTNode* node){
     list->statements[list->size++] = node;
 }
 
-ParseContext ParseContextInit(TokenArray tokens, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize){
-    ParseContext ctx = {
-        .tokens = tokens,
-        .typeMappings = typeMappings,
-        .typeMappingsSize = typeMappingsSize,
-        .opInfo = opInfo,
-        .opInfoSize = opInfoSize,
-    };
-    return ctx;
-}
-
 ASTNode* NodeInit(Arena* mem){
     ASTNode* node = arena_alloc(mem, sizeof(ASTNode));
     assert(node && "Failed to allocate AST node");
@@ -240,15 +229,6 @@ void ASTPrint(Scope* root){
 }
 #endif // COMP_DEBUG
 
-int OpGetPrecedence(ParseContext* ctx, String op){
-    for(int i = 0; i < ctx->opInfoSize; i++){
-        if(StringEquals(ctx->opInfo[i].symbol, op)){
-            return ctx->opInfo[i].precedence;
-        }
-    }
-    return -1;
-}
-
 // return what the parse context is pointong to then advance
 Token parseConsume(ParseContext* ctx){
 	if (ctx->index + 1 > ctx->tokens.size) return (Token){0};
@@ -336,7 +316,7 @@ ASTNode* makeVariable(Arena* mem, Token identifier) {
 }
 
 ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
-    parseNext(ctx); // opening parenthesis (
+    parseConsume(ctx); // opening parenthesis (
 
     ASTNode* result = NodeInit(mem);
     result->type = ASTNodeType_FUNCTION_CALL;
@@ -405,6 +385,34 @@ ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
 
     printf("[ERROR] Unhandled input\n");
     exit(EXIT_FAILURE);
+}
+
+// TODO: move somewhere more sane
+Operator operators[] = {
+    {.type = TokenType_LESS,       .presedence = 4},
+    {.type = TokenType_LESS_EQ,    .presedence = 4},
+    {.type = TokenType_GREATER,    .presedence = 4},
+    {.type = TokenType_GREATER_EQ, .presedence = 4},
+    {.type = TokenType_COMPARISON, .presedence = 4},
+    {.type = TokenType_NOT_EQUALS, .presedence = 4},
+    {.type = TokenType_ADD, .presedence = 5},
+    {.type = TokenType_SUB, .presedence = 5},
+    {.type = TokenType_MUL, .presedence = 10},
+    {.type = TokenType_DIV, .presedence = 10},
+};
+
+bool isOperator(Token token) {
+    for(u64 i = 0; i < ARRAY_SIZE(operators); ++i) {
+        if(token.type == operators[i].type) return TRUE;
+    }
+    return FALSE;
+}
+
+s64 getPresedence(Token token) {
+    for(u64 i = 0; i < ARRAY_SIZE(operators); ++i) {
+        if(token.type == operators[i].type) return operators[i].presedence;
+    }
+    return 0;
 }
 
 ASTNode* parseIncreasingPresedence(ParseContext* ctx, Arena* mem, ASTNode* left, s64 minPrec) {
@@ -500,45 +508,6 @@ ASTNode* typeVoid(Arena* mem){
     return node;
 }
 
-// context should point to the first token of the type
-// when this return the parse context will point to the first token after the type
-ASTNode* parseType(ParseContext* ctx, Arena* mem){
-    Token next = parseConsume(ctx);
-    if(next.type != TokenType_TYPE){
-        ERROR(next.loc, "Token should be a type");
-    }
-
-    ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_TYPE;
-    node->node.TYPE.type = mapFromSymbolToType(ctx->typeMappings, ctx->typeMappingsSize, next.value);
-    node->node.TYPE.array = FALSE;
-    node->node.TYPE.arraySize = 0;
-    node->node.TYPE.dynamic = FALSE;
-
-    next = parsePeek(ctx, 0);
-    if(next.type != TokenType_LBRACKET){
-        return node;
-    }
-    parseConsume(ctx); // '['
-
-    next = parseConsume(ctx);
-    if(next.type == TokenType_TRIPLEDOT){
-        node->node.TYPE.dynamic = TRUE;
-    }else if(next.type == TokenType_INT_LITERAL){
-        int num = StringToInt(next.value);
-        node->node.TYPE.arraySize = num;
-    }else{
-        ERROR(next.loc, "Array needs a fixed size or '...' for dynamic size");
-    }
-
-    next = parseConsume(ctx);
-    if(next.type != TokenType_RBRACKET){
-        ERROR(next.loc, "Expected closing pair to square bracket ']'");
-    }
-    node->node.TYPE.array = TRUE;
-    return node;
-}
-
 // the ctx needs to point at '('
 Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     Args result = {0};
@@ -548,7 +517,7 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
         ERROR(next.loc, "Function arguments need to be inside parenthesis");
         exit(EXIT_FAILURE);
     }
-    for(int i = ctx->index; i < ctx->tokens.size; i++){
+    for(u64 i = ctx->index; i < ctx->tokens.size; i++){
         next = parsePeek(ctx, 0);
         if(next.type == TokenType_IDENTIFIER){
             parseConsume(ctx);
@@ -598,56 +567,16 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     return result;
 }
 
-// TODO: this function can only be called after the second pass,
-//       because ASTNodeType_SYMBOL_RVALUE only get their type once functions are all parsed,
-//       so expressions can also only be typed on the second pass,
-//       the only variable that can get a type are the ones explicitly given one and not inferred
-ASTNode* parseGetTypeOfExpression(ParseContext* ctx, Arena* mem, ASTNode* expr){
-    ASTNode* result = NodeInit(mem);
-    result->type = ASTNodeType_TYPE;
-    result->node.TYPE.array = FALSE;
-    result->node.TYPE.arraySize = 0;
-    result->node.TYPE.dynamic = FALSE;
-    
-    if(expr->type == ASTNodeType_INT_LIT){
-        result->node.TYPE.type = TYPE_S64;
-        // TODO: change the type that gets inferred to 64/32bit based on compilation target
-    }else if(expr->type == ASTNodeType_FLOAT_LIT){
-        result->node.TYPE.type = TYPE_F64;
-        // TODO: change the type that gets inferred to 64/32bit based on compilation target
-    }else if(expr->type == ASTNodeType_STRING_LIT){
-        result->node.TYPE.type = TYPE_STRING;
-    }else if(expr->type == ASTNodeType_BOOL_LIT){
-        result->node.TYPE.type = TYPE_BOOL;
-    }else if(expr->type == ASTNodeType_EXPRESION){
-        OperatorType opBehaviour = getOperatorBehaviourType(ctx->opInfo, ctx->opInfoSize, expr->node.EXPRESION.operator);
-        switch(opBehaviour){
-            case OP_TYPE_NONE: break;
-            case OP_TYPE_COUNT: break;
-            
-            case OP_TYPE_ARITHMETIC: {
-                // can either be int or float
-                // TODO: this is broken here
-                result->node.TYPE.type = TYPE_S64;
-            } break;
-            case OP_TYPE_LOGICAL: {
-                result->node.TYPE.type = TYPE_BOOL;
-            } break;
-        }
-    }else if(expr->type == ASTNodeType_SYMBOL){
-        ASTNode* type = expr->node.SYMBOL.type;
-        result->node.TYPE.type = type->node.TYPE.type;
-        // NOTE: technically the `type` var could just be returned,
-        //       but every other branch of this function needs to allocate the node
-        //       so for consistency sake we are copying the value here
-    }else{
-        UNIMPLEMENTED("unreachable");
-        return NULL;
-    }
-    return result;
+ASTNode* parseType(ParseContext* ctx, Arena* mem) {
+    UNUSED(ctx);
+    UNUSED(mem);
+    UNIMPLEMENTED("parseType in not implemented yet");
 }
 
-Scope* Parse(ParseContext* ctx, Arena* mem){
+Scope* Parse(TokenArray tokens, Arena* mem) {
+    ParseContext ctx2 = {.tokens = tokens};
+    ParseContext* ctx = &ctx2;
+
     Scope* globalScope = parseScopeInit(mem, NULL);
     Scope* currentScope = globalScope;
     for(Token t = parseConsume(ctx); t.type != TokenType_NONE; t = parseConsume(ctx)){
@@ -678,7 +607,9 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                     node->node.VAR_DECL_ASSIGN.identifier = t.value;
                     ASTNode* expr = parseExpression(ctx, mem);
                     node->node.VAR_DECL_ASSIGN.expresion = expr;
-                    node->node.VAR_DECL_ASSIGN.type = parseGetTypeOfExpression(ctx, mem, expr);
+
+                    // TODO: do this in the typechecking phase
+                    // node->node.VAR_DECL_ASSIGN.type = parseGetTypeOfExpression(ctx, mem, expr);
                     
                     // TODO: add the variable to the symbol table
                     parseScopeAddSymbol(currentScope, t.value);
@@ -777,8 +708,6 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
                         next = parsePeek(ctx, 0);
                         if(next.type == TokenType_RARROW){
                             parseConsume(ctx);
-                            // TODO: make parseType return null on error and handle the error logging here,
-                            //       more specific error based on where the error occured is better
                             node->node.FUNCTION_DEF.type = parseType(ctx, mem);
 
                             next = parseConsume(ctx);
@@ -929,7 +858,15 @@ Scope* Parse(ParseContext* ctx, Arena* mem){
             case TokenType_DOT:
             case TokenType_DOUBLEDOT:
             case TokenType_TRIPLEDOT:
-            case TokenType_OPERATOR:
+            case TokenType_LESS:
+            case TokenType_LESS_EQ:
+            case TokenType_GREATER:
+            case TokenType_GREATER_EQ:
+            case TokenType_NOT_EQUALS:
+            case TokenType_ADD:
+            case TokenType_SUB:
+            case TokenType_MUL:
+            case TokenType_DIV:
             case TokenType_ASSIGNMENT:
             case TokenType_COMPARISON:
             case TokenType_INT_LITERAL:

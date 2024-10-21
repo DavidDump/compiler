@@ -175,32 +175,36 @@ typedef struct _ASTNode{
     } node;
 } ASTNode;
 
-typedef struct ParseContext{
+typedef struct ParseContext {
     TokenArray tokens;
-	int index;
-    
-    TypeMapping* typeMappings;
-    int typeMappingsSize;
-    OperatorInfo* opInfo;
-    int opInfoSize;
+	u64 index;
 } ParseContext;
 
-void parseAddStatement(StmtList* list, ASTNode* node);
-ParseContext ParseContextInit(TokenArray tokens, TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize);
-ASTNode* NodeInit(Arena* mem);
-void ASTNodePrint(ASTNode* node, int indent);
-void ASTPrint(Scope* root);
-int OpGetPrecedence(ParseContext* ctx, String op);
-Token parseConsume(ParseContext* ctx);
-Token parsePeek(ParseContext* ctx, int num);
-bool parseScopeContainsSymbol(Scope* scope, String symbol);
-bool parseCheckSemicolon(ParseContext* ctx);
-void parseScopeAddChild(Scope* parent, Scope* child);
+typedef struct Operator {
+    TokenType type;
+    s64 presedence;
+} Operator;
+
+// void parseAddStatement(StmtList* list, ASTNode* node);
+// ASTNode* NodeInit(Arena* mem);
+// void ASTNodePrint(ASTNode* node, int indent);
+// void ASTPrint(Scope* root);
+// int OpGetPrecedence(ParseContext* ctx, String op);
+// Token parseConsume(ParseContext* ctx);
+// Token parsePeek(ParseContext* ctx, int num);
+// bool parseScopeContainsSymbol(Scope* scope, String symbol);
+// bool parseCheckSemicolon(ParseContext* ctx);
+// void parseScopeAddChild(Scope* parent, Scope* child);
+// void parseAddArg(Args* args, ASTNode* node);
+// Scope* parseScopeInit(Arena* mem, Scope* parent);
+// void parseScopeAddSymbol(Scope* scope, String symbol);
+// ASTNode* parseType(ParseContext* ctx, Arena* mem);
+// Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope);
+// Scope* Parse(TokenArray tokens, Arena* mem);
+
+ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
 void parseAddArg(Args* args, ASTNode* node);
-Scope* parseScopeInit(Arena* mem, Scope* parent);
-void parseScopeAddSymbol(Scope* scope, String symbol);
+ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 ASTNode* parseType(ParseContext* ctx, Arena* mem);
-Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope);
-Scope* Parse(ParseContext* ctx, Arena* mem);
 
 #endif // COMP_PARSER_NEW_H
