@@ -25,7 +25,7 @@ typedef enum ASTNodeType{
     ASTNodeType_FLOAT_LIT,
     ASTNodeType_STRING_LIT,
     ASTNodeType_BOOL_LIT,
-    ASTNodeType_SYMBOL_RVALUE,
+    ASTNodeType_SYMBOL,
     ASTNodeType_TYPE,
     
     ASTNodeType_COUNT,
@@ -51,7 +51,7 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_FLOAT_LIT]       = "FLOAT_LIT,",
     [ASTNodeType_STRING_LIT]      = "STRING_LIT",
     [ASTNodeType_BOOL_LIT]        = "BOOL_LIT",
-    [ASTNodeType_SYMBOL_RVALUE]   = "SYMBOL_RVALUE",
+    [ASTNodeType_SYMBOL]          = "SYMBOL",
     [ASTNodeType_TYPE]            = "TYPE",
 
     [ASTNodeType_COUNT]           = "COUNT",
@@ -137,7 +137,8 @@ typedef struct _ASTNode{
             String value;
         } INT_LIT;
         struct FLOAT_LIT {
-            String value;
+            String wholePart;
+            String fractPart;
         } FLOAT_LIT;
         struct STRING_LIT {
             String value;
@@ -160,10 +161,10 @@ typedef struct _ASTNode{
             ASTNode* expresion;
             Scope* scope;
         } LOOP;
-        struct SYMBOL_RVALUE {
+        struct SYMBOL {
             String identifier;
             ASTNode* type;
-        } SYMBOL_RVALUE;
+        } SYMBOL;
         struct TYPE {
             Type type;
             
@@ -193,17 +194,12 @@ int OpGetPrecedence(ParseContext* ctx, String op);
 Token parseConsume(ParseContext* ctx);
 Token parsePeek(ParseContext* ctx, int num);
 bool parseScopeContainsSymbol(Scope* scope, String symbol);
-ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope);
-ASTNode* parsePrimary(ParseContext* ctx, Arena* mem, Scope* scope);
-ASTNode* parseExpression_rec(ParseContext* ctx, Arena* mem, Scope* scope, ASTNode* lhs, int precedence);
-ASTNode* parseExpression(ParseContext* ctx, Arena* mem, Scope* scope);
 bool parseCheckSemicolon(ParseContext* ctx);
 void parseScopeAddChild(Scope* parent, Scope* child);
 void parseAddArg(Args* args, ASTNode* node);
 Scope* parseScopeInit(Arena* mem, Scope* parent);
 void parseScopeAddSymbol(Scope* scope, String symbol);
 ASTNode* parseType(ParseContext* ctx, Arena* mem);
-ASTNode* parseFunctionCall(ParseContext* ctx, Arena* mem, Scope* scope);
 Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope);
 Scope* Parse(ParseContext* ctx, Arena* mem);
 
