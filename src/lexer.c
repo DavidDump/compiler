@@ -106,46 +106,55 @@ TokenArray Tokenize(String source, String filenameCstring) {
         } else if(c == '<') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            if(next == '=') len = 2;
+            type = TokenType_LESS;
+            if(next == '=') {
+                len = 2;
+                type = TokenType_LESS_EQ;
+            }
             
             value.str = &source.str[i];
             value.length = len;
-            type = TokenType_OPERATOR;
         } else if(c == '>') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            if(next == '=') len = 2;
+            type = TokenType_GREATER;
+            if(next == '=') {
+                len = 2;
+                type = TokenType_GREATER_EQ;
+            }
             
             value.str = &source.str[i];
             value.length = len;
-            type = TokenType_OPERATOR;
         } else if(c == '=') {
             u8 next = source.str[i + 1];
             u64 len = 1;
             type = TokenType_ASSIGNMENT;
             if(next == '=') {
                 len = 2;
-                type = TokenType_OPERATOR;
+                type = TokenType_COMPARISON;
             }
             value.str = &source.str[i];
             value.length = len;
         } else if(c == '!') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            if(next == '=') len = 2;
+            type = TokenType_NONE;
+            if(next == '=') {
+                len = 2;
+                type = TokenType_NOT_EQUALS;
+            }
             assert(len == 2 && "! unary operator currently unsupported");
             
             value.str = &source.str[i];
             value.length = len;
-            type = TokenType_OPERATOR;
         } else if(c == '+') {
             value.str = &source.str[i];
             value.length = 1;
-            type = TokenType_OPERATOR;
+            type = TokenType_ADD;
         } else if(c == '-') {
             u8 next = source.str[i + 1];
             u64 len = 1;
-            type = TokenType_OPERATOR;
+            type = TokenType_SUB;
             if(next == '>') {
                 len = 2;
                 type = TokenType_RARROW;
@@ -155,11 +164,11 @@ TokenArray Tokenize(String source, String filenameCstring) {
         } else if(c == '*') {
             value.str = &source.str[i];
             value.length = 1;
-            type  = TokenType_OPERATOR;
+            type  = TokenType_MUL;
         } else if(c == '/') {
             value.str = &source.str[i];
             value.length = 1;
-            type  = TokenType_OPERATOR;
+            type  = TokenType_DIV;
         } else if(c == ';') {
             value.str = &source.str[i];
             value.length = 1;

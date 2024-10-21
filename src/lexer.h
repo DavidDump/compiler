@@ -14,15 +14,15 @@ typedef struct Location{
 typedef enum TokenType{
     TokenType_NONE,
     
+    // keywords
     TokenType_RETURN,        // return
     TokenType_IF,            // if
     TokenType_ELSE,          // else
     TokenType_LOOP,          // loop
+
     TokenType_TYPE,          // like u8
     TokenType_SEMICOLON,     // ;
     TokenType_COLON,         // :
-    TokenType_DOUBLECOLON,   // ::
-    TokenType_INITIALIZER,   // :=
     TokenType_RARROW,        // ->
     TokenType_LPAREN,        // (
     TokenType_RPAREN,        // )
@@ -34,9 +34,22 @@ typedef enum TokenType{
     TokenType_DOT,           // .
     TokenType_DOUBLEDOT,     // ..
     TokenType_TRIPLEDOT,     // ...
-    TokenType_OPERATOR,      // +
-    TokenType_ASSIGNMENT,    // =
+    
+    // operators
+    TokenType_LESS,          // <
+    TokenType_LESS_EQ,       // <=
+    TokenType_GREATER,       // >
+    TokenType_GREATER_EQ,    // >=
+    TokenType_NOT_EQUALS,    // !=
+    TokenType_ADD,           // +
+    TokenType_SUB,           // -
+    TokenType_MUL,           // *
+    TokenType_DIV,           // /
     TokenType_COMPARISON,    // ==
+    TokenType_ASSIGNMENT,    // =
+    TokenType_DOUBLECOLON,   // ::
+    TokenType_INITIALIZER,   // :=
+
     TokenType_IDENTIFIER,    // any string that is not a keyword
     TokenType_INT_LITERAL,   // 69
     TokenType_STRING_LIT,    // "Hello, world!"
@@ -69,7 +82,15 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_DOT]           = "DOT",
     [TokenType_DOUBLEDOT]     = "DOUBLEDOT",
     [TokenType_TRIPLEDOT]     = "TRIPLEDOT",
-    [TokenType_OPERATOR]      = "OPERATOR",
+    [TokenType_LESS]          = "LESS",
+    [TokenType_LESS_EQ]       = "LESS_EQ",
+    [TokenType_GREATER]       = "GREATER",
+    [TokenType_GREATER_EQ]    = "GREATER_EQ",
+    [TokenType_NOT_EQUALS]    = "NOT_EQUALS",
+    [TokenType_ADD]           = "ADD",
+    [TokenType_SUB]           = "SUB",
+    [TokenType_MUL]           = "MUL",
+    [TokenType_DIV]           = "DIV",
     [TokenType_ASSIGNMENT]    = "ASSIGNMENT",
     [TokenType_COMPARISON]    = "COMPARISON",
     [TokenType_IDENTIFIER]    = "IDENTIFIER",
@@ -89,8 +110,8 @@ typedef struct Token{
 
 typedef struct TokenArray{
     Token* tokens;
-    int size;
-    int capacity;
+    u64 size;
+    u64 capacity;
     Arena mem;
 } TokenArray;
 
