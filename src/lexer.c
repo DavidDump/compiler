@@ -340,3 +340,4 @@ void TokensPrint(TokenArray* tokens){
 #endif // COMP_DEBUG
 
 // TODO: remove all the (int) casts when comparing u64s and ints once all the types are converted in the codebase
+// TODO: add a mapping table from single char tokens to TokenType's and multi char tokens to TokenType's
