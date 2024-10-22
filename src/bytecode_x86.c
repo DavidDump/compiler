@@ -459,7 +459,7 @@ void genPop(GenContext* ctx, Register reg) {
     genInstruction(ctx, INST(pop, OP_REG(reg)));
 }
 
-void genSaveStack(GenContext* ctx) {
+void genSaveStackNew(GenContext* ctx) {
     if(ctx->savedStackPointer + 1 > SAVED_STACK_SIZE){
         printf("[ERROR] Call stack overflow\n");
         exit(EXIT_FAILURE);
@@ -467,7 +467,7 @@ void genSaveStack(GenContext* ctx) {
     ctx->savedStack[ctx->savedStackPointer++] = ctx->stackPointer;
 }
 
-void genRestoreStack(GenContext* ctx) {
+void genRestoreStackNew(GenContext* ctx) {
     if(ctx->savedStackPointer - 1 < 0){
         printf("[ERROR] Call stack underflow\n");
         exit(EXIT_FAILURE);
@@ -637,7 +637,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
 
                 genPush(ctx, RBP);
                 genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
-                genSaveStack(ctx);
+                genSaveStackNew(ctx);
 
                 // function arguments
                 // TODO: cast
@@ -722,9 +722,11 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
 
                 gen_x86_64_expression(ctx, expr);
                 genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
-                genRestoreStack(ctx);
+                genRestoreStackNew(ctx);
                 genPop(ctx, RBP);
-                genInstruction(ctx, INST(ret, 0));
+                // NOTE: the {0} argument is to get rid of an annoying c warning, just using 0 is enough
+                //       this is used to indicate that the instruction has no operands
+                genInstruction(ctx, INST(ret, {0}));
             } break;
             case ASTNodeType_IF: {
                 ASTNode* next = node;

@@ -48,7 +48,7 @@ void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
     va_list args;
     va_start(args, format);
 
-    String workingStr = {.str = format, .length = 0};
+    String workingStr = {.str = (u8*)format, .length = 0};
     bool wasPercent = FALSE;
     while(*format != '\0'){
         if(wasPercent == FALSE && *format == '%'){
@@ -60,7 +60,7 @@ void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
             StringChainAppend(result, mem, workingStr);
             StringChainAppend(result, mem, arg);
             
-            workingStr.str = format + 1;
+            workingStr.str = (u8*)format + 1;
             workingStr.length = 0;
         }else if(wasPercent == TRUE && *format == 'i'){
             wasPercent = FALSE;
@@ -70,10 +70,11 @@ void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
 
             int intLen = digitsCount(arg) + 1; // NOTE: snprintf only works if the buffer has enough space for a \0 terminator
             char* buffer = arena_alloc(mem, intLen * sizeof(char));
+            // TODO: implement snprintf myself
             snprintf(buffer, intLen, "%i", arg);
-            StringChainAppend(result, mem, (String){.str = buffer, .length = intLen});
+            StringChainAppend(result, mem, (String){.str = (u8*)buffer, .length = intLen});
 
-            workingStr.str = format + 1;
+            workingStr.str = (u8*)format + 1;
             workingStr.length = 0;
         }else{
             wasPercent = FALSE;
@@ -89,7 +90,7 @@ void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
 
 void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, char* reg){
     ctx->stack++;
-    genChainPrintf(result, &ctx->mem, "    push %s\n", (String){.str = reg, .length = strlen(reg)});
+    genChainPrintf(result, &ctx->mem, "    push %s\n", StringFromCstr(&ctx->mem, reg));
 }
 
 void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg){
@@ -98,7 +99,7 @@ void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg){
         exit(EXIT_FAILURE);
     }
     ctx->stack--;
-    genChainPrintf(result, &ctx->mem, "    pop %s\n", (String){.str = reg, .length = strlen(reg)});
+    genChainPrintf(result, &ctx->mem, "    pop %s\n", StringFromCstr(&ctx->mem, reg));
 }
 
 void genSaveStack(GenContext* ctx){
@@ -227,7 +228,7 @@ StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
         gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    div rcx\n");
     }else{
-        printf("[ERROR] Unknown operator: %.*s\n", expr->node.EXPRESION.operator.length, expr->node.EXPRESION.operator.str);
+        printf("[ERROR] Unknown operator: "STR_FMT"\n", STR_PRINT(expr->node.EXPRESION.operator));
         exit(EXIT_FAILURE);
     }
 

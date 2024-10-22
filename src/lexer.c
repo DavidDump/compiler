@@ -60,15 +60,15 @@ TokenArray Tokenize(String source, String filenameCstring) {
     String value = {0};
     TokenType type = 0;
 
-    for(u64 i = 0; (int)i < source.length; ++i) {
+    for(u64 i = 0; i < source.length; ++i) {
         u8 c = source.str[i];
         
         // special case: line comment
         if(c == '/') {
             u8 next = source.str[i + 1];
             if(next == '/'){
-                do c = source.str[++i]; while(c != '\n' && (int)i < source.length);
-                if((int)i >= source.length) break; // in case the file is only one line
+                do c = source.str[++i]; while(c != '\n' && i < source.length);
+                if(i >= source.length) break; // in case the file is only one line
             }
         }
 
@@ -77,7 +77,7 @@ TokenArray Tokenize(String source, String filenameCstring) {
             u64 startIndex = i;
             u64 endIndex = i;
             do c = source.str[++endIndex]; while(isLetter(c) || isNumber(c)); // TODO: add special characters that can be in the middle of a identifier
-            if((int)endIndex >= source.length) break;
+            if(endIndex >= source.length) break;
             u64 len = endIndex - startIndex;
             
             // compare keywords and types
@@ -97,7 +97,7 @@ TokenArray Tokenize(String source, String filenameCstring) {
             u64 startIndex = i;
             u64 endIndex = i;
             do c = source.str[++endIndex]; while(isNumber(c));
-            if((int)endIndex >= source.length) break;
+            if(endIndex >= source.length) break;
             u64 len = endIndex - startIndex;
 
             value.str = &source.str[startIndex];
@@ -246,9 +246,8 @@ TokenArray Tokenize(String source, String filenameCstring) {
         } else if(c == '\"') {
             // string literal
             // TODO: propper string literal parsing with escape characters
-            // TODO: old types
-            char* start = &source.str[i];
-            char* end = start + 1;
+            u8* start = &source.str[i];
+            u8* end = start + 1;
             while(*end && *end != '\"'){
                 if(*end == '\n') lineNum++;
                 end++;
@@ -339,5 +338,4 @@ void TokensPrint(TokenArray* tokens){
 }
 #endif // COMP_DEBUG
 
-// TODO: remove all the (int) casts when comparing u64s and ints once all the types are converted in the codebase
 // TODO: add a mapping table from single char tokens to TokenType's and multi char tokens to TokenType's

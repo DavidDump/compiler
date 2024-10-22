@@ -4,20 +4,25 @@
 #include "common.h"
 #include "arena.h"
 
-typedef struct String{
-    char* str;
-    int length;
+#define STR_FMT "%.*s"
+#define STR_PRINT(_str_) (int)(_str_).length, (_str_).str
+
+#define STR(_cstr_) StringFromCstrLit(_cstr_)
+
+typedef struct String {
+    u8* str;
+    u64 length;
 } String;
 
 typedef struct StringNode StringNode;
 
-typedef struct StringNode{
+typedef struct StringNode {
     String str;
     StringNode* next;
     StringNode* prev;
 } StringNode;
 
-typedef struct StringChain{
+typedef struct StringChain {
     StringNode* first;
     StringNode* last;
     int nodeCount; // dont know if need

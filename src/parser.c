@@ -873,7 +873,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
             case TokenType_INT_LITERAL:
             case TokenType_STRING_LIT:
             case TokenType_BOOL_LITERAL:
-                printf("[ERROR] Unhandled token type: %s at (%.*s:%i:%i)\n", TokenTypeStr[t.type], t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
+                printf("[ERROR] Unhandled token type: %s at ("STR_FMT":%i:%i)\n", TokenTypeStr[t.type], STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum);
             break;
         }
     }

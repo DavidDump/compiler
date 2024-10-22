@@ -66,7 +66,7 @@ String StringFromCstr(Arena* mem, char* cstr){
 String StringFromCstrLit(char* cstr){
     String result = {0};
     int len = strlen(cstr);
-    result.str = cstr;
+    result.str = (u8*)cstr;
     result.length = len;
     return result;
 }
@@ -81,23 +81,23 @@ String StringFromArray(Arena* mem, char* arr, int size){
 
 bool StringEquals(String str1, String str2){
     if(str1.length != str2.length) return FALSE;
-    for(int i = 0; i < str1.length; i++){
+    for(u64 i = 0; i < str1.length; ++i) {
         if(str1.str[i] != str2.str[i]) return FALSE;
     }
     return TRUE;
 }
 
 bool StringEqualsCstr(String str1, char* cstr){
-    if(str1.length != (int)strlen(cstr)) return FALSE;
-    for(int i = 0; i < str1.length; i++){
+    if(str1.length != strlen(cstr)) return FALSE;
+    for(u64 i = 0; i < str1.length; ++i) {
         if(str1.str[i] != cstr[i]) return FALSE;
     }
     return TRUE;
 }
 
 bool StringContains(String str1, char* cstr){
-    if(str1.length > (int)strlen(cstr)) return FALSE;
-    for(int i = 0; i < str1.length; i++){
+    if(str1.length > strlen(cstr)) return FALSE;
+    for(u64 i = 0; i < str1.length; ++i) {
         if(str1.str[i] != cstr[i]) return FALSE;
     }
     return TRUE;

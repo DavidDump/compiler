@@ -12,15 +12,15 @@
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
-String EntireFileRead(Arena* mem, const char* filePath){
-    FILE* f = fopen(filePath, "rb");
+String EntireFileRead(Arena* mem, u8* filePath){
+    FILE* f = fopen((char*)filePath, "rb");
     
     if(f){
         fseek(f, 0, SEEK_END);
         int fileSize = ftell(f);
         fseek(f, 0, SEEK_SET);
         
-        char* fileBuffer = arena_alloc(mem, fileSize * sizeof(char));
+        u8* fileBuffer = arena_alloc(mem, fileSize * sizeof(u8));
         fread(fileBuffer, sizeof(char), fileSize, f);
         fclose(f);
 
@@ -41,7 +41,7 @@ bool EntireFileWrite(const char* filePath, StringChain data){
     if(f){
         StringNode* current = data.first;
         while(current != NULL){
-            fprintf(f, "%.*s", current->str.length, current->str.str);
+            fprintf(f, STR_FMT, STR_PRINT(current->str));
             current = current->next;
         }
         fclose(f);
@@ -72,14 +72,14 @@ int main(int argc, char** argv){
     bool printTokens = FALSE;
     bool printAST = FALSE;
 #endif // COMP_DEBUG
-    char* inFilepath = 0;
-    char* outFilepath = "output.asm";
+    u8* inFilepath = 0;
+    u8* outFilepath = (u8*)"output.asm";
     for(int i = 0; i < argc; i++){
         if(strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0){
-            outFilepath = argv[i + 1];
+            outFilepath = (u8*)argv[i + 1];
             i++;
         }else if(strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--input") == 0){
-            inFilepath = argv[i + 1];
+            inFilepath = (u8*)argv[i + 1];
             i++;
         }
 #ifdef COMP_DEBUG
@@ -143,7 +143,7 @@ int main(int argc, char** argv){
     Arena readFileMem = {0}; // source file is stored in here
     String sourceRaw = EntireFileRead(&readFileMem, inFilepath);
 
-    int filenameLen = strlen(inFilepath);
+    u64 filenameLen = strlen((char*)inFilepath);
     String filename = {.str = inFilepath, .length = filenameLen};
     TokenArray tokens = Tokenize(sourceRaw, filename);
 #ifdef COMP_DEBUG
