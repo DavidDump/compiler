@@ -92,6 +92,7 @@ typedef enum OperandType {
     OPERAND_COUNT,
 } OperandType;
 
+#pragma GCC diagnostic ignored "-Wunused-variable"
 static char* OperandTypeStr[OPERAND_COUNT] = {
     [OPERAND_NONE]              = "NONE",
     [OPERAND_Register]          = "r",
@@ -106,6 +107,7 @@ static char* OperandTypeStr[OPERAND_COUNT] = {
     [OPERAND_Immediate8]        = "imm8",
     [OPERAND_Immediate32]       = "imm32",
 };
+#pragma GCC diagnostic pop
 
 typedef struct Operand {
     OperandType type;
@@ -155,6 +157,7 @@ typedef struct Instruction {
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
+void gen_x86_64_bytecode(GenContext* ctx, Scope* globalScope);
 
 #endif // COMP_BYTECODE_H
 

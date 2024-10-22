@@ -739,7 +739,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
                 } while(next->type == ASTNodeType_IF || next->type == ASTNodeType_ELSE || next->type == ASTNodeType_ELSE_IF);
             } break;
             case ASTNodeType_LOOP: {
-
+                UNIMPLEMENTED("ASTNodeType_LOOP in codegen");
             } break;
             
             case ASTNodeType_ELSE:
@@ -757,7 +757,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
     }
 }
 
-void genBytecode(GenContext* ctx, Scope* globalScope) {
+void gen_x86_64_bytecode(GenContext* ctx, Scope* globalScope) {
     ctx->variables = hashmapInit(&ctx->mem, 0x1000);
     ctx->functions = hashmapInit(&ctx->mem, 0x1000);
     ctx->data  = hashmapDataInit(&ctx->mem, 0x1000);
