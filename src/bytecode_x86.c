@@ -568,6 +568,39 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
     }
 }
 
+void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
+    // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
+    // it doesnt need to be moved into a register as its already there
+    assert(expr->type == ASTNodeType_EXPRESION);
+    ASTNode* rhs = expr->node.EXPRESION.rhs;
+    ASTNode* lhs = expr->node.EXPRESION.lhs;
+    String op = expr->node.EXPRESION.operator;
+
+    gen_x86_64_expression(ctx, rhs);
+    genPush(ctx, RAX);
+    gen_x86_64_expression(ctx, lhs);
+    genPop(ctx, RCX);
+    genInstruction(ctx, INST(cmp, OP_REG(RAX), OP_REG(RCX)));
+
+    // TODO: the encoding used to generate the jump needs to be selected based on the distance to the target
+    // TODO: signed and unsigned jump after comparison is different
+    u32 offset = 0;
+    UNIMPLEMENTED("offset calculation not finished");
+    if(StringEqualsCstr(op, "==")) {
+        genInstruction(ctx, INST(je, OP_IMM32(offset)));
+    } else if(StringEqualsCstr(op, "!=")) {
+        genInstruction(ctx, INST(jne, OP_IMM32(offset)));
+    } else if(StringEqualsCstr(op, "<")) {
+        genInstruction(ctx, INST(jl, OP_IMM32(offset)));
+    } else if(StringEqualsCstr(op, ">")) {
+        genInstruction(ctx, INST(jg, OP_IMM32(offset)));
+    } else if(StringEqualsCstr(op, "<=")) {
+        genInstruction(ctx, INST(jle, OP_IMM32(offset)));
+    } else if(StringEqualsCstr(op, ">=")) {
+        genInstruction(ctx, INST(jge, OP_IMM32(offset)));
+    }
+}
+
 void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
     // TODO: cast
     for(u64 i = 0; i < (u64)scope->stmts.size; ++i) {
@@ -694,7 +727,21 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
                 genInstruction(ctx, INST(ret, 0));
             } break;
             case ASTNodeType_IF: {
+                ASTNode* next = node;
+                do {
+                    if(next->type != ASTNodeType_IF) i++;
+                    if(next->type == ASTNodeType_IF) {
+                        ASTNode* expr = next->node.IF.expresion;
+                        Scope* scope = next->node.IF.scope;
 
+                        // conditions
+                        gen_x86_64_condition(ctx, expr);
+
+                        // body
+                        gen_x86_64_scope(ctx, scope);
+                        UNIMPLEMENTED("unfished, need out of order appending for instructions");
+                    }
+                } while(next->type == ASTNodeType_IF || next->type == ASTNodeType_ELSE || next->type == ASTNodeType_ELSE_IF);
             } break;
             case ASTNodeType_LOOP: {
 

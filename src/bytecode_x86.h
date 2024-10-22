@@ -161,3 +161,5 @@ typedef struct Instruction {
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
 
 #endif // COMP_BYTECODE_H
+
+// TODO: make a OP_IMM macro that dispaches to a specific sized version based on the value provided
