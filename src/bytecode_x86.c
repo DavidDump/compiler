@@ -467,22 +467,6 @@ void genPop(GenContext* ctx, Register reg) {
     genInstruction(ctx, INST(pop, OP_REG(reg)));
 }
 
-void genSaveStackNew(GenContext* ctx) {
-    if(ctx->savedStackPointer + 1 > SAVED_STACK_SIZE){
-        printf("[ERROR] Call stack overflow\n");
-        exit(EXIT_FAILURE);
-    }
-    ctx->savedStack[ctx->savedStackPointer++] = ctx->stackPointer;
-}
-
-void genRestoreStackNew(GenContext* ctx) {
-    if(ctx->savedStackPointer - 1 < 0){
-        printf("[ERROR] Call stack underflow\n");
-        exit(EXIT_FAILURE);
-    }
-    ctx->stackPointer = ctx->savedStack[--ctx->savedStackPointer];
-}
-
 void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
     assert(funcCall->type == ASTNodeType_FUNCTION_CALL);
     String id = funcCall->node.FUNCTION_CALL.identifier;
@@ -609,7 +593,8 @@ void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
     }
 }
 
-void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
+// stackToRestore is the value set to the stack in the GenContext when generating a ret instruction
+void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
     // TODO: cast
     for(u64 i = 0; i < (u64)scope->stmts.size; ++i) {
         ASTNode* node = scope->stmts.statements[i];
@@ -645,7 +630,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
 
                 genPush(ctx, RBP);
                 genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
-                genSaveStackNew(ctx);
+                s64 savedStack = ctx->stackPointer;
 
                 // function arguments
                 // TODO: cast
@@ -674,7 +659,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
                 }
 
                 // function body
-                gen_x86_64_scope(ctx, scope);
+                gen_x86_64_scope(ctx, scope, savedStack);
                 // TODO: the jump after function should end up here
             } break;
             case ASTNodeType_FUNCTION_CALL: {
@@ -730,7 +715,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
 
                 gen_x86_64_expression(ctx, expr);
                 genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
-                genRestoreStackNew(ctx);
+                ctx->stackPointer = stackToRestore;
                 genPop(ctx, RBP);
                 // NOTE: the {0} argument is to get rid of an annoying c warning, just using 0 is enough
                 //       this is used to indicate that the instruction has no operands
@@ -748,7 +733,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope) {
                         gen_x86_64_condition(ctx, expr);
 
                         // body
-                        gen_x86_64_scope(ctx, scope);
+                        gen_x86_64_scope(ctx, scope, stackToRestore);
                         UNIMPLEMENTED("unfished, need out of order appending for instructions");
                     }
                 } while(next->type == ASTNodeType_IF || next->type == ASTNodeType_ELSE || next->type == ASTNodeType_ELSE_IF);
@@ -776,5 +761,5 @@ void genBytecode(GenContext* ctx, Scope* globalScope) {
     ctx->variables = hashmapInit(&ctx->mem, 0x1000);
     ctx->functions = hashmapInit(&ctx->mem, 0x1000);
     ctx->data  = hashmapDataInit(&ctx->mem, 0x1000);
-    gen_x86_64_scope(ctx, globalScope);
+    gen_x86_64_scope(ctx, globalScope, 0);
 }

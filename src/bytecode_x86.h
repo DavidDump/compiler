@@ -65,10 +65,6 @@ typedef struct GenContext {
     s64 stackPointer;     // keeping track of the stack pointer for variables
     u64 entryPointOffset; // the offset from the begining of the code buffer to the entry point
 
-    // NOTE: dont like this approach to dealing with the stack across function calls
-    s64 savedStack[SAVED_STACK_SIZE];
-    s64 savedStackPointer;
-
     Hashmap variables; // value is the stack offset to the variable
     Hashmap functions; // value is the offset to the begining of the function from the beginnig of the code buffer
     HashmapData data;  // value is a UserDataEntry
