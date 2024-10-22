@@ -34,7 +34,8 @@ typedef enum OpType {
 typedef struct InstructionEncoding {
     InstructionType type;
     RexByteType rexType;
-    u8 opcode;
+    // opcodes can be up to 64bits?, most are only 8bits, generetor will not emit null bytes in case of only 8bit opcodes
+    u64 opcode;
     bool regInOpcode; // the target register is stored in the lower 3bits of the opcode
     ModRMType modRMType;
     u8 opcodeExtension;

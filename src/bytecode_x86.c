@@ -332,6 +332,14 @@ void genInstruction(GenContext* ctx, Instruction inst) {
         if(encoding.rexType != RexByte_NONE && (rexW || (rexR & 8) || (rexX & 8) || (rexB & 8))) genRexByte(ctx, rexW, rexR, rexX, rexB);
 
         // Opcode
+        // NOTE: multibyte opcodes are emited like this because of how they are encoded, for an example see conditional jmp instructions ex.: jne
+        if(encoding.opcode & 0xFF000000000000) Emit8(ctx, (encoding.opcode >> (7 * 8)) & 0xFF);
+        if(encoding.opcode & 0x00FF0000000000) Emit8(ctx, (encoding.opcode >> (6 * 8)) & 0xFF);
+        if(encoding.opcode & 0x0000FF00000000) Emit8(ctx, (encoding.opcode >> (5 * 8)) & 0xFF);
+        if(encoding.opcode & 0x000000FF000000) Emit8(ctx, (encoding.opcode >> (4 * 8)) & 0xFF);
+        if(encoding.opcode & 0x000000FF000000) Emit8(ctx, (encoding.opcode >> (3 * 8)) & 0xFF);
+        if(encoding.opcode & 0x00000000FF0000) Emit8(ctx, (encoding.opcode >> (2 * 8)) & 0xFF);
+        if(encoding.opcode & 0x0000000000FF00) Emit8(ctx, (encoding.opcode >> (1 * 8)) & 0xFF);
         if(encoding.regInOpcode) Emit8(ctx, encoding.opcode | (dstReg & 7));
         else Emit8(ctx, encoding.opcode);
 
