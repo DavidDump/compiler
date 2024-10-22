@@ -137,6 +137,8 @@ int main(int argc, char** argv){
         {.symbol = StringFromCstrLit("*"), .precedence = 10, .behaviour = OP_TYPE_ARITHMETIC},
         {.symbol = StringFromCstrLit("/"), .precedence = 10, .behaviour = OP_TYPE_ARITHMETIC},
     };
+    UNUSED(opInfo);
+    UNUSED(typeMappings);
 
     Arena readFileMem = {0}; // source file is stored in here
     String sourceRaw = EntireFileRead(&readFileMem, inFilepath);

@@ -60,7 +60,14 @@ typedef enum Mnemonic {
     inc_,
     dec_,
     // jmp_,
-    // all,
+    // NOTE: less and greater are used for signed comparison
+    //       below and above are used for unsigned comparison
+    je_,
+    jne_,
+    jl_,
+    jg_,
+    jle_,
+    jge_,
     Mnemonic_COUNT,
 } Mnemonic;
 
@@ -78,6 +85,12 @@ const char* MnemonicStr[Mnemonic_COUNT] = {
     [lea_]  = "lea",
     [inc_]  = "inc",
     [dec_]  = "dec",
+    [je_]   = "je",
+    [jne_]  = "jne",
+    [jl_]   = "jl",
+    [jg_]   = "jg",
+    [jle_]  = "jle",
+    [jge_]  = "jge",
 };
 
 // NOTE: when needing to iterate all the encodings for one instruction,
@@ -337,5 +350,53 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0xFF, .modRMType = ModRMType_EXT, .opcodeExtension = 1, .opTypes[0] = OpType_RM},
         // 48+rw         | DEC r16     | O     | N.E.        | Valid           | Decrement r16 by 1.
         // 48+rd         | DEC r32     | O     | N.E.        | Valid           | Decrement r32 by 1.
+    },
+    [je_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 74 cb         | JE rel8     | D     | Valid       | Valid           | Jump short if equal (ZF=1).
+        // 0F 84 cw      | JE rel16    | D     | N.S.        | Valid           | Jump near if equal (ZF=1). Not supported in 64-bit mode.
+        // 0F 84 cd      | JE rel32    | D     | Valid       | Valid           | Jump near if equal (ZF=1).
+        {.type = InstructionType_64BIT, .opcode = 0x0F84, .opTypes[0] = OpType_IMM32},
+        // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
+    },
+    [jne_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 75 cb         | JNE rel8    | D     | Valid       | Valid           | Jump short if not equal (ZF=0).
+        // 0F 85 cw      | JNE rel16   | D     | N.S.        | Valid           | Jump near if not equal (ZF=0). Not supported in 64-bit mode.
+        // 0F 85 cd      | JNE rel32   | D     | Valid       | Valid           | Jump near if not equal (ZF=0).
+        {.type = InstructionType_64BIT, .opcode = 0x0F85, .opTypes[0] = OpType_IMM32},
+        // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
+    },
+    [jl_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 7C cb         | JL rel8     | D     | Valid       | Valid           | Jump short if less (SF≠ OF).
+        // 0F 8C cw      | JL rel16    | D     | N.S.        | Valid           | Jump near if less (SF≠ OF). Not supported in 64-bit mode.
+        // 0F 8C cd      | JL rel32    | D     | Valid       | Valid           | Jump near if less (SF≠ OF).
+        {.type = InstructionType_64BIT, .opcode = 0x0F8C, .opTypes[0] = OpType_IMM32},
+        // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
+    },
+    [jg_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 7F cb         | JG rel8     | D     | Valid       | Valid           | Jump short if greater (ZF=0 and SF=OF).
+        // 0F 8F cw      | JG rel16    | D     | N.S.        | Valid           | Jump near if greater (ZF=0 and SF=OF). Not supported in 64-bit mode.
+        // 0F 8F cd      | JG rel32    | D     | Valid       | Valid           | Jump near if greater (ZF=0 and SF=OF).
+        {.type = InstructionType_64BIT, .opcode = 0x0F8F, .opTypes[0] = OpType_IMM32},
+        // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
+    },
+    [jle_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 7E cb         | JLE rel8    | D     | Valid       | Valid           | Jump short if less or equal (ZF=1 or SF≠ OF).
+        // 0F 8E cw      | JLE rel16   | D     | N.S.        | Valid           | Jump near if less or equal (ZF=1 or SF≠ OF). Not supported in 64-bit mode.
+        // 0F 8E cd      | JLE rel32   | D     | Valid       | Valid           | Jump near if less or equal (ZF=1 or SF≠ OF).
+        {.type = InstructionType_64BIT, .opcode = 0x0F8E, .opTypes[0] = OpType_IMM32},
+        // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
+    },
+    [jge_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 7D cb         | JGE rel8    | D     | Valid       | Valid           | Jump short if greater or equal (SF=OF).
+        // 0F 8D cw      | JGE rel16   | D     | N.S.        | Valid           | Jump near if greater or equal (SF=OF). Not supported in 64-bit mode.
+        // 0F 8D cd      | JGE rel32   | D     | Valid       | Valid           | Jump near if greater or equal (SF=OF).
+        {.type = InstructionType_64BIT, .opcode = 0x0F8D, .opTypes[0] = OpType_IMM32},
+        // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
     },
 };
