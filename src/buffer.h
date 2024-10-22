@@ -1,3 +1,6 @@
+#ifndef COMP_BUFFER_H
+#define COMP_BUFFER_H
+
 #include "common.h"
 
 // NOTE: redefining this here because i dont want to include windows headers everywhere
@@ -29,3 +32,5 @@ s8* buffer_append_s8(Buffer *buffer, s8 value);
 s16* buffer_append_s16(Buffer *buffer, s16 value);
 s32* buffer_append_s32(Buffer *buffer, s32 value);
 s64* buffer_append_s64(Buffer *buffer, s64 value);
+
+#endif // COMP_BUFFER_H
