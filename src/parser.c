@@ -33,25 +33,25 @@ void ASTNodePrint(ASTNode* node, int indent){
         
         case ASTNodeType_INT_LIT: {
             String val = node->node.INT_LIT.value;
-            printf("INT LIT: %.*s\n", val.length, val.str);
+            printf("INT LIT: "STR_FMT"\n", STR_PRINT(val));
         } break;
         case ASTNodeType_FLOAT_LIT: {
             String wholePart = node->node.FLOAT_LIT.wholePart;
             String fractPart = node->node.FLOAT_LIT.fractPart;
-            printf("FLOAT LIT: %.*s.%.*s\n", wholePart.length, wholePart.str, fractPart.length, fractPart.str);
+            printf("FLOAT LIT: "STR_FMT"."STR_FMT"\n", STR_PRINT(wholePart), STR_PRINT(fractPart));
         } break;
         case ASTNodeType_STRING_LIT: {
             String val = node->node.STRING_LIT.value;
-            if(val.length > 50) printf("STRING LIT: %.*s...\n", 50, val.str);
-            else                printf("STRING LIT: %.*s\n", val.length, val.str);
+            if(val.length > 50) printf("STRING LIT: "STR_FMT"...\n", 50, val.str);
+            else                printf("STRING LIT: "STR_FMT"\n", STR_PRINT(val));
         } break;
         case ASTNodeType_BOOL_LIT: {
             String val = node->node.STRING_LIT.value;
-            printf("BOOL LIT: %.*s\n", val.length, val.str);
+            printf("BOOL LIT: "STR_FMT"\n", STR_PRINT(val));
         } break;
         case ASTNodeType_EXPRESION: {
             String val = node->node.EXPRESION.operator;
-            printf("EXP: %.*s\n", val.length, val.str);
+            printf("EXP: "STR_FMT"\n", STR_PRINT(val));
             ASTNodePrint(node->node.EXPRESION.lhs, indent + 1);
             ASTNodePrint(node->node.EXPRESION.rhs, indent + 1);
         } break;
@@ -62,7 +62,7 @@ void ASTNodePrint(ASTNode* node, int indent){
             ASTNode* retType = node->node.FUNCTION_DEF.type;
             Args args = node->node.FUNCTION_DEF.args;
             Scope* scope = node->node.FUNCTION_DEF.scope;
-            printf("id: %.*s\n", id.length, id.str);
+            printf("id: "STR_FMT"\n", STR_PRINT(id));
             ASTNodePrint(retType, indent);
             for(int h = 0; h < indent; h++) printf("  ");
 
@@ -72,7 +72,7 @@ void ASTNodePrint(ASTNode* node, int indent){
                 for(int h = 0; h < indent; h++) printf("  ");
                 String argId = args.args[i]->node.VAR_DECL.identifier;
                 ASTNode* argType = args.args[i]->node.VAR_DECL.type;
-                printf(" id: %.*s\n", argId.length, argId.str);
+                printf(" id: "STR_FMT"\n", STR_PRINT(argId));
                 printf(" ");
                 ASTNodePrint(argType, indent);
             }
@@ -89,7 +89,7 @@ void ASTNodePrint(ASTNode* node, int indent){
             for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL.identifier;
             ASTNode* type = node->node.VAR_DECL.type;
-            printf("id: %.*s\n", id.length, id.str);
+            printf("id: "STR_FMT"\n", STR_PRINT(id));
             ASTNodePrint(type, indent);
             for(int h = 0; h < indent; h++) printf("  ");
         } break;
@@ -99,7 +99,7 @@ void ASTNodePrint(ASTNode* node, int indent){
             String id = node->node.VAR_DECL_ASSIGN.identifier;
             ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
             ASTNode* expr = node->node.VAR_DECL_ASSIGN.expresion;
-            printf("id: %.*s\n", id.length, id.str);
+            printf("id: "STR_FMT"\n", STR_PRINT(id));
             ASTNodePrint(type, indent);
             for(int h = 0; h < indent; h++) printf("  ");
             printf("expr: \n");
@@ -110,7 +110,7 @@ void ASTNodePrint(ASTNode* node, int indent){
             for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_REASSIGN.identifier;
             ASTNode* expr = node->node.VAR_REASSIGN.expresion;
-            printf("id: %.*s\n", id.length, id.str);
+            printf("id: "STR_FMT"\n", STR_PRINT(id));
             for(int h = 0; h < indent; h++) printf("  ");
             printf("expr: \n");
             ASTNodePrint(expr, indent + 1);
@@ -120,9 +120,9 @@ void ASTNodePrint(ASTNode* node, int indent){
             for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_CONST.identifier;
             String value = node->node.VAR_CONST.value;
-            printf("id: %.*s\n", id.length, id.str);
+            printf("id: "STR_FMT"\n", STR_PRINT(id));
             for(int h = 0; h < indent; h++) printf("  ");
-            printf("value: %.*s\n", value.length, value.str);
+            printf("value: "STR_FMT"\n", STR_PRINT(value));
         } break;
         case ASTNodeType_RET: {
             printf("RET:\n");
@@ -187,14 +187,14 @@ void ASTNodePrint(ASTNode* node, int indent){
         } break;
         case ASTNodeType_SYMBOL: {
             String id = node->node.SYMBOL.identifier;
-            printf("RVALUE: %.*s\n", id.length, id.str);
+            printf("RVALUE: "STR_FMT"\n", STR_PRINT(id));
         } break;
         case ASTNodeType_FUNCTION_CALL: {
             printf("FUNCTION CALL\n");
             for(int h = 0; h < indent + 1; h++) printf("  ");
             String id = node->node.FUNCTION_CALL.identifier;
             Args args = node->node.FUNCTION_CALL.args;
-            printf("id: %.*s\n", id.length, id.str);
+            printf("id: "STR_FMT"\n", STR_PRINT(id));
 
             // args
             for(int i = 0; i < args.size; i++){

@@ -53,7 +53,7 @@ bool isType(String value) {
     );
 }
 
-TokenArray Tokenize(String source, String filenameCstring) {
+TokenArray Tokenize(String source, String filename) {
     TokenArray result = {0};
     u64 lineNum = 1;
     u64 collumNum = 1;
@@ -269,13 +269,13 @@ TokenArray Tokenize(String source, String filenameCstring) {
             // NOTE: space is ignored but this case is needed here for debug print
             continue;
         } else {
-            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at %.*s:%lli:%lli\n", c, filenameCstring.length, filenameCstring.str, lineNum, collumNum);
+            printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at "STR_FMT":%lli:%lli\n", c, STR_PRINT(filename), lineNum, collumNum);
         }
         #endif // COMP_DEBUG
         
         assert(value.length != 0);
         assert(type != 0);
-        TokenArrayAddToken(&result, value, type, filenameCstring, lineNum, collumNum);
+        TokenArrayAddToken(&result, value, type, filename, lineNum, collumNum);
         
         collumNum += value.length - 1;
         i += value.length - 1;
@@ -289,21 +289,21 @@ TokenArray Tokenize(String source, String filenameCstring) {
 
 #ifdef COMP_DEBUG
 void TokenPrint(Token t){
-    printf("%.*s:%i:%i\t { %-12s %-8.*s }\n", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum, TokenTypeStr[t.type], t.value.length, t.value.str);
+    printf(STR_FMT":%i:%i\t { %-12s %-8.*s }\n", STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum, TokenTypeStr[t.type], (int)t.value.length, t.value.str);
 }
 
 void TokenPrintAsTable(Token t, int locWidth, int symbolNameWidth, int symbolWidth){
     int printed = 0;
     int remaining = 0;
     
-    printed = printf("%.*s:%i:%i", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
+    printed = printf(STR_FMT":%i:%i", STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum);
     remaining = locWidth - printed;
     for(int i = 0; i < remaining + 1; i++) printf(" ");
     printf("{  ");
     printed = printf("%s", TokenTypeStr[t.type]);
     remaining = symbolNameWidth - printed;
     for(int i = 0; i < remaining + 1; i++) printf(" ");
-    printed = printf("%.*s", t.value.length, t.value.str);
+    printed = printf(STR_FMT, STR_PRINT(t.value));
     remaining = symbolWidth - printed;
     for(int i = 0; i < remaining + 1; i++) printf(" ");
     printf(" }\n");
@@ -319,14 +319,14 @@ void TokensPrint(TokenArray* tokens){
         #define BUFFER_SIZE 1024
         char buffer[BUFFER_SIZE] = {0};
 
-        int len = snprintf(buffer, BUFFER_SIZE, "%.*s:%i:%i", t.loc.filename.length, t.loc.filename.str, t.loc.line, t.loc.collum);
+        int len = snprintf(buffer, BUFFER_SIZE, STR_FMT":%i:%i", STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum);
         if(len > locWidth) locWidth = len;
         memset(buffer, 0, len);
 
         len = strlen(TokenTypeStr[t.type]);
         if(len > symbolNameWidth) symbolNameWidth = len;
 
-        len = snprintf(buffer, BUFFER_SIZE, "%.*s", t.value.length, t.value.str);
+        len = snprintf(buffer, BUFFER_SIZE, STR_FMT, STR_PRINT(t.value));
         if(len > symbolWidth) symbolWidth = len;
     }
 
