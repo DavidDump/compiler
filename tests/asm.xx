@@ -25,17 +25,17 @@ rbx = foo; // mov rax, [rbp - 1 * 8]
 
 // so saving the registers and restoring them at the end of the function would look like this:
 foo :: () {
-  a := rax;
-  b := rbx;
-  c := rcx;
-  d := rdx;
+    a := rax;
+    b := rbx;
+    c := rcx;
+    d := rdx;
   
-  // body of the function
-  // ...
+    // body of the function
+    // ...
   
-  // the order doesnt matter here as the local variables dont get accesses after
-  rax = a;
-  rbx = b;
-  rcx = c;
-  rdx = d;
+    // the order doesnt matter here as the local variables dont get accesses after
+    rax = a;
+    rbx = b;
+    rcx = c;
+    rdx = d;
 }

@@ -2,7 +2,8 @@
 #include <string.h> // strlen(), memcpy()
 #include <assert.h> // assert()
 
-#include "codegen.h"
+#include "bytecode_x86.h"
+// #include "codegen.h"
 #include "types.h"
 #include "parser.h"
 #include "lexer.h"
@@ -35,6 +36,7 @@ String EntireFileRead(Arena* mem, u8* filePath){
     }
 }
 
+#if 0
 bool EntireFileWrite(const char* filePath, StringChain data){
     FILE* f = fopen(filePath, "wb");
 
@@ -51,6 +53,22 @@ bool EntireFileWrite(const char* filePath, StringChain data){
         return FALSE;
     }
 }
+#else
+bool EntireFileWrite(u8* filePath, Buffer data) {
+    FILE* f = fopen((char*)filePath, "wb");
+
+    if(f) {
+        size_t res = fwrite(data.mem, 1, data.size, f);
+        
+        fclose(f);
+        if(res != data.size) return FALSE;
+        return TRUE;
+    } else {
+        printf("[ERROR] Failed to open file: %s\n", filePath);
+        return FALSE;
+    }
+}
+#endif
 
 // 
 // Main
@@ -155,6 +173,14 @@ int main(int argc, char** argv){
 #ifdef COMP_DEBUG
     if(printAST) ASTPrint(globalScope);
 #endif // COMP_DEBUG
+
+    GenContext ctx = {0};
+    gen_x86_64_bytecode(&ctx, globalScope);
+
+    if(!EntireFileWrite(outFilepath, ctx.code)) {
+        printf("[ERROR] Failed to write output file: %s\n", outFilepath);
+        exit(EXIT_FAILURE);
+    }
 
 #if 0 // NOTE: tmp while doing typechecking
     GenContext genContext = GenContextInit(typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
