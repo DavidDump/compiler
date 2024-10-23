@@ -41,5 +41,6 @@ bool StringContains(String str1, char* cstr);
 int StringToInt(String str);
 u64 StringToU64(String value);
 u32 StringToU32(String value);
+bool StringEndsWith(String str, String end);
 
 #endif // COMP_STRING_H

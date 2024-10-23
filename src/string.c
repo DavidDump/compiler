@@ -134,3 +134,9 @@ u32 StringToU32(String value) {
 
     return result;
 }
+
+bool StringEndsWith(String str, String end) {
+    if(str.length < end.length) return FALSE;
+    if(StringEquals((String){.str = str.str + (str.length - end.length), .length = end.length}, end)) return TRUE;
+    return FALSE;
+}
