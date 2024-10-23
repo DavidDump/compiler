@@ -757,10 +757,12 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
     }
 }
 
-void gen_x86_64_bytecode(GenContext* ctx, Scope* globalScope) {
-    ctx->code = make_buffer(0x100, PAGE_READWRITE);
-    ctx->variables = hashmapInit(&ctx->mem, 0x1000);
-    ctx->functions = hashmapInit(&ctx->mem, 0x1000);
-    ctx->data  = hashmapDataInit(&ctx->mem, 0x1000);
-    gen_x86_64_scope(ctx, globalScope, 0);
+Buffer gen_x86_64_bytecode(Scope* globalScope) {
+    GenContext ctx = {0};
+    ctx.code = make_buffer(0x100, PAGE_READWRITE);
+    ctx.variables = hashmapInit(&ctx.mem, 0x1000);
+    ctx.functions = hashmapInit(&ctx.mem, 0x1000);
+    ctx.data  = hashmapDataInit(&ctx.mem, 0x1000);
+    gen_x86_64_scope(&ctx, globalScope, 0);
+    return ctx.code;
 }

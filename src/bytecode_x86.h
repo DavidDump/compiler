@@ -42,13 +42,7 @@ typedef enum Scale {
     X8 = 3,
 } Scale;
 
-// symbols or functions imported from other libs, and data defined in the data section is referenced using RIP addressing,
-// the address is only knowns once the text section and the data section have been written to the file,
-// so they need to be patched later
-typedef struct AddrToPatch {
-    String name;
-    u64 offset;
-} AddrToPatch;
+#import "bytecode_exe_common.h"
 
 #define INVALID_ADDRESS 0xCAFEBABE
 #define SAVED_STACK_SIZE 255
@@ -157,7 +151,7 @@ typedef struct Instruction {
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
-void gen_x86_64_bytecode(GenContext* ctx, Scope* globalScope);
+Buffer gen_x86_64_bytecode(Scope* globalScope);
 
 #endif // COMP_BYTECODE_H
 
