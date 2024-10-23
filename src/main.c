@@ -174,12 +174,15 @@ int main(int argc, char** argv){
     if(printAST) ASTPrint(globalScope);
 #endif // COMP_DEBUG
 
-    GenContext ctx = {0};
-    gen_x86_64_bytecode(&ctx, globalScope);
+    Buffer bytecode = gen_x86_64_bytecode(globalScope);
 
-    if(!EntireFileWrite(outFilepath, ctx.code)) {
-        printf("[ERROR] Failed to write output file: %s\n", outFilepath);
-        exit(EXIT_FAILURE);
+    if(StringEndsWith(STR(outFilepath), STR(".bin"))) {
+        if(!EntireFileWrite(outFilepath, bytecode)) {
+            printf("[ERROR] Failed to write output file: %s\n", outFilepath);
+            exit(EXIT_FAILURE);
+        }
+    } else if(StringEndsWith(STR(outFilepath), STR(".exe"))) {
+        UNIMPLEMENTED("executable writing not finished yet");
     }
 
 #if 0 // NOTE: tmp while doing typechecking
