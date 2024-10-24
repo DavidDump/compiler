@@ -12,3 +12,5 @@ eight bytes of padding in one instruction that does nothing, reads the value sto
 ## References
 [compiler project](https://github.com/grassator/mass)
 [compiler on youtube](https://www.youtube.com/@DmitriyKubyshkin)
+[expression parsing](https://www.youtube.com/watch?v=fIPO4G42wYE)
+[programming language example](https://gitlab.com/tsoding/porth)
