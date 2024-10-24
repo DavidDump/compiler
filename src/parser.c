@@ -24,207 +24,256 @@ ASTNode* NodeInit(Arena* mem){
 }
 
 #ifdef COMP_DEBUG
-void ASTNodePrint(ASTNode* node, int indent){
+void ASTNodePrint(ASTNode* node, u64 indent) {
+#define genPrintHelper(...) do{for(u64 h = 0; h < indent; ++h) printf("    "); printf(__VA_ARGS__);}while(0)
     // TODO: need to fix indentation, everytime a case has a newline it needs to be indented
-    for(int h = 0; h < indent; h++) printf("  ");
-    switch(node->type){
+    switch(node->type) {
         case ASTNodeType_COUNT: break;
         case ASTNodeType_NONE: break;
         
         case ASTNodeType_INT_LIT: {
             String val = node->node.INT_LIT.value;
-            printf("INT LIT: "STR_FMT"\n", STR_PRINT(val));
+            printf(" "STR_FMT, STR_PRINT(val));
         } break;
         case ASTNodeType_FLOAT_LIT: {
             String wholePart = node->node.FLOAT_LIT.wholePart;
             String fractPart = node->node.FLOAT_LIT.fractPart;
-            printf("FLOAT LIT: "STR_FMT"."STR_FMT"\n", STR_PRINT(wholePart), STR_PRINT(fractPart));
+            printf(" "STR_FMT"."STR_FMT, STR_PRINT(wholePart), STR_PRINT(fractPart));
         } break;
         case ASTNodeType_STRING_LIT: {
             String val = node->node.STRING_LIT.value;
-            if(val.length > 50) printf("STRING LIT: "STR_FMT"...\n", 50, val.str);
-            else                printf("STRING LIT: "STR_FMT"\n", STR_PRINT(val));
+            if(val.length > 50) printf(" "STR_FMT"...", 50, val.str);
+            else                printf(" "STR_FMT, STR_PRINT(val));
         } break;
         case ASTNodeType_BOOL_LIT: {
             String val = node->node.STRING_LIT.value;
-            printf("BOOL LIT: "STR_FMT"\n", STR_PRINT(val));
+            printf(" "STR_FMT, STR_PRINT(val));
         } break;
+        case ASTNodeType_SYMBOL: { // NOTE: identifier
+            String id = node->node.SYMBOL.identifier;
+
+            printf(" "STR_FMT, STR_PRINT(id));
+        } break;        
         case ASTNodeType_EXPRESION: {
-            String val = node->node.EXPRESION.operator;
-            printf("EXP: "STR_FMT"\n", STR_PRINT(val));
+            String op = node->node.EXPRESION.operator;
             ASTNodePrint(node->node.EXPRESION.lhs, indent + 1);
+            printf(" "STR_FMT, STR_PRINT(op));
             ASTNodePrint(node->node.EXPRESION.rhs, indent + 1);
         } break;
         case ASTNodeType_FUNCTION_DEF: {
-            printf("FUNCTION DEF:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.FUNCTION_DEF.identifier;
             ASTNode* retType = node->node.FUNCTION_DEF.type;
             Args args = node->node.FUNCTION_DEF.args;
             Scope* scope = node->node.FUNCTION_DEF.scope;
-            printf("id: "STR_FMT"\n", STR_PRINT(id));
-            ASTNodePrint(retType, indent);
-            for(int h = 0; h < indent; h++) printf("  ");
+
+            genPrintHelper("FUNCTION_DEF: {\n");
+            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    type: %s,\n", retType ? "type" : "null");
 
             // args
-            for(int i = 0; i < args.size; i++){
-                printf("arg%i:\n", i + 1);
-                for(int h = 0; h < indent; h++) printf("  ");
-                String argId = args.args[i]->node.VAR_DECL.identifier;
-                ASTNode* argType = args.args[i]->node.VAR_DECL.type;
-                printf(" id: "STR_FMT"\n", STR_PRINT(argId));
-                printf(" ");
-                ASTNodePrint(argType, indent);
+            if(args.size > 0) {
+                genPrintHelper("    args: [\n");
+                for(u64 i = 0; i < args.size; ++i) {
+                    String argId = args.args[i]->node.VAR_DECL.identifier;
+                    ASTNode* argType = args.args[i]->node.VAR_DECL.type;
+
+                    genPrintHelper("        {id: "STR_FMT", type: %s},\n", STR_PRINT(argId), argType ? "type" : "null");
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    args: [],\n");
             }
             
             // statements
-            for(int i = 0; i < scope->stmts.size; i++){
-                for(int h = 0; h < indent + 1; h++) printf("  ");
-                printf("Statement %i\n", i + 1);
-                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            if(scope->stmts.size > 0) {
+                genPrintHelper("    statements: [\n");
+                for(u64 i = 0; i < scope->stmts.size; ++i) {
+                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    statements: [],\n");
             }
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_DECL: {
-            printf("VAR DECL:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL.identifier;
             ASTNode* type = node->node.VAR_DECL.type;
-            printf("id: "STR_FMT"\n", STR_PRINT(id));
-            ASTNodePrint(type, indent);
-            for(int h = 0; h < indent; h++) printf("  ");
+
+            genPrintHelper("VAR_DECL: {\n");
+            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    type: %s,\n", type ? "type" : "null");
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_DECL_ASSIGN: {
-            printf("VAR DECL ASSIGN:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_DECL_ASSIGN.identifier;
             ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
             ASTNode* expr = node->node.VAR_DECL_ASSIGN.expresion;
-            printf("id: "STR_FMT"\n", STR_PRINT(id));
-            ASTNodePrint(type, indent);
-            for(int h = 0; h < indent; h++) printf("  ");
-            printf("expr: \n");
+
+            genPrintHelper("VAR_DECL_ASSIGN: {\n");
+            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    type: %s,\n", type ? "type" : "null");
+            genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
+            printf(",\n");
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_REASSIGN: {
-            printf("VAR REASSIGN:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_REASSIGN.identifier;
             ASTNode* expr = node->node.VAR_REASSIGN.expresion;
-            printf("id: "STR_FMT"\n", STR_PRINT(id));
-            for(int h = 0; h < indent; h++) printf("  ");
-            printf("expr: \n");
+
+            genPrintHelper("VAR_REASSIGN: {\n");
+            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
+            printf(",\n");
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_CONST: {
-            printf("VAR CONST:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             String id = node->node.VAR_CONST.identifier;
             String value = node->node.VAR_CONST.value;
-            printf("id: "STR_FMT"\n", STR_PRINT(id));
-            for(int h = 0; h < indent; h++) printf("  ");
-            printf("value: "STR_FMT"\n", STR_PRINT(value));
+
+            genPrintHelper("VAR_CONST: {\n");
+            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    expr:"STR_FMT",\n", STR_PRINT(value));
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_RET: {
-            printf("RET:\n");
             ASTNode* expr = node->node.RET.expresion;
+
+            genPrintHelper("RET: {\n");
+            genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
+            printf(",\n");
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_IF: {
-            printf("IF:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             ASTNode* expr = node->node.IF.expresion;
             Scope* scope = node->node.IF.scope;
-            printf("expr:\n");
+
+            genPrintHelper("IF: {\n");
+            genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
+            printf(",\n");
 
             // statements
-            for(int i = 0; i < scope->stmts.size; i++){
-                for(int h = 0; h < indent + 1; h++) printf("  ");
-                printf("Statement %i\n", i + 1);
-                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            if(scope->stmts.size > 0) {
+                genPrintHelper("    statements: [\n");
+                for(u64 i = 0; i < scope->stmts.size; ++i) {
+                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    statements: [],\n");
             }
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_ELSE: {
-            printf("ELSE:\n");
+            genPrintHelper("ELSE: {\n");
             Scope* scope = node->node.ELSE.scope;
 
             // statements
-            for(int i = 0; i < scope->stmts.size; i++){
-                for(int h = 0; h < indent + 1; h++) printf("  ");
-                printf("Statement %i\n", i + 1);
-                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            if(scope->stmts.size > 0) {
+                genPrintHelper("    statements: [\n");
+                for(u64 i = 0; i < scope->stmts.size; ++i) {
+                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    statements: [],\n");
             }
         } break;
         case ASTNodeType_ELSE_IF: {
-            printf("ELSE_IF:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             ASTNode* expr = node->node.ELSE_IF.expresion;
             Scope* scope = node->node.ELSE_IF.scope;
-            printf("expr:\n");
+
+            genPrintHelper("ELSE_IF: {\n");
+            genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
+            printf(",\n");
 
             // statements
-            for(int i = 0; i < scope->stmts.size; i++){
-                for(int h = 0; h < indent + 1; h++) printf("  ");
-                printf("Statement %i\n", i + 1);
-                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            if(scope->stmts.size > 0) {
+                genPrintHelper("    statements: [\n");
+                for(u64 i = 0; i < scope->stmts.size; ++i) {
+                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    statements: [],\n");
             }
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_LOOP: {
-            printf("LOOP:\n");
-            for(int h = 0; h < indent; h++) printf("  ");
             ASTNode* expr = node->node.LOOP.expresion;
             Scope* scope = node->node.LOOP.scope;
-            printf("expr:\n");
+
+            genPrintHelper("LOOP: {\n");
+            genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
+            printf(",\n");
 
             // statements
-            for(int i = 0; i < scope->stmts.size; i++){
-                for(int h = 0; h < indent + 1; h++) printf("  ");
-                printf("Statement %i\n", i + 1);
-                ASTNodePrint(scope->stmts.statements[i], indent + 1);
+            if(scope->stmts.size > 0) {
+                genPrintHelper("    statements: [\n");
+                for(u64 i = 0; i < scope->stmts.size; ++i) {
+                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    statements: [],\n");
             }
-        } break;
-        case ASTNodeType_SYMBOL: {
-            String id = node->node.SYMBOL.identifier;
-            printf("RVALUE: "STR_FMT"\n", STR_PRINT(id));
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_FUNCTION_CALL: {
-            printf("FUNCTION CALL\n");
-            for(int h = 0; h < indent + 1; h++) printf("  ");
             String id = node->node.FUNCTION_CALL.identifier;
             Args args = node->node.FUNCTION_CALL.args;
-            printf("id: "STR_FMT"\n", STR_PRINT(id));
+
+            genPrintHelper("FUNCTION_CALL: {\n");
+            genPrintHelper("    id: "STR_FMT"\n", STR_PRINT(id));
 
             // args
-            for(int i = 0; i < args.size; i++){
-                for(int h = 0; h < indent + 1; h++) printf("  ");
-                printf("arg%i:\n", i + 1);
-                ASTNodePrint(args.args[i], indent + 1);
+            if(args.size > 0) {
+                genPrintHelper("    args: [\n");
+                for(u64 i = 0; i < args.size; i++){
+                    ASTNodePrint(args.args[i], indent + 1);
+                    printf(",\n");
+                }
+                genPrintHelper("],\n");
+            } else {
+                genPrintHelper("    args: [],\n");
             }
+            genPrintHelper("}\n");
         } break;
         case ASTNodeType_TYPE:{
-            printf("TYPE: ");
             Type type = node->node.TYPE.type;
             bool array = node->node.TYPE.array;
             int arraySize = node->node.TYPE.arraySize;
             bool dynamic = node->node.TYPE.dynamic;
-            printf("%s", TypeStr[type]);
-            if(array){
-                if(dynamic){
-                    printf("[]");
-                }else{
-                    printf("[%i]", arraySize);
-                }
-            }
-            printf("\n");
+            UNUSED(type);
+            UNUSED(array);
+            UNUSED(arraySize);
+            UNUSED(dynamic);
+
+            genPrintHelper("TYPE: not implemented\n");
+            
+            // printf("TYPE:");
+            // printf("%s", TypeStr[type]);
+            // if(array){
+            //     if(dynamic){
+            //         printf("[]");
+            //     }else{
+            //         printf("[%i]", arraySize);
+            //     }
+            // }
+            // printf("\n");
         } break;
     }
+#undef genPrintHelper
 }
 
 void ASTPrint(Scope* root){
-    for(int i = 0; i < root->stmts.size; i++){
-        printf("Statement %i\n", i + 1);
+    for(u64 i = 0; i < root->stmts.size; ++i) {
         ASTNodePrint(root->stmts.statements[i], 0);
     }
 }
