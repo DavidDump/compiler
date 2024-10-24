@@ -79,3 +79,5 @@ bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
     }
     return FALSE;
 }
+
+// TODO: when searching for a free slot wrap the index if it overflows

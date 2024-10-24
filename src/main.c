@@ -2,6 +2,7 @@
 #include <string.h> // strlen(), memcpy()
 #include <assert.h> // assert()
 
+#include "peWriter.h"
 #include "bytecode_x86.h"
 // #include "codegen.h"
 #include "types.h"
@@ -13,8 +14,8 @@
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
-String EntireFileRead(Arena* mem, u8* filePath){
-    FILE* f = fopen((char*)filePath, "rb");
+String EntireFileRead(Arena* mem, String filePath) {
+    FILE* f = fopen((char*)filePath.str, "rb");
     
     if(f){
         fseek(f, 0, SEEK_END);
@@ -31,7 +32,7 @@ String EntireFileRead(Arena* mem, u8* filePath){
         };
         return str;
     }else{
-        printf("[ERROR] Failed to open file: %s\n", filePath);
+        printf("[ERROR] Failed to open file: "STR_FMT"\n", STR_PRINT(filePath));
         return (String){0};
     }
 }
@@ -54,8 +55,8 @@ bool EntireFileWrite(const char* filePath, StringChain data){
     }
 }
 #else
-bool EntireFileWrite(u8* filePath, Buffer data) {
-    FILE* f = fopen((char*)filePath, "wb");
+bool EntireFileWrite(String filePath, Buffer data) {
+    FILE* f = fopen((char*)filePath.str, "wb");
 
     if(f) {
         size_t res = fwrite(data.mem, 1, data.size, f);
@@ -64,7 +65,7 @@ bool EntireFileWrite(u8* filePath, Buffer data) {
         if(res != data.size) return FALSE;
         return TRUE;
     } else {
-        printf("[ERROR] Failed to open file: %s\n", filePath);
+        printf("[ERROR] Failed to open file: "STR_FMT"\n", STR_PRINT(filePath));
         return FALSE;
     }
 }
@@ -90,14 +91,14 @@ int main(int argc, char** argv){
     bool printTokens = FALSE;
     bool printAST = FALSE;
 #endif // COMP_DEBUG
-    u8* inFilepath = 0;
-    u8* outFilepath = (u8*)"output.asm";
+    String inFilepath = {0};
+    String outFilepath = STR("output.asm");
     for(int i = 0; i < argc; i++){
         if(strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0){
-            outFilepath = (u8*)argv[i + 1];
+            outFilepath = STR(argv[i + 1]);
             i++;
         }else if(strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--input") == 0){
-            inFilepath = (u8*)argv[i + 1];
+            inFilepath = STR(argv[i + 1]);
             i++;
         }
 #ifdef COMP_DEBUG
@@ -116,7 +117,7 @@ int main(int argc, char** argv){
         }
     }
 
-    if(!inFilepath || !outFilepath){
+    if(inFilepath.length == 0 || outFilepath.length == 0){
         printf("[ERROR] Input filepath required\n");
         usage(argv[0]);
         exit(EXIT_FAILURE);
@@ -161,9 +162,7 @@ int main(int argc, char** argv){
     Arena readFileMem = {0}; // source file is stored in here
     String sourceRaw = EntireFileRead(&readFileMem, inFilepath);
 
-    u64 filenameLen = strlen((char*)inFilepath);
-    String filename = {.str = inFilepath, .length = filenameLen};
-    TokenArray tokens = Tokenize(sourceRaw, filename);
+    TokenArray tokens = Tokenize(sourceRaw, inFilepath);
 #ifdef COMP_DEBUG
     if(printTokens) TokensPrint(&tokens);
 #endif // COMP_DEBUG
@@ -174,15 +173,44 @@ int main(int argc, char** argv){
     if(printAST) ASTPrint(globalScope);
 #endif // COMP_DEBUG
 
-    Buffer bytecode = gen_x86_64_bytecode(globalScope);
+    GenContext bytecode = gen_x86_64_bytecode(globalScope);
 
-    if(StringEndsWith(STR(outFilepath), STR(".bin"))) {
-        if(!EntireFileWrite(outFilepath, bytecode)) {
-            printf("[ERROR] Failed to write output file: %s\n", outFilepath);
+    if(StringEndsWith(outFilepath, STR(".bin"))) {
+        if(!EntireFileWrite(outFilepath, bytecode.code)) {
+            printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);
         }
-    } else if(StringEndsWith(STR(outFilepath), STR(".exe"))) {
-        UNIMPLEMENTED("executable writing not finished yet");
+    } else if(StringEndsWith(outFilepath, STR(".exe"))) {
+        ImportNameToRva kernel32Functions[] = {
+            {.name = STR("ExitProcess"), .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
+            // {.name = "GetStdHandle", .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
+            // {.name = "ReadConsoleA", .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
+        };
+        
+        ImportLibrary libs[] = {
+            {
+                .dll = {.name = STR("kernel32.dll"), .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
+                .imageThunkRva = INVALID_ADDRESS,
+                .functions = kernel32Functions,
+                .functionCount = ARRAY_SIZE(kernel32Functions),
+            },
+        };
+        Buffer exeBytes = genExecutable(libs, ARRAY_SIZE(libs), bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
+        if(!EntireFileWrite(outFilepath, exeBytes)) {
+            printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        s64 index = StringLastIndexOf(outFilepath, '.');
+        String format = {0};
+        if(index >= 0) {
+            format.str = &outFilepath.str[index];
+            format.length = outFilepath.length - index;
+        } else {
+            format = STR("unknown");
+        }
+        printf("[ERROR] unsupported target format: "STR_FMT"\n", STR_PRINT(format));
+        exit(EXIT_FAILURE);
     }
 
 #if 0 // NOTE: tmp while doing typechecking
@@ -211,3 +239,7 @@ int main(int argc, char** argv){
 // then migrate the code, then build the next version and reapead until the code is up to date
 // this could be usefull later in development when standard libraries already exist and have to be updated
 // with syntax changes
+
+// TODO: maybe having an else and elseif ast node doesnt make sense
+// just store all the conditions and their coresponding scopes
+// in an array, and tag the node if it has an else/elseif block
