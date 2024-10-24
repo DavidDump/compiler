@@ -80,6 +80,9 @@ TokenArray Tokenize(String source, String filename) {
             if(endIndex >= source.length) break;
             u64 len = endIndex - startIndex;
             
+            value.str = &source.str[startIndex];
+            value.length = len;
+
             // compare keywords and types
             if(StringEqualsCstr(value, "return"))     type = TokenType_RETURN;
             else if(StringEqualsCstr(value, "if"))    type = TokenType_IF;
@@ -89,9 +92,6 @@ TokenArray Tokenize(String source, String filename) {
             else if(StringEqualsCstr(value, "false")) type = TokenType_BOOL_LITERAL;
             else if(isType(value))                    type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
-
-            value.str = &source.str[startIndex];
-            value.length = len;
         } else if(isNumber(c)) {
             // numbers
             u64 startIndex = i;
