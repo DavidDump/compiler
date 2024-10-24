@@ -140,7 +140,7 @@ StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr);
 StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args){
     StringChain result = {0};
 
-    for(int i = 0; i < args.size; i++){
+    for(u64 i = 0; i < args.size; ++i) {
         ASTNode* exprNode = args.args[i];
 
         StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
@@ -272,7 +272,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
     StringChain ifConditions = {0};
     StringChain ifBody = {0};
     int ifEndLabel = INVALID_IF_LABEL_COUNTER;
-    for(int i = 0; i < globalScope->stmts.size; i++){
+    for(u64 i = 0; i < globalScope->stmts.size; ++i) {
         ASTNode* node = globalScope->stmts.statements[i];
 
         switch(node->type){
@@ -367,7 +367,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 genSaveStack(ctx);
                 
                 // get args
-                for(int i = 0; i < args.size; i++){
+                for(u64 i = 0; i < args.size; ++i) {
                     String argId = args.args[i]->node.VAR_DECL.identifier;
                     ASTNode* argType = args.args[i]->node.VAR_DECL.type;
                     UNUSED(argType);

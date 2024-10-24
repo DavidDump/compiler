@@ -60,21 +60,21 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
 
 typedef struct _ASTNode ASTNode;
 
-typedef struct Args{
+typedef struct Args {
     // the type of this node has to be:
     // on FUNCTION_DEF  - VAR_DECL
     // on FUNCTION_CALL - INT_LIT or EXPRESION
     ASTNode** args;
-    int size;
-    int capacity;
+    u64 size;
+    u64 capacity;
 
     Arena mem;
 } Args;
 
-typedef struct StmtList{
+typedef struct StmtList {
     ASTNode** statements;
-    int size;
-    int capacity;
+    u64 size;
+    u64 capacity;
 
     Arena mem;
 } StmtList;
