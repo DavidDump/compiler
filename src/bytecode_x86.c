@@ -402,13 +402,12 @@ void genInstruction(GenContext* ctx, Instruction inst) {
     assert(FALSE);
 }
 
-#define gen_callExtern(_ctx_, _name_) _gen_callExtern(_ctx_, _name_, strlen(_name_))
-void _gen_callExtern(GenContext* ctx, u8* name, u64 size) {
+void gen_callExtern(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
     *buffer_allocate(&ctx->symbolsToPatch, AddrToPatch) = (AddrToPatch){
-        .name = (String){.str = name, .length = size},
+        .name = name,
         .offset = offset,
     };
 }
@@ -417,7 +416,7 @@ void gen_call(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
-    *buffer_allocate(&ctx->functionToPatch, AddrToPatch) = (AddrToPatch){
+    *buffer_allocate(&ctx->functionsToPatch, AddrToPatch) = (AddrToPatch){
         .name = name,
         .offset = offset,
     };
@@ -426,8 +425,7 @@ void gen_call(GenContext* ctx, String name) {
 // lea rax, [rip + 0xdeadbeef + sizeof(u64)] ; load data
 // mov rax, [rip + 0xdeadbeef]               ; load size
 // read the data field of the entry into reg register
-#define gen_DataInReg(_ctx_, _reg_, _name_) _gen_DataInReg(_ctx_, _reg_, _name_, strlen(_name_))
-void _gen_DataInReg(GenContext* ctx, Register reg, u8* name, u64 nameLen) {
+void _gen_DataInReg(GenContext* ctx, Register reg, String name) {
     // NOTE: the rip address get added to the patched address,
     // so adding the size of u64 offsets the address by 8,
     // meaning instead of reading from the data begining, where the size is stored,
@@ -435,20 +433,19 @@ void _gen_DataInReg(GenContext* ctx, Register reg, u8* name, u64 nameLen) {
     genInstruction(ctx, INST(lea, OP_REG(reg), OP_RIP(sizeof(u64))));
     int offset = ctx->code.size - 4;
     *buffer_allocate(&ctx->dataToPatch, AddrToPatch) = (AddrToPatch){
-        .name = (String){.str = name, .length = nameLen},
+        .name = name,
         .offset = offset,
     };
 }
 
 // read the size field of the entry into reg register
-#define gen_SizeInReg(_ctx_, _reg_, _name_) _gen_SizeInReg(_ctx_, _reg_, _name_, strlen(_name_))
-void _gen_SizeInReg(GenContext* ctx, Register reg, u8* name, u64 nameLen) {
+void _gen_SizeInReg(GenContext* ctx, Register reg, String name) {
     // NOTE: the rip address get added to the patched address,
     // the address gets added to 0 so in this case we read the size field of the entry
     genInstruction(ctx, INST(mov, OP_REG(reg), OP_RIP(0)));
     int offset = ctx->code.size - 4;
     *buffer_allocate(&ctx->dataToPatch, AddrToPatch) = (AddrToPatch){
-        .name = (String){.str = name, .length = nameLen},
+        .name = name,
         .offset = offset,
     };
 }
@@ -594,7 +591,7 @@ void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
 }
 
 // stackToRestore is the value set to the stack in the GenContext when generating a ret instruction
-void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
+void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool mainScope) {
     // TODO: cast
     for(u64 i = 0; i < (u64)scope->stmts.size; ++i) {
         ASTNode* node = scope->stmts.statements[i];
@@ -626,7 +623,8 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
                 // NOTE: would be usefull here to generating code into a separate buffer
                 // TODO: jump after function
                 // TODO: make the main entrypoint name customisable
-                if(StringEqualsCstr(id, "main")) ctx->entryPointOffset = ctx->code.size;
+                bool mainFunction = StringEqualsCstr(id, "main");
+                if(mainFunction) ctx->entryPointOffset = ctx->code.size;
 
                 genPush(ctx, RBP);
                 genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
@@ -659,7 +657,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
                 }
 
                 // function body
-                gen_x86_64_scope(ctx, scope, savedStack);
+                gen_x86_64_scope(ctx, scope, savedStack, mainFunction);
                 // TODO: the jump after function should end up here
             } break;
             case ASTNodeType_FUNCTION_CALL: {
@@ -717,9 +715,15 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
                 genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
                 ctx->stackPointer = stackToRestore;
                 genPop(ctx, RBP);
-                // NOTE: the {0} argument is to get rid of an annoying c warning, just using 0 is enough
-                //       this is used to indicate that the instruction has no operands
-                genInstruction(ctx, INST(ret, {0}));
+
+                if(mainScope) {
+                    genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
+                    gen_callExtern(ctx, STR("ExitProcess"));
+                } else {
+                    // NOTE: the {0} argument is to get rid of an annoying c warning, just using 0 is enough
+                    //       this is used to indicate that the instruction has no operands
+                    genInstruction(ctx, INST(ret, {0}));
+                }
             } break;
             case ASTNodeType_IF: {
                 ASTNode* next = node;
@@ -733,7 +737,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
                         gen_x86_64_condition(ctx, expr);
 
                         // body
-                        gen_x86_64_scope(ctx, scope, stackToRestore);
+                        gen_x86_64_scope(ctx, scope, stackToRestore, mainScope);
                         UNIMPLEMENTED("unfished, need out of order appending for instructions");
                     }
                 } while(next->type == ASTNodeType_IF || next->type == ASTNodeType_ELSE || next->type == ASTNodeType_ELSE_IF);
@@ -757,12 +761,18 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore) {
     }
 }
 
-Buffer gen_x86_64_bytecode(Scope* globalScope) {
+GenContext gen_x86_64_bytecode(Scope* globalScope) {
     GenContext ctx = {0};
     ctx.code = make_buffer(0x100, PAGE_READWRITE);
+
+    ctx.symbolsToPatch = make_buffer(0x100, PAGE_READWRITE);
+    ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE);
+    ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE);
+
     ctx.variables = hashmapInit(&ctx.mem, 0x1000);
     ctx.functions = hashmapInit(&ctx.mem, 0x1000);
     ctx.data  = hashmapDataInit(&ctx.mem, 0x1000);
-    gen_x86_64_scope(&ctx, globalScope, 0);
-    return ctx.code;
+    
+    gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
+    return ctx;
 }

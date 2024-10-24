@@ -42,7 +42,7 @@ typedef enum Scale {
     X8 = 3,
 } Scale;
 
-#import "bytecode_exe_common.h"
+#include "bytecode_exe_common.h"
 
 #define INVALID_ADDRESS 0xCAFEBABE
 #define SAVED_STACK_SIZE 255
@@ -51,16 +51,16 @@ typedef struct GenContext {
     Buffer code;
 
     // TODO: this is not good, me not like, make better
-    Buffer symbolsToPatch;  // AddrToPatch
-    Buffer dataToPatch;     // AddrToPatch
-    Buffer functionToPatch; // AddrToPatch
+    Buffer symbolsToPatch;   // AddrToPatch, external function call, variable or other symbol
+    Buffer functionsToPatch; // AddrToPatch, internal function call
+    Buffer dataToPatch;      // AddrToPatch, data defined in the .data section
 
     // u32 freeRegisterMask;
     s64 stackPointer;     // keeping track of the stack pointer for variables
     u64 entryPointOffset; // the offset from the begining of the code buffer to the entry point
 
     Hashmap variables; // value is the stack offset to the variable
-    Hashmap functions; // value is the offset to the begining of the function from the beginnig of the code buffer
+    Hashmap functions; // value is the offset to the begining of the function from the begining of the code buffer
     HashmapData data;  // value is a UserDataEntry
 } GenContext;
 
@@ -151,7 +151,7 @@ typedef struct Instruction {
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
-Buffer gen_x86_64_bytecode(Scope* globalScope);
+GenContext gen_x86_64_bytecode(Scope* globalScope);
 
 #endif // COMP_BYTECODE_H
 
