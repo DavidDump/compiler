@@ -75,9 +75,11 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
         expected_encoded_size += sizeof(IMAGE_IMPORT_DESCRIPTOR);
 
         // Data section
-        for(u64 h = 0; h < userData->size; ++h) {
-            KVPair_SD pair = userData->pair[h];
-            if(pair.key.length != 0) expected_encoded_size += pair.value.dataLen;
+        if(userData->size != 0) { // TODO: find out why the memory is corrupted
+            for(u64 h = 0; h < userData->capacity; ++h) {
+                KVPair_SD pair = userData->pair[h];
+                if(pair.key.length != 0) expected_encoded_size += pair.value.dataLen;
+            }
         }
     }
 
@@ -160,15 +162,17 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
     *buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR) = (IMAGE_IMPORT_DESCRIPTOR) {0};
 
     // Data Section
-    for(u64 i = 0; i < userData->size; ++i) {
-        KVPair_SD pair = userData->pair[i];
-        if(pair.key.length != 0) {
-            UserDataEntry* dataEntry = &userData->pair[i].value;
-            dataEntry->dataRVA = get_rva();
-            
-            buffer_append_u64(buffer, dataEntry->dataLen);
-            u8* bufferMem = buffer_allocate_size(buffer, dataEntry->dataLen);
-            memcpy(bufferMem, dataEntry->data, dataEntry->dataLen);
+    if(userData->size != 0) { // TODO: find out why the memory is corrupted
+        for(u64 i = 0; i < userData->capacity; ++i) {
+            KVPair_SD pair = userData->pair[i];
+            if(pair.key.length != 0) {
+                UserDataEntry* dataEntry = &userData->pair[i].value;
+                dataEntry->dataRVA = get_rva();
+                
+                buffer_append_u64(buffer, dataEntry->dataLen);
+                u8* bufferMem = buffer_allocate_size(buffer, dataEntry->dataLen);
+                memcpy(bufferMem, dataEntry->data, dataEntry->dataLen);
+            }
         }
     }
     
@@ -186,8 +190,8 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
 // dataToPatch is the locations where user defined data was refferenced, used for patching
 Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch) {
     // Sections
-    IMAGE_SECTION_HEADER sections[] = {
-        {
+    IMAGE_SECTION_HEADER sections[3] = {
+        [0] = {
             .Name = ".rdata",
             .Misc = {0},
             .VirtualAddress = 0,
@@ -195,7 +199,7 @@ Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer
             .PointerToRawData = 0,
             .Characteristics = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
         },
-        {
+        [1] = {
             .Name = ".text",
             .Misc = {0},
             .VirtualAddress = 0,
@@ -203,7 +207,6 @@ Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer
             .PointerToRawData = 0,
             .Characteristics = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE,
         },
-        {0}
     };
 
     IMAGE_SECTION_HEADER *rdata_section_header = &sections[0];
@@ -278,7 +281,7 @@ Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer
         .SizeOfHeapReserve = 0x100000,
         .SizeOfHeapCommit = 0x1000,
         .NumberOfRvaAndSizes = IMAGE_NUMBEROF_DIRECTORY_ENTRIES,
-        .DataDirectory = {0},
+        .DataDirectory = {{0}},
     };
     optional_header->DataDirectory[IAT_DIRECTORY_INDEX].VirtualAddress    = rdata_section.iatRva;
     optional_header->DataDirectory[IAT_DIRECTORY_INDEX].Size              = rdata_section.iatSize;
