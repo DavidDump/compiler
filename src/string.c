@@ -122,8 +122,7 @@ u64 StringToU64(String value) {
 u32 StringToU32(String value) {
     u32 result = 0;
 
-    // TODO: cast
-    for(u64 i = 0; i < (u64)value.length; ++i) {
+    for(u64 i = 0; i < value.length; ++i) {
         u8 c = value.str[i];
         assert('0' <= c && c <= '9' && "can only convert numbers");
         // if(result > UINT32_MAX / 10); // overflow
@@ -139,4 +138,11 @@ bool StringEndsWith(String str, String end) {
     if(str.length < end.length) return FALSE;
     if(StringEquals((String){.str = str.str + (str.length - end.length), .length = end.length}, end)) return TRUE;
     return FALSE;
+}
+
+s64 StringLastIndexOf(String str, u8 c) {
+    for(s64 i = (s64)str.length; i >= 0; --c) {
+        if(str.str[i] == c) return i;
+    }
+    return -1;
 }
