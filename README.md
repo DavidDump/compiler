@@ -2,19 +2,19 @@
 Natively compiled systems programing language for x86-64 architecture. Hobby project to learn assembly and compiler architecture.
 
 ## TODO
-- [ ] expression parsing
-- [ ] variable assignment
-- [ ] local variables
+- [x] expression parsing
+- [x] variable assignment
+- [x] local variables
 - [ ] global variables
 - [ ] local constants
 - [ ] global constants
 - [ ] `if` keyword
 - [ ] `loop` keyword
 - [ ] `using` keyword
-- [ ] global function declaration
+- [x] global function declaration
 - [ ] local function declaration
 - [ ] external function declaration
-- [ ] function envocation
+- [x] function envocation
 - [ ] structs
 - [ ] enums
 - [ ] typechecking
