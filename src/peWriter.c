@@ -335,6 +335,7 @@ Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer
     }
 
     // patch entry point
+    // TODO: path the virtual address of main
     optional_header->AddressOfEntryPoint = text_section_header->VirtualAddress;
 
     exe_buffer.size = text_section_header->PointerToRawData + text_section_header->SizeOfRawData;
