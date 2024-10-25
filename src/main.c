@@ -123,42 +123,6 @@ int main(int argc, char** argv){
         exit(EXIT_FAILURE);
     }
 
-    // types
-    TypeMapping typeMappings[] = {
-        {.type = TYPE_U8,     .symbol = StringFromCstrLit("u8")},
-        {.type = TYPE_U16,    .symbol = StringFromCstrLit("u16")},
-        {.type = TYPE_U32,    .symbol = StringFromCstrLit("u32")},
-        {.type = TYPE_U64,    .symbol = StringFromCstrLit("u64")},
-        {.type = TYPE_S8,     .symbol = StringFromCstrLit("s8")},
-        {.type = TYPE_S16,    .symbol = StringFromCstrLit("s16")},
-        {.type = TYPE_S32,    .symbol = StringFromCstrLit("s32")},
-        {.type = TYPE_S64,    .symbol = StringFromCstrLit("s64")},
-        {.type = TYPE_F32,    .symbol = StringFromCstrLit("f32")},
-        {.type = TYPE_F64,    .symbol = StringFromCstrLit("f64")},
-        {.type = TYPE_STRING, .symbol = StringFromCstrLit("string")},
-        {.type = TYPE_BOOL,   .symbol = StringFromCstrLit("bool")},
-        {.type = TYPE_VOID,   .symbol = StringFromCstrLit("void")},
-        
-        {.type = TYPE_S64,    .symbol = StringFromCstrLit("int")},
-        {.type = TYPE_F64,    .symbol = StringFromCstrLit("float")},
-    };
-    
-    OperatorInfo opInfo[] = {
-        {.symbol = StringFromCstrLit(">="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
-        {.symbol = StringFromCstrLit("<="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
-        {.symbol = StringFromCstrLit(">"),  .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
-        {.symbol = StringFromCstrLit("<"),  .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
-        {.symbol = StringFromCstrLit("!="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
-        {.symbol = StringFromCstrLit("=="), .precedence = 4, .behaviour = OP_TYPE_LOGICAL},
-        
-        {.symbol = StringFromCstrLit("+"), .precedence = 5,  .behaviour = OP_TYPE_ARITHMETIC},
-        {.symbol = StringFromCstrLit("-"), .precedence = 5,  .behaviour = OP_TYPE_ARITHMETIC},
-        {.symbol = StringFromCstrLit("*"), .precedence = 10, .behaviour = OP_TYPE_ARITHMETIC},
-        {.symbol = StringFromCstrLit("/"), .precedence = 10, .behaviour = OP_TYPE_ARITHMETIC},
-    };
-    UNUSED(opInfo);
-    UNUSED(typeMappings);
-
     Arena readFileMem = {0}; // source file is stored in here
     String sourceRaw = EntireFileRead(&readFileMem, inFilepath);
 
@@ -196,6 +160,8 @@ int main(int argc, char** argv){
             },
         };
         Buffer exeBytes = genExecutable(libs, ARRAY_SIZE(libs), bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
+        // genExecutable(bytecode.code, bytecode.entryPointOffset, libs, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
+        // genExecutable(bytecode, entryPointOffset, symbolsToImport, symbolsToPatch, userData, userDataToPatch)
         if(!EntireFileWrite(outFilepath, exeBytes)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);

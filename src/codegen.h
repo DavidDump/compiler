@@ -31,15 +31,9 @@ typedef struct GenContext {
     int intSize; // 8 for 64-bit, 4 for 32-bit
     IdentifierLocations idLoc;
     
-    TypeMapping* typeMappings;
-    int typeMappingsSize;
-    OperatorInfo* opInfo;
-    int opInfoSize;
-    
     Arena mem;
 } GenContext;
 
-GenContext GenContextInit(TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize);
 void appendIdLoc(IdentifierLocations* idLoc, String key, int value);
 int findIdLoc(IdentifierLocations* idLoc, String key);
 int digitsCount(int value);

@@ -16,6 +16,18 @@ void parseAddStatement(StmtList* list, ASTNode* node){
     list->statements[list->size++] = node;
 }
 
+void parseAddArg(Args* args, ASTNode* node){
+    // assert(node->type == ASTNodeType_VAR_DECL); // NOTE: read the Args struct for type info
+    if(args->size >= args->capacity){
+        size_t newCap = args->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        args->args = arena_realloc(&args->mem, args->args, args->capacity * sizeof(args->args[0]), newCap * sizeof(args->args[0]));
+        args->capacity = newCap;
+    }
+
+    args->args[args->size++] = node;
+}
+
 ASTNode* NodeInit(Arena* mem){
     ASTNode* node = arena_alloc(mem, sizeof(ASTNode));
     assert(node && "Failed to allocate AST node");
@@ -247,26 +259,14 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
         } break;
         case ASTNodeType_TYPE:{
             Type type = node->node.TYPE.type;
-            bool array = node->node.TYPE.array;
-            int arraySize = node->node.TYPE.arraySize;
-            bool dynamic = node->node.TYPE.dynamic;
-            UNUSED(type);
-            UNUSED(array);
-            UNUSED(arraySize);
-            UNUSED(dynamic);
-
-            genPrintHelper("TYPE: not implemented\n");
+            bool isArray = node->node.TYPE.isArray;
+            bool isDynamic = node->node.TYPE.isDynamic;
+            u64 arraySize = node->node.TYPE.arraySize;
             
-            // printf("TYPE:");
-            // printf("%s", TypeStr[type]);
-            // if(array){
-            //     if(dynamic){
-            //         printf("[]");
-            //     }else{
-            //         printf("[%i]", arraySize);
-            //     }
-            // }
-            // printf("\n");
+            printf("TYPE: {\n");
+            printf("    %s", TypeStr[type]);
+            if(isArray) isDynamic ? printf("[...]\n") : printf("[%llu]\n", arraySize);
+            printf("}\n");
         } break;
     }
 #undef genPrintHelper
@@ -516,18 +516,6 @@ void parseScopeAddChild(Scope* parent, Scope* child){
     parent->children[parent->childrenSize++] = child;
 }
 
-void parseAddArg(Args* args, ASTNode* node){
-    // assert(node->type == ASTNodeType_VAR_DECL); // NOTE: read the Args struct for type info
-    if(args->size >= args->capacity){
-        size_t newCap = args->capacity * 2;
-        if(newCap == 0) newCap = 1;
-        args->args = arena_realloc(&args->mem, args->args, args->capacity * sizeof(args->args[0]), newCap * sizeof(args->args[0]));
-        args->capacity = newCap;
-    }
-
-    args->args[args->size++] = node;
-}
-
 Scope* parseScopeInit(Arena* mem, Scope* parent){
     Scope* result = arena_alloc(mem, sizeof(Scope));
     result->parent = parent;
@@ -552,9 +540,79 @@ ASTNode* typeVoid(Arena* mem){
     ASTNode* node = NodeInit(mem);
     node->type = ASTNodeType_TYPE;
     node->node.TYPE.type = TYPE_VOID;
-    node->node.TYPE.array = FALSE;
+    node->node.TYPE.isArray = FALSE;
+    node->node.TYPE.isDynamic = FALSE;
     node->node.TYPE.arraySize = 0;
-    node->node.TYPE.dynamic = FALSE;
+    return node;
+}
+
+ASTNode* parseType(ParseContext* ctx, Arena* mem) {
+    Token tok = parseConsume(ctx);
+    if(tok.type != TokenType_TYPE) {
+        ERROR(tok.loc, "Variable declaration needs a valid type");
+    }
+
+    // TODO: this could be a hashmap with key `String` value `Type` and just look up the type there
+    Type type = TYPE_NONE;
+    if(StringEqualsCstr(tok.value, "u8")) {
+        type = TYPE_U8;
+    } else if(StringEqualsCstr(tok.value, "u16")) {
+        type = TYPE_U16;
+    } else if(StringEqualsCstr(tok.value, "u32")) {
+        type = TYPE_U32;
+    } else if(StringEqualsCstr(tok.value, "u64")) {
+        type = TYPE_U64;
+    } else if(StringEqualsCstr(tok.value, "s8")) {
+        type = TYPE_S8;
+    } else if(StringEqualsCstr(tok.value, "s16")) {
+        type = TYPE_S16;
+    } else if(StringEqualsCstr(tok.value, "s32")) {
+        type = TYPE_S32;
+    } else if(StringEqualsCstr(tok.value, "s64")) {
+        type = TYPE_S64;
+    } else if(StringEqualsCstr(tok.value, "f32")) {
+        type = TYPE_F32;
+    } else if(StringEqualsCstr(tok.value, "f64")) {
+        type = TYPE_F64;
+    } else if(StringEqualsCstr(tok.value, "string")) {
+        type = TYPE_STRING;
+    } else if(StringEqualsCstr(tok.value, "bool")) {
+        type = TYPE_BOOL;
+    } else if(StringEqualsCstr(tok.value, "void")) {
+        type = TYPE_VOID;
+    } else {
+        ERROR(tok.loc, "Unknown type");
+        // TODO: make this error print better
+    }
+    ASTNode* node = NodeInit(mem);
+    node->type = ASTNodeType_TYPE;
+    node->node.TYPE.type = type;
+    node->node.TYPE.isArray = FALSE;
+    node->node.TYPE.isDynamic = FALSE;
+    node->node.TYPE.arraySize = 0;
+
+    tok = parsePeek(ctx, 0);
+    if(tok.type != TokenType_LBRACKET) {
+        return node;
+    }
+    parseConsume(ctx); // '['
+    node->node.TYPE.isArray = TRUE;
+
+    tok = parseConsume(ctx);
+    if(tok.type == TokenType_TRIPLEDOT) {
+        node->node.TYPE.isDynamic = TRUE;
+    }else if(tok.type == TokenType_INT_LITERAL) {
+        u64 size = StringToU64(tok.value);
+        node->node.TYPE.arraySize = size;
+    }else{
+        ERROR(tok.loc, "Array needs a fixed size or '...' for dynamic size");
+    }
+
+    tok = parseConsume(ctx);
+    if(tok.type != TokenType_RBRACKET){
+        ERROR(tok.loc, "Expected closing pair to square bracket ']'");
+    }
+
     return node;
 }
 
@@ -615,12 +673,6 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     }
 
     return result;
-}
-
-ASTNode* parseType(ParseContext* ctx, Arena* mem) {
-    UNUSED(ctx);
-    UNUSED(mem);
-    UNIMPLEMENTED("parseType in not implemented yet");
 }
 
 Scope* Parse(TokenArray tokens, Arena* mem) {

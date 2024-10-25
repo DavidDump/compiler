@@ -1,15 +1,5 @@
 #include "codegen.h"
 
-GenContext GenContextInit(TypeMapping* typeMappings, int typeMappingsSize, OperatorInfo* opInfo, int opInfoSize){
-    GenContext ctx = {
-        .typeMappings = typeMappings,
-        .typeMappingsSize = typeMappingsSize,
-        .opInfo = opInfo,
-        .opInfoSize = opInfoSize,
-    };
-    return ctx;
-}
-
 void appendIdLoc(IdentifierLocations* idLoc, String key, int value){
     if(idLoc->size >= idLoc->capacity){
         size_t newCap = idLoc->capacity * 2;
@@ -266,6 +256,15 @@ StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, i
     return result;
 }
 
+bool genHelper_isOperatorArithmetic(String value) {
+    return (
+        StringEqualsCstr(value, "+") ||
+        StringEqualsCstr(value, "-") ||
+        StringEqualsCstr(value, "*") ||
+        StringEqualsCstr(value, "/")
+    );
+}
+
 #define INVALID_IF_LABEL_COUNTER -1
 StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, StringChain* dataSection){
     StringChain result = {0};
@@ -487,7 +486,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
 
                 // TODO: very scuffed way of finding if the expresion evaluates to a bool or an int
                 // this is temporary, should get removed when typechecking is added
-                if(exprNode->type == ASTNodeType_EXPRESION && getOperatorBehaviourType(ctx->opInfo, ctx->opInfoSize, exprNode->node.EXPRESION.operator) == OP_TYPE_ARITHMETIC){
+                if(exprNode->type == ASTNodeType_EXPRESION && genHelper_isOperatorArithmetic(exprNode->node.EXPRESION.operator)) {
                     // expr evaluates to bool
                     // do the loop while condition is true
                     int startLabel = ctx->labelCounter++;

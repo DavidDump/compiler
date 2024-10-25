@@ -167,10 +167,15 @@ typedef struct _ASTNode{
         } SYMBOL;
         struct TYPE {
             Type type;
-            
-            bool array;
-            int arraySize; // maybe ??
-            bool dynamic; // is the array dynamic
+
+            // NOTE: these maybe required later but for not all the information required about the type is in `Type type`
+            //       info about the signedness or the size in case of structs or enums can be queried for,
+            //       using functions like `typeSize()` or `typeBehaviour()`
+            // u64 size;       // size on the stack in bytes
+            // bool isSigned;  // signed or unsigned
+            bool isArray;   // single value or array of values
+            bool isDynamic; // dynamic or static array
+            u64 arraySize;  // size of static array
         } TYPE;
     } node;
 } ASTNode;
@@ -185,27 +190,8 @@ typedef struct Operator {
     s64 presedence;
 } Operator;
 
-// void parseAddStatement(StmtList* list, ASTNode* node);
-// ASTNode* NodeInit(Arena* mem);
-// void ASTNodePrint(ASTNode* node, int indent);
-// void ASTPrint(Scope* root);
-// int OpGetPrecedence(ParseContext* ctx, String op);
-// Token parseConsume(ParseContext* ctx);
-// Token parsePeek(ParseContext* ctx, int num);
-// bool parseScopeContainsSymbol(Scope* scope, String symbol);
-// bool parseCheckSemicolon(ParseContext* ctx);
-// void parseScopeAddChild(Scope* parent, Scope* child);
-// void parseAddArg(Args* args, ASTNode* node);
-// Scope* parseScopeInit(Arena* mem, Scope* parent);
-// void parseScopeAddSymbol(Scope* scope, String symbol);
-// ASTNode* parseType(ParseContext* ctx, Arena* mem);
-// Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope);
-// Scope* Parse(TokenArray tokens, Arena* mem);
-
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
-void parseAddArg(Args* args, ASTNode* node);
 ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
-ASTNode* parseType(ParseContext* ctx, Arena* mem);
 Scope* Parse(TokenArray tokens, Arena* mem);
 
 #if COMP_DEBUG

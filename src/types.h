@@ -1,8 +1,7 @@
 #ifndef COMP_TYPES_H
 #define COMP_TYPES_H
 
-#include "string.h"
-#include "arena.h"
+#include "common.h"
 
 typedef enum Type {
     TYPE_NONE,
@@ -48,37 +47,9 @@ static char* TypeStr[TYPE_COUNT + 1] = {
 };
 #pragma GCC diagnostic pop
 
-typedef struct TypeMapping {
-    Type type;
-    String symbol;
-    // int byteSize; // NOTE: maybe later
-} TypeMapping;
-
-typedef enum OperatorType {
-    OP_TYPE_NONE,
-    
-    // arithmetic operators take the same type inputs as lhs and rhs, and return the same type aswell: u8 + u8 = u8
-    OP_TYPE_ARITHMETIC,
-    // logical operators take two int, float, string or bool and always return bool: u8 < u8 = bool
-    OP_TYPE_LOGICAL,
-    
-    OP_TYPE_COUNT,
-} OperatorType;
-
-typedef struct OperatorInfo {
-    String symbol;
-    int precedence;
-    OperatorType behaviour;
-} OperatorInfo;
-
-// void addType(TypeInformation* info, TypeDefinition def);
-// void addOperator(OperatorInformation* info, OperatorDefinition def);
-// TypeDefinition TypeDefinitionInit(String symbol, int byteSize);
-// OperatorDefinition OperatorDefinitionInit(String symbol, int precedence, TypeDefinition ret, TypeDefinition lhs, TypeDefinition rhs);
-// bool containsOp(OperatorInformation opInfo, String op, OperatorDefinition* result);
-
-Type mapFromSymbolToType(TypeMapping* mappings, int mappingsSize, String symbol);
-OperatorType getOperatorBehaviourType(OperatorInfo* opInfo, int opInfoSize, String symbol);
+// Type mapFromSymbolToType(TypeMapping* mappings, int mappingsSize, String symbol);
+// OperatorType getOperatorBehaviourType(OperatorInfo* opInfo, int opInfoSize, String symbol);
+u64 typeSize(Type type); // assert TYPE_COUNT in these types of functions
 
 #endif // COMP_TYPES_H
 
