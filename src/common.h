@@ -11,7 +11,7 @@ typedef int bool;
 #define UNIMPLEMENTED(x) printf("[NOT IMPLEMENTED] %s:%i: %s\n", __FILE__, __LINE__, (x)), exit(EXIT_FAILURE)
 #define UNREACHABLE(x) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (x)), exit(EXIT_FAILURE)
 #define UNUSED(x) (void)(x)
-#define ERROR(loc, msg) printf("[ERROR] "STR_FMT":%i:%i %s\n", STR_PRINT(loc.filename), (loc).line, (loc).collum, msg), exit(EXIT_FAILURE)
+#define ERROR(loc, msg) printf("[ERROR] "STR_FMT":%i:%i %s\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, msg), exit(EXIT_FAILURE)
 
 typedef int8_t  s8;
 typedef int16_t s16;
