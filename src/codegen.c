@@ -531,6 +531,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             case ASTNodeType_ELSE:
             case ASTNodeType_ELSE_IF:
             case ASTNodeType_BINARY_EXPRESSION:
+            case ASTNodeType_UNARY_EXPRESSION:
             case ASTNodeType_INT_LIT:
             case ASTNodeType_FLOAT_LIT:
             case ASTNodeType_STRING_LIT:

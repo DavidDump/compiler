@@ -552,7 +552,7 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
             genInstruction(ctx, INST(div, OP_REG(RCX)));
         }
     } else {
-        printf("[ERROR] Unknown ASTNodeType in epxression generator: %s\n", ASTNodeTypeStr[expr->type]);
+        printf("[ERROR] Unknown ASTNodeType in expression generator: %s\n", ASTNodeTypeStr[expr->type]);
         exit(EXIT_FAILURE);
     }
 }
@@ -749,6 +749,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             case ASTNodeType_ELSE:
             case ASTNodeType_ELSE_IF:
             case ASTNodeType_BINARY_EXPRESSION:
+            case ASTNodeType_UNARY_EXPRESSION:
             case ASTNodeType_INT_LIT:
             case ASTNodeType_FLOAT_LIT:
             case ASTNodeType_STRING_LIT:
