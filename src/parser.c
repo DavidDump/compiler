@@ -72,6 +72,11 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             printf(" "STR_FMT, STR_PRINT(op));
             ASTNodePrint(node->node.BINARY_EXPRESSION.rhs, indent + 1);
         } break;
+        case ASTNodeType_UNARY_EXPRESSION: {
+            String op = node->node.UNARY_EXPRESSION.operator;
+            printf(" "STR_FMT, STR_PRINT(op));
+            ASTNodePrint(node->node.UNARY_EXPRESSION.expr, indent + 1);
+        } break;
         case ASTNodeType_FUNCTION_DEF: {
             String id = node->node.FUNCTION_DEF.identifier;
             ASTNode* retType = node->node.FUNCTION_DEF.type;
@@ -421,18 +426,26 @@ bool parseIsNumber(Token next) {
     return (next.type == TokenType_INT_LITERAL || next.type == TokenType_DOT);
 }
 
-#if 0
 // NOTE: for now the only unary prefix operator is: '-'
 bool isUnaryOperator(Token next) {
     return (next.type == TokenType_SUB);
 }
-#endif
+
+// NOTE: untested
+ASTNode* makeUnary(ParseContext* ctx, Arena* mem, Token next) {
+    ASTNode* result = NodeInit(mem);
+    result->type = ASTNodeType_UNARY_EXPRESSION;
+    result->node.UNARY_EXPRESSION.operator = next.value;
+    result->node.UNARY_EXPRESSION.expr = parseLeaf(ctx, mem);
+    return result;
+}
 
 ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
     
     if(isFunction(ctx, next))               return makeFunction(ctx, mem, next);
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
+    if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);

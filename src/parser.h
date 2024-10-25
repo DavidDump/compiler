@@ -199,6 +199,7 @@ typedef struct Operator {
 
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
 ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
+ASTNode* parseLeaf(ParseContext* ctx, Arena* mem);
 Scope* Parse(TokenArray tokens, Arena* mem);
 
 #if COMP_DEBUG
