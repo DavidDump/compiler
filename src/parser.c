@@ -80,7 +80,9 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
 
             genPrintHelper("FUNCTION_DEF: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
-            genPrintHelper("    type: %s,\n", retType ? "type" : "null");
+            genPrintHelper("    type: ");
+            ASTNodePrint(retType, indent);
+            printf(",\n");
 
             // args
             if(args.size > 0) {
@@ -89,7 +91,9 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
                     String argId = args.args[i]->node.VAR_DECL.identifier;
                     ASTNode* argType = args.args[i]->node.VAR_DECL.type;
 
-                    genPrintHelper("        {id: "STR_FMT", type: %s},\n", STR_PRINT(argId), argType ? "type" : "null");
+                    genPrintHelper("        {id: "STR_FMT", type: ", STR_PRINT(argId));
+                    ASTNodePrint(argType, indent);
+                    printf("},\n");
                 }
                 genPrintHelper("    ],\n");
             } else {
@@ -114,7 +118,9 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
 
             genPrintHelper("VAR_DECL: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
-            genPrintHelper("    type: %s,\n", type ? "type" : "null");
+            genPrintHelper("    type: ");
+            ASTNodePrint(type, indent);
+            printf(",\n");
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_DECL_ASSIGN: {
@@ -124,7 +130,9 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
 
             genPrintHelper("VAR_DECL_ASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
-            genPrintHelper("    type: %s,\n", type ? "type" : "null");
+            genPrintHelper("    type: ");
+            ASTNodePrint(type, indent);
+            printf(",\n");
             genPrintHelper("    expr:");
             ASTNodePrint(expr, indent + 1);
             printf(",\n");
@@ -263,10 +271,8 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             bool isDynamic = node->node.TYPE.isDynamic;
             u64 arraySize = node->node.TYPE.arraySize;
             
-            printf("TYPE: {\n");
-            printf("    %s", TypeStr[type]);
-            if(isArray) isDynamic ? printf("[...]\n") : printf("[%llu]\n", arraySize);
-            printf("}\n");
+            printf("%s", TypeStr[type]);
+            if(isArray) isDynamic ? printf("[...]") : printf("[%llu]", arraySize);
         } break;
     }
 #undef genPrintHelper
