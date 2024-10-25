@@ -28,7 +28,7 @@ main :: (args: string[]) -> u8 {
     }
     asd : asd = {.foo = 1, .bar = 2, .baz = 3}; // member initializers, type required
 
-    // loop can have both expresions that evaluate to integers or booleans
+    // loop can have both expressions that evaluate to integers or booleans
     // in the case of booleans the loop will keep going while true
     // in the case of integers the loop will to n number on iterations
     // this may be changed later if inconvenient to use

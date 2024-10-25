@@ -472,7 +472,7 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
     // TODO: cast
     for(u64 i = 0; i < (u64)args.size; ++i) {
         ASTNode* arg = args.args[i];
-        assert(arg->type == ASTNodeType_INT_LIT || arg->type == ASTNodeType_EXPRESION);
+        assert(arg->type == ASTNodeType_INT_LIT || arg->type == ASTNodeType_BINARY_EXPRESSION);
 
         gen_x86_64_expression(ctx, arg);
         if(i == 0) {
@@ -516,10 +516,10 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
         genInstruction(ctx, inst);
     } else if(expr->type == ASTNodeType_FUNCTION_CALL) {
         gen_x86_64_func_call(ctx, expr);
-    } else if(expr->type == ASTNodeType_EXPRESION) {
-        ASTNode* lhs = expr->node.EXPRESION.lhs;
-        String operator = expr->node.EXPRESION.operator;
-        ASTNode* rhs = expr->node.EXPRESION.rhs;
+    } else if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
+        ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
+        String operator = expr->node.BINARY_EXPRESSION.operator;
+        ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but than again what do i know
         if(StringEqualsCstr(operator, "+")) {
@@ -560,10 +560,10 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
 void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
-    assert(expr->type == ASTNodeType_EXPRESION);
-    ASTNode* rhs = expr->node.EXPRESION.rhs;
-    ASTNode* lhs = expr->node.EXPRESION.lhs;
-    String op = expr->node.EXPRESION.operator;
+    assert(expr->type == ASTNodeType_BINARY_EXPRESSION);
+    ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
+    ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
+    String op = expr->node.BINARY_EXPRESSION.operator;
 
     gen_x86_64_expression(ctx, rhs);
     genPush(ctx, RAX);
@@ -604,7 +604,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             } break;
 
             case ASTNodeType_VAR_DECL_ASSIGN: {
-                ASTNode* exprNode = node->node.VAR_DECL_ASSIGN.expresion;
+                ASTNode* exprNode = node->node.VAR_DECL_ASSIGN.expr;
                 String id = node->node.VAR_DECL_ASSIGN.identifier;
                 ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
                 UNUSED(type);
@@ -675,7 +675,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             } break;
             case ASTNodeType_VAR_REASSIGN: {
                 String id = node->node.VAR_REASSIGN.identifier;
-                ASTNode* exprNode = node->node.VAR_REASSIGN.expresion;
+                ASTNode* exprNode = node->node.VAR_REASSIGN.expr;
 
                 gen_x86_64_expression(ctx, exprNode);
 
@@ -709,7 +709,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             } break;
             case ASTNodeType_RET: {
                 // NOTE: dead code elimination, currently internal stack underflows if there is more than one return in a add
-                ASTNode* expr = node->node.RET.expresion;
+                ASTNode* expr = node->node.RET.expr;
 
                 gen_x86_64_expression(ctx, expr);
                 genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
@@ -730,7 +730,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 do {
                     if(next->type != ASTNodeType_IF) i++;
                     if(next->type == ASTNodeType_IF) {
-                        ASTNode* expr = next->node.IF.expresion;
+                        ASTNode* expr = next->node.IF.expr;
                         Scope* scope = next->node.IF.scope;
 
                         // conditions
@@ -748,7 +748,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             
             case ASTNodeType_ELSE:
             case ASTNodeType_ELSE_IF:
-            case ASTNodeType_EXPRESION:
+            case ASTNodeType_BINARY_EXPRESSION:
             case ASTNodeType_INT_LIT:
             case ASTNodeType_FLOAT_LIT:
             case ASTNodeType_STRING_LIT:

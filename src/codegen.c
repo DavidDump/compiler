@@ -125,7 +125,7 @@ StringChain gen_win_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
 }
 #endif
 
-StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr);
+StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr);
 
 StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args){
     StringChain result = {0};
@@ -133,7 +133,7 @@ StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args)
     for(u64 i = 0; i < args.size; ++i) {
         ASTNode* exprNode = args.args[i];
 
-        StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+        StringChain expr = gen_win_x86_64_nasm_expression(ctx, exprNode);
         StringChainAppendChain(&result, &ctx->mem, expr);
         if(i == 0){
             // first arg
@@ -158,7 +158,7 @@ StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args)
     return result;
 }
 
-StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
+StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     // TODO: for now hardcode + operator
     if(expr->type == ASTNodeType_INT_LIT){
@@ -177,39 +177,39 @@ StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
         }else{
             genChainPrintf(&result, &ctx->mem, "    mov rax, [rbp - %i * %i]\n", loc, ctx->intSize);
         }
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "+")){
-        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "+")){
+        StringChain lhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.rhs);
 
-        StringChainAppendChain(&result, &ctx->mem, lhs);       // expresion ends up in rax
+        StringChainAppendChain(&result, &ctx->mem, lhs);       // expression ends up in rax
         gen_win_x86_64_nasm_push(ctx, &result, "rax");
-        StringChainAppendChain(&result, &ctx->mem, rhs);       // expresion ends up in rax
+        StringChainAppendChain(&result, &ctx->mem, rhs);       // expression ends up in rax
         gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    add rax, rcx\n");
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "-")){
-        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "-")){
+        StringChain lhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
         gen_win_x86_64_nasm_push(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, lhs);
         gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    sub rax, rcx\n");
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "*")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "*")){
         // NOTE: mul rcx means rax = rax * rcx
-        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain lhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, lhs);
         gen_win_x86_64_nasm_push(ctx, &result, "rax");
         StringChainAppendChain(&result, &ctx->mem, rhs);
         gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    mul rcx\n");
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "/")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "/")){
         // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
         // div rcx means rax = rax / rcx remainder is rdx
-        StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-        StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+        StringChain lhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.lhs);
+        StringChain rhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.rhs);
 
         StringChainAppendChain(&result, &ctx->mem, rhs);
         gen_win_x86_64_nasm_push(ctx, &result, "rax");
@@ -218,7 +218,7 @@ StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr){
         gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
         genChainPrintf(&result, &ctx->mem, "    div rcx\n");
     }else{
-        printf("[ERROR] Unknown operator: "STR_FMT"\n", STR_PRINT(expr->node.EXPRESION.operator));
+        printf("[ERROR] Unknown operator: "STR_FMT"\n", STR_PRINT(expr->node.BINARY_EXPRESSION.operator));
         exit(EXIT_FAILURE);
     }
 
@@ -230,8 +230,8 @@ StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, i
     // it doesnt need to be moved into a register as its already there
     StringChain result = {0};
 
-    StringChain lhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.lhs);
-    StringChain rhs = gen_win_x86_64_nasm_expresion(ctx, expr->node.EXPRESION.rhs);
+    StringChain lhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.lhs);
+    StringChain rhs = gen_win_x86_64_nasm_expression(ctx, expr->node.BINARY_EXPRESSION.rhs);
 
     StringChainAppendChain(&result, &ctx->mem, rhs);
     gen_win_x86_64_nasm_push(ctx, &result, "rax");
@@ -239,17 +239,17 @@ StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, i
     gen_win_x86_64_nasm_pop(ctx, &result, "rcx");
     genChainPrintf(&result, &ctx->mem, "    cmp rax, rcx\n");
     
-    if(StringEqualsCstr(expr->node.EXPRESION.operator, "==")){
+    if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "==")){
         genChainPrintf(&result, &ctx->mem, "    je .L%i\n", label);
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "!=")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "!=")){
         genChainPrintf(&result, &ctx->mem, "    jne .L%i\n", label);
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "<")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "<")){
         genChainPrintf(&result, &ctx->mem, "    jl .L%i\n", label);
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, ">")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, ">")){
         genChainPrintf(&result, &ctx->mem, "    jg .L%i\n", label);
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, "<=")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, "<=")){
         genChainPrintf(&result, &ctx->mem, "    jle .L%i\n", label);
-    }else if(StringEqualsCstr(expr->node.EXPRESION.operator, ">=")){
+    }else if(StringEqualsCstr(expr->node.BINARY_EXPRESSION.operator, ">=")){
         genChainPrintf(&result, &ctx->mem, "    jge .L%i\n", label);
     }
 
@@ -282,12 +282,12 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             } break;
 
             case ASTNodeType_VAR_DECL_ASSIGN: {
-                ASTNode* exprNode = node->node.VAR_DECL_ASSIGN.expresion;
+                ASTNode* exprNode = node->node.VAR_DECL_ASSIGN.expr;
                 String id = node->node.VAR_DECL_ASSIGN.identifier;
                 ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
                 UNUSED(type);
                 
-                StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+                StringChain expr = gen_win_x86_64_nasm_expression(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
 
                 // store location in a hashmap with the symbol identifier as a key
@@ -315,9 +315,9 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             } break;
             case ASTNodeType_VAR_REASSIGN: {
                 String id = node->node.VAR_REASSIGN.identifier;
-                ASTNode* exprNode = node->node.VAR_REASSIGN.expresion;
+                ASTNode* exprNode = node->node.VAR_REASSIGN.expr;
 
-                StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+                StringChain expr = gen_win_x86_64_nasm_expression(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
 
                 int loc = findIdLoc(&ctx->idLoc, id);
@@ -336,9 +336,9 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             } break;
             case ASTNodeType_RET: {
                 // NOTE: dead code elimination, currently internal stack underflows if there is more than one return in a add
-                ASTNode* exprNode = node->node.RET.expresion;
+                ASTNode* exprNode = node->node.RET.expr;
                 
-                StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+                StringChain expr = gen_win_x86_64_nasm_expression(ctx, exprNode);
                 StringChainAppendChain(&result, &ctx->mem, expr);
 
                 genChainPrintf(&result, &ctx->mem, "    mov rsp, rbp\n");
@@ -411,7 +411,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 do{
                     if(next->type != ASTNodeType_IF) i++;
                     if(next->type == ASTNodeType_IF){
-                        ASTNode* exprNode = next->node.IF.expresion;
+                        ASTNode* exprNode = next->node.IF.expr;
                         Scope* scope = next->node.IF.scope;
 
                         // conditions
@@ -432,7 +432,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
 
                         StringChainAppendChain(&ifConditions, &ctx->mem, body);
                     }else if(next->type == ASTNodeType_ELSE_IF){
-                        ASTNode* exprNode = next->node.ELSE_IF.expresion;
+                        ASTNode* exprNode = next->node.ELSE_IF.expr;
                         Scope* scope = next->node.ELSE_IF.scope;
 
                         // condition
@@ -479,14 +479,14 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                 StringChainAppendChain(&result, &ctx->mem, funcCall);
             } break;
             case ASTNodeType_LOOP: {
-                ASTNode* exprNode = node->node.LOOP.expresion;
+                ASTNode* exprNode = node->node.LOOP.expr;
                 Scope* scope = node->node.LOOP.scope;
 
                 StringChain body = generate_win_x86_64_nasm_scope(ctx, scope, dataSection);
 
-                // TODO: very scuffed way of finding if the expresion evaluates to a bool or an int
+                // TODO: very scuffed way of finding if the expression evaluates to a bool or an int
                 // this is temporary, should get removed when typechecking is added
-                if(exprNode->type == ASTNodeType_EXPRESION && genHelper_isOperatorArithmetic(exprNode->node.EXPRESION.operator)) {
+                if(exprNode->type == ASTNodeType_BINARY_EXPRESSION && genHelper_isOperatorArithmetic(exprNode->node.BINARY_EXPRESSION.operator)) {
                     // expr evaluates to bool
                     // do the loop while condition is true
                     int startLabel = ctx->labelCounter++;
@@ -502,13 +502,13 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
                     StringChainAppendChain(&result, &ctx->mem, body);
                     genChainPrintf(&result, &ctx->mem, "    jmp .L%i\n", conditionLabel);
                     genChainPrintf(&result, &ctx->mem, ".L%i:\n", endLabel);
-                }else{
+                } else {
                     // expr is int litaral or evaluates to int
                     // do the loop n times
                     int startLabel = ctx->labelCounter++;
                     int endLabel = ctx->labelCounter++;
 
-                    StringChain expr = gen_win_x86_64_nasm_expresion(ctx, exprNode);
+                    StringChain expr = gen_win_x86_64_nasm_expression(ctx, exprNode);
 
                     int savedStack = ctx->stack;
                     StringChainAppendChain(&result, &ctx->mem, expr);
@@ -530,7 +530,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
 
             case ASTNodeType_ELSE:
             case ASTNodeType_ELSE_IF:
-            case ASTNodeType_EXPRESION:
+            case ASTNodeType_BINARY_EXPRESSION:
             case ASTNodeType_INT_LIT:
             case ASTNodeType_FLOAT_LIT:
             case ASTNodeType_STRING_LIT:

@@ -66,11 +66,11 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
 
             printf(" "STR_FMT, STR_PRINT(id));
         } break;        
-        case ASTNodeType_EXPRESION: {
-            String op = node->node.EXPRESION.operator;
-            ASTNodePrint(node->node.EXPRESION.lhs, indent + 1);
+        case ASTNodeType_BINARY_EXPRESSION: {
+            String op = node->node.BINARY_EXPRESSION.operator;
+            ASTNodePrint(node->node.BINARY_EXPRESSION.lhs, indent + 1);
             printf(" "STR_FMT, STR_PRINT(op));
-            ASTNodePrint(node->node.EXPRESION.rhs, indent + 1);
+            ASTNodePrint(node->node.BINARY_EXPRESSION.rhs, indent + 1);
         } break;
         case ASTNodeType_FUNCTION_DEF: {
             String id = node->node.FUNCTION_DEF.identifier;
@@ -126,7 +126,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
         case ASTNodeType_VAR_DECL_ASSIGN: {
             String id = node->node.VAR_DECL_ASSIGN.identifier;
             ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
-            ASTNode* expr = node->node.VAR_DECL_ASSIGN.expresion;
+            ASTNode* expr = node->node.VAR_DECL_ASSIGN.expr;
 
             genPrintHelper("VAR_DECL_ASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
@@ -140,7 +140,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
         } break;
         case ASTNodeType_VAR_REASSIGN: {
             String id = node->node.VAR_REASSIGN.identifier;
-            ASTNode* expr = node->node.VAR_REASSIGN.expresion;
+            ASTNode* expr = node->node.VAR_REASSIGN.expr;
 
             genPrintHelper("VAR_REASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
@@ -159,7 +159,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_RET: {
-            ASTNode* expr = node->node.RET.expresion;
+            ASTNode* expr = node->node.RET.expr;
 
             genPrintHelper("RET: {\n");
             genPrintHelper("    expr:");
@@ -168,7 +168,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_IF: {
-            ASTNode* expr = node->node.IF.expresion;
+            ASTNode* expr = node->node.IF.expr;
             Scope* scope = node->node.IF.scope;
 
             genPrintHelper("IF: {\n");
@@ -204,7 +204,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             }
         } break;
         case ASTNodeType_ELSE_IF: {
-            ASTNode* expr = node->node.ELSE_IF.expresion;
+            ASTNode* expr = node->node.ELSE_IF.expr;
             Scope* scope = node->node.ELSE_IF.scope;
 
             genPrintHelper("ELSE_IF: {\n");
@@ -225,7 +225,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_LOOP: {
-            ASTNode* expr = node->node.LOOP.expresion;
+            ASTNode* expr = node->node.LOOP.expr;
             Scope* scope = node->node.LOOP.scope;
 
             genPrintHelper("LOOP: {\n");
@@ -312,10 +312,10 @@ bool parseScopeContainsSymbol(Scope* scope, String symbol){
 
 ASTNode* makeBinary(Arena* mem, ASTNode* left, Token op, ASTNode* right) {
     ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_EXPRESION;
-    node->node.EXPRESION.lhs = left;
-    node->node.EXPRESION.rhs = right;
-    node->node.EXPRESION.operator = op.value;
+    node->type = ASTNodeType_BINARY_EXPRESSION;
+    node->node.BINARY_EXPRESSION.lhs = left;
+    node->node.BINARY_EXPRESSION.rhs = right;
+    node->node.BINARY_EXPRESSION.operator = op.value;
     return node;
 }
 
@@ -420,6 +420,13 @@ bool isFunction(ParseContext* ctx, Token next) {
 bool parseIsNumber(Token next) {
     return (next.type == TokenType_INT_LITERAL || next.type == TokenType_DOT);
 }
+
+#if 0
+// NOTE: for now the only unary prefix operator is: '-'
+bool isUnaryOperator(Token next) {
+    return (next.type == TokenType_SUB);
+}
+#endif
 
 ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
@@ -681,6 +688,33 @@ Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
     return result;
 }
 
+#if 0
+typedef struct ExrpressionTypeResult {
+    Type type;
+    bool isNegative;
+} ExrpressionTypeResult;
+
+ExrpressionTypeResult parseGetTypeOfExpression(ParseContext* ctx, ASTNode* expr) {
+    if(expr->type == ASTNodeType_INT_LIT) {
+        // ...
+    } else if(expr->type == ASTNodeType_FLOAT_LIT) {
+        // ...
+    } else if(expr->type == ASTNodeType_STRING_LIT) {
+        // ...
+    } else if(expr->type == ASTNodeType_BOOL_LIT) {
+        // ...
+    } else if(expr->type == ASTNodeType_SYMBOL) {
+        // ...
+    } else if(expr->type == ASTNodeType_FUNCTION_CALL) {
+        // ...
+    } else if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
+        // ...
+    } else {
+        UNREACHABLE("called parseGetTypeOfExpression() on not an expression");
+    }
+}
+#endif
+
 Scope* Parse(TokenArray tokens, Arena* mem) {
     ParseContext ctx2 = {.tokens = tokens};
     ParseContext* ctx = &ctx2;
@@ -698,7 +732,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
             case TokenType_RETURN: {
                 ASTNode* node = NodeInit(mem);
                 node->type = ASTNodeType_RET;
-                node->node.RET.expresion = parseExpression(ctx, mem);
+                node->node.RET.expr = parseExpression(ctx, mem);
                 
                 // Check for semicolon
                 if(parseCheckSemicolon(ctx)){
@@ -714,9 +748,13 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                     node->type = ASTNodeType_VAR_DECL_ASSIGN;
                     node->node.VAR_DECL_ASSIGN.identifier = t.value;
                     ASTNode* expr = parseExpression(ctx, mem);
-                    node->node.VAR_DECL_ASSIGN.expresion = expr;
+                    node->node.VAR_DECL_ASSIGN.expr = expr;
 
-                    // TODO: do this in the typechecking phase
+                    // TODO: this function can only be called after the second pass,
+                    //       because ASTNodeType_SYMBOL only get its type once all functions are parsed,
+                    //       so expressions can also only be typed on the second pass,
+                    //       the only variables that can get a type are the ones explicitly given one and not inferred
+                    node->node.VAR_DECL_ASSIGN.type = typeVoid(mem);
                     // node->node.VAR_DECL_ASSIGN.type = parseGetTypeOfExpression(ctx, mem, expr);
                     
                     // TODO: add the variable to the symbol table
@@ -744,7 +782,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                         parseConsume(ctx); // =
                         
                         node->type = ASTNodeType_VAR_DECL_ASSIGN;
-                        node->node.VAR_DECL_ASSIGN.expresion = parseExpression(ctx, mem);
+                        node->node.VAR_DECL_ASSIGN.expr = parseExpression(ctx, mem);
                         node->node.VAR_DECL_ASSIGN.identifier = identifier.value;
                         node->node.VAR_DECL_ASSIGN.type = type;
                     }else{
@@ -763,7 +801,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                     ASTNode* node = NodeInit(mem);
                     node->type = ASTNodeType_VAR_REASSIGN;
                     node->node.VAR_REASSIGN.identifier = t.value;
-                    node->node.VAR_REASSIGN.expresion = parseExpression(ctx, mem);
+                    node->node.VAR_REASSIGN.expr = parseExpression(ctx, mem);
 
                     // TODO: should look up in the symbol table if the symbol is already defined
                     // since functions can be defined after use this can only be done on the second pass
@@ -786,7 +824,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                         ASTNode* node = NodeInit(mem);
                         node->type = ASTNodeType_VAR_CONST;
                         node->node.VAR_CONST.identifier = t.value;
-                        // TODO: this should be an expresion but only if it is evaluatable during compile time
+                        // TODO: this should be an expression but only if it is evaluatable during compile time
                         parseConsume(ctx);
                         node->node.VAR_CONST.value = next.value;
 
@@ -862,7 +900,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                 // if block
                 ASTNode* node = NodeInit(mem);
                 node->type = ASTNodeType_IF;
-                node->node.IF.expresion = parseExpression(ctx, mem);
+                node->node.IF.expr = parseExpression(ctx, mem);
                 
                 Token next = parsePeek(ctx, 0);
                 if(next.type != TokenType_LSCOPE){
@@ -885,7 +923,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
 
                     ASTNode* node = NodeInit(mem);
                     node->type = ASTNodeType_ELSE_IF;
-                    node->node.ELSE_IF.expresion = parseExpression(ctx, mem);
+                    node->node.ELSE_IF.expr = parseExpression(ctx, mem);
                     
                     Token next = parsePeek(ctx, 0);
                     if(next.type != TokenType_LSCOPE){
@@ -935,7 +973,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
             case TokenType_LOOP: {
                 ASTNode* node = NodeInit(mem);
                 node->type = ASTNodeType_LOOP;
-                node->node.LOOP.expresion = parseExpression(ctx, mem);
+                node->node.LOOP.expr = parseExpression(ctx, mem);
 
                 Token next = parsePeek(ctx, 0);
                 if(next.type != TokenType_LSCOPE){

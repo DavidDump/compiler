@@ -42,7 +42,7 @@ void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, char* reg);
 void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg);
 void genSaveStack(GenContext* ctx);
 void genRestoreStack(GenContext* ctx);
-StringChain gen_win_x86_64_nasm_expresion(GenContext* ctx, ASTNode* expr);
+StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr);
 StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args);
 StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, int label);
 StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, StringChain* dataSection);
