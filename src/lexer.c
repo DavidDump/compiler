@@ -269,7 +269,7 @@ TokenArray Tokenize(String source, String filename) {
             type = TokenType_STRING_LIT;
         } else if(c == '\n') {
             lineNum++;
-            collumNum = 0;
+            collumNum = 1;
             continue;
         } else if(isWhitespace(c)) {
             collumNum++;
@@ -286,7 +286,7 @@ TokenArray Tokenize(String source, String filename) {
         assert(type != 0);
         TokenArrayAddToken(&result, value, type, filename, lineNum, collumNum);
         
-        collumNum += value.length - 1;
+        collumNum += value.length;
         i += value.length - 1;
         
         value.str = 0;
