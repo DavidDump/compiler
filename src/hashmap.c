@@ -25,7 +25,7 @@ bool hashmapSet(Hashmap* hs, String key, s64 value) {
     if(hs->size >= hs->capacity) return FALSE;
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0) index++;
+    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
 
     KVPair_SI pair = {.key = key, .value = value};
     hs->pair[index] = pair;
@@ -36,7 +36,7 @@ bool hashmapGet(Hashmap* hs, String key, s64* value) {
     UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index++;
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_SI pair = hs->pair[index];
@@ -59,7 +59,7 @@ bool hashmapDataSet(HashmapData* hs, String key, UserDataEntry value) {
     if(hs->size >= hs->capacity) return FALSE;
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0) index++;
+    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
 
     KVPair_SD pair = {.key = key, .value = value};
     hs->pair[index] = pair;
@@ -70,7 +70,7 @@ bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
     UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index++;
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_SD pair = hs->pair[index];
@@ -79,5 +79,3 @@ bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
     }
     return FALSE;
 }
-
-// TODO: when searching for a free slot wrap the index if it overflows
