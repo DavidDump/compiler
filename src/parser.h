@@ -205,6 +205,7 @@ typedef struct _ASTNode {
             // bool isSigned;  // signed or unsigned
             bool isArray;   // single value or array of values
             bool isDynamic; // dynamic or static array
+            bool isPointer; // pointer to a type of value specified by this node
             u64 arraySize;  // size of static array
         } TYPE;
         struct COMPILER_INST {
@@ -225,10 +226,16 @@ typedef struct Operator {
     s64 presedence;
 } Operator;
 
+typedef struct ExpressionEvaluationResult {
+    u64 result;
+    bool isNegative;
+} ExpressionEvaluationResult;
+
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
 ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 ASTNode* parseLeaf(ParseContext* ctx, Arena* mem);
 Scope* Parse(TokenArray tokens, Arena* mem);
+ExpressionEvaluationResult evaluate_expression(ASTNode* expr);
 
 #if COMP_DEBUG
 void ASTPrint(Scope* root);

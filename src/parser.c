@@ -285,11 +285,12 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             // args
             if(args.size > 0) {
                 genPrintHelper("    args: [\n");
-                for(u64 i = 0; i < args.size; i++){
+                for(u64 i = 0; i < args.size; ++i) {
+                    for(u64 h = 0; h < indent + 2; ++h) printf("    ");
                     ASTNodePrint(args.args[i], indent + 1);
                     printf(",\n");
                 }
-                genPrintHelper("],\n");
+                genPrintHelper("    ],\n");
             } else {
                 genPrintHelper("    args: [],\n");
             }
@@ -299,9 +300,11 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             Type type = node->node.TYPE.type;
             bool isArray = node->node.TYPE.isArray;
             bool isDynamic = node->node.TYPE.isDynamic;
+            bool isPointer = node->node.TYPE.isPointer;
             u64 arraySize = node->node.TYPE.arraySize;
             
             printf("%s", TypeStr[type]);
+            if(isPointer) printf("*");
             if(isArray) isDynamic ? printf("[...]") : printf("[%llu]", arraySize);
         } break;
         case ASTNodeType_COMPILER_INST: {
@@ -488,7 +491,8 @@ ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
         return result;
     }
 
-    printf("[ERROR] Unhandled input\n");
+    Location loc = next.loc;
+    printf("[ERROR] Unhandled input: "STR_FMT":%i:%i "STR_FMT"\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, STR_PRINT(next.value));
     exit(EXIT_FAILURE);
 }
 
@@ -644,7 +648,14 @@ ASTNode* parseType(ParseContext* ctx, Arena* mem) {
     node->node.TYPE.type = type;
     node->node.TYPE.isArray = FALSE;
     node->node.TYPE.isDynamic = FALSE;
+    node->node.TYPE.isPointer = FALSE;
     node->node.TYPE.arraySize = 0;
+
+    Token next = parsePeek(ctx, 0);
+    if(next.type == TokenType_MUL) {
+        parseConsume(ctx); // *
+        node->node.TYPE.isPointer = TRUE;
+    }
 
     tok = parsePeek(ctx, 0);
     if(tok.type != TokenType_LBRACKET) {
@@ -749,14 +760,12 @@ ASTNode* parseFunctionDecl(ParseContext* ctx, Arena* mem, Scope* currentScope, T
         next = parseConsume(ctx);
     }
 
-    if(next.type == TokenType_LSCOPE) {
+    if(next.type == TokenType_LSCOPE || next.type == TokenType_SEMICOLON) {
         node->node.FUNCTION_DEF.type = typeVoid(mem);
-    } else if(next.type == TokenType_SEMICOLON) {
         return node;
     } else {
         ERROR(next.loc, "Function declaration needs to have a body, or be marked as #extern");
     }
-    return node;
 }
 
 #if 0
@@ -785,6 +794,63 @@ ExrpressionTypeResult parseGetTypeOfExpression(ParseContext* ctx, ASTNode* expr)
     }
 }
 #endif
+
+ExpressionEvaluationResult evaluate_expression(ASTNode* expr) {
+    ExpressionEvaluationResult result = {0};
+
+    if (expr->type == ASTNodeType_INT_LIT) {
+        String value = expr->node.INT_LIT.value;
+        result.result = StringToU64(value);
+    } else if (expr->type == ASTNodeType_FLOAT_LIT) {
+        UNIMPLEMENTED("float in const");
+    } else if (expr->type == ASTNodeType_BOOL_LIT) {
+        UNIMPLEMENTED("bool in const");
+    } else if (expr->type == ASTNodeType_STRING_LIT) {
+        UNIMPLEMENTED("string in const");
+    } else if (expr->type == ASTNodeType_FUNCTION_CALL) {
+        UNIMPLEMENTED("function call in const");
+    } else if (expr->type == ASTNodeType_BINARY_EXPRESSION) {
+        String op = expr->node.BINARY_EXPRESSION.operator;
+        ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
+        ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
+        if(StringEqualsCstr(op, "+")) {
+            ExpressionEvaluationResult lhsResult = evaluate_expression(lhs);
+            ExpressionEvaluationResult rhsResult = evaluate_expression(rhs);
+            // TODO: check if there is no overflow
+            result.result = lhsResult.result + rhsResult.result;
+        } else if(StringEqualsCstr(op, "-")) {
+            ExpressionEvaluationResult lhsResult = evaluate_expression(lhs);
+            ExpressionEvaluationResult rhsResult = evaluate_expression(rhs);
+            // TODO: check if there is no overflow
+            result.result = lhsResult.result - rhsResult.result;
+        } else if(StringEqualsCstr(op, "*")) {
+            ExpressionEvaluationResult lhsResult = evaluate_expression(lhs);
+            ExpressionEvaluationResult rhsResult = evaluate_expression(rhs);
+            // TODO: check if there is no overflow
+            result.result = lhsResult.result * rhsResult.result;
+        } else if(StringEqualsCstr(op, "/")) {
+            ExpressionEvaluationResult lhsResult = evaluate_expression(lhs);
+            ExpressionEvaluationResult rhsResult = evaluate_expression(rhs);
+            // TODO: check if there is no overflow
+            result.result = lhsResult.result / rhsResult.result;
+        }
+    } else if (expr->type == ASTNodeType_UNARY_EXPRESSION) {
+        String op = expr->node.UNARY_EXPRESSION.operator;
+        ASTNode* subExpr = expr->node.UNARY_EXPRESSION.expr;
+        if(StringEqualsCstr(op, "-")) {
+            result = evaluate_expression(subExpr);
+            result.isNegative = !result.isNegative;
+        } else {
+            printf("[ERROR] only unary operator implemented is -\n");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        printf("[ERROR] constant expression needs to be of constrant value\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
 
 Scope* Parse(TokenArray tokens, Arena* mem) {
     ParseContext ctx2 = {.tokens = tokens};
@@ -890,7 +956,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                 }else if(next.type == TokenType_DOUBLECOLON){
                     // constant
                     parseConsume(ctx); // consume the ::
-                    if(parsePeek(ctx, 0).type == TokenType_LPAREN && parsePeek(ctx, 1).type == TokenType_IDENTIFIER) {
+                    if(parsePeek(ctx, 0).type == TokenType_LPAREN && (parsePeek(ctx, 1).type == TokenType_IDENTIFIER || parsePeek(ctx, 1).type == TokenType_RPAREN)) {
                         // constant is a function
                         ASTNode* function = parseFunctionDecl(ctx, mem, currentScope, t);
                         assert(function->node.FUNCTION_DEF.isExtern == FALSE && "`parseFunctionDecl()` should set isExtern to FALSE by default");
@@ -1038,16 +1104,16 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                     if(next.type != TokenType_STRING_LIT) {
                         ERROR(next.loc, "#library needs to be followed by a string");
                     }
+                    String key = {.str = &next.value.str[1], .length = next.value.length - 2}; // remove the " around the string
 
                     CompilerInstruction* inst = CompInstInit(mem);
                     inst->type = CompilerInstructionType_LIB;
-                    inst->inst.LIB.libName = next.value;
+                    inst->inst.LIB.libName = key;
 
                     ASTNode* node = NodeInit(mem);
                     node->type = ASTNodeType_COMPILER_INST;
                     node->node.COMPILER_INST.inst = inst;
 
-                    String key = {.str = &next.value.str[1], .length = next.value.length - 2}; // remove the " around the string
                     LibName value = {.functions = hashmapFuncNameInit(mem, 0x1000)};
                     if(!hashmapLibNameSet(&ctx->importLibraries, key, value)) {
                         UNREACHABLE("hashmap failed to insert");
@@ -1062,22 +1128,22 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                     if(next.type != TokenType_IDENTIFIER) {
                         ERROR(next.loc, "#extern needs to be followed by a function declaration");
                     }
+                    Token functionName = next;
 
                     next = parseConsume(ctx);
                     if(next.type != TokenType_DOUBLECOLON) {
                         ERROR(next.loc, "#extern needs to be followed by a function declaration");
                     }
 
-                    String functionName = next.value;
                     // NOTE: `parseFunctionDecl()` consumes the semicolon at the end of the line
                     // in case of #extern functions, no need to check here
-                    ASTNode* function = parseFunctionDecl(ctx, mem, currentScope, next);
+                    ASTNode* function = parseFunctionDecl(ctx, mem, currentScope, functionName);
                     function->node.FUNCTION_DEF.isExtern = TRUE;
                     parseAddStatement(&currentScope->stmts, function);
 
                     CompilerInstruction* inst = CompInstInit(mem);
                     inst->type = CompilerInstructionType_EXTERN;
-                    inst->inst.EXTERN.funcName = functionName;
+                    inst->inst.EXTERN.funcName = functionName.value;
 
                     ASTNode* node = NodeInit(mem);
                     node->type = ASTNodeType_COMPILER_INST;
@@ -1088,7 +1154,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                         UNREACHABLE("cant find library to import frunction from, either hashmap ran out of space or no #library specified");
                     }
                     FuncName value2 = {0};
-                    if(!hashmapFuncNameSet(&value.functions, functionName, value2)) {
+                    if(!hashmapFuncNameSet(&value.functions, functionName.value, value2)) {
                         UNREACHABLE("hashmap failed to insert");
                     }
 
