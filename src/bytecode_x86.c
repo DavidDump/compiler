@@ -693,17 +693,16 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             } break;
             case ASTNodeType_VAR_CONST: {
                 String id = node->node.VAR_CONST.identifier;
-                String value = node->node.VAR_CONST.value;
+                ASTNode* expr = node->node.VAR_CONST.expr;
                 // TODO: will need a type
+                // TODO: based on type figure out if its a string or something else
+                //       string goes in one hashmap and signed numbers go in another
                 
-                // TODO: this is broken, memory allocation needed for data field of UserDataEntry
-                u64 valueData = StringToU64(value);
-                UserDataEntry data = {
-                    .data = (u8*)&valueData,
-                    .dataLen = sizeof(data),
-                    .dataRVA = INVALID_ADDRESS
-                };
-                if(!hashmapDataSet(&ctx->data, id, data)) {
+                ExpressionEvaluationResult exprResult = evaluate_expression(expr);
+                s64 value = exprResult.result <= S64_MAX ? (s64)exprResult.result : S64_MAX;
+                value = exprResult.isNegative ? -value : value;
+                // TODO: assuming numberical constant
+                if(!hashmapSet(&ctx->constats, id, value)) {
                     UNREACHABLE("hashmap full");
                 }
             } break;
@@ -774,6 +773,7 @@ GenContext gen_x86_64_bytecode(Scope* globalScope) {
     ctx.variables = hashmapInit(&ctx.mem, 0x1000);
     ctx.functions = hashmapInit(&ctx.mem, 0x1000);
     ctx.data  = hashmapDataInit(&ctx.mem, 0x1000);
+    ctx.constats  = hashmapInit(&ctx.mem, 0x1000);
     
     gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
     return ctx;

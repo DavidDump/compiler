@@ -23,4 +23,22 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+#define S8_MIN  ((s8)0x80)
+#define S8_MAX  ((s8)0x7F)
+#define S16_MIN ((s16)0x8000)
+#define S16_MAX ((s16)0x7FFF)
+#define S32_MIN ((s32)0x80000000)
+#define S32_MAX ((s32)0x7FFFFFFF)
+#define S64_MIN ((s64)0x8000000000000000)
+#define S64_MAX ((s64)0x7FFFFFFFFFFFFFFF)
+
+#define U8_MIN  ((u8)0x0)
+#define U8_MAX  ((u8)0xFF)
+#define U16_MIN ((u16)0x0)
+#define U16_MAX ((u16)0xFFFF)
+#define U32_MIN ((u32)0x0)
+#define U32_MAX ((u32)0xFFFFFFFF)
+#define U64_MIN ((u64)0x0)
+#define U64_MAX ((u64)0xFFFFFFFFFFFFFFFF)
+
 #endif // COMP_COMMON_H

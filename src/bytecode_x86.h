@@ -61,7 +61,8 @@ typedef struct GenContext {
 
     Hashmap variables; // value is the stack offset to the variable
     Hashmap functions; // value is the offset to the begining of the function from the begining of the code buffer
-    HashmapData data;  // value is a UserDataEntry
+    HashmapData data;  // value is a UserDataEntry, only for string data
+    Hashmap constats;  // value is the value of a constant that should ne hardcoded
 } GenContext;
 
 typedef enum OperandType {

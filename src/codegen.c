@@ -297,10 +297,13 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
             } break;
             case ASTNodeType_VAR_CONST: {
                 String id = node->node.VAR_CONST.identifier;
-                String value = node->node.VAR_CONST.value;
+                ASTNode* expr = node->node.VAR_CONST.expr;
 
+                ExpressionEvaluationResult exprResult = evaluate_expression(expr);
+                s64 value = exprResult.result <= S64_MAX ? (s64)exprResult.result : S64_MAX;
+                value = exprResult.isNegative ? -value : value;
                 // TODO: dont hardcode dq size but somehow use space more efficiently
-                genChainPrintf(dataSection, &ctx->mem, "    %s dq %s\n", id, value);
+                genChainPrintf(dataSection, &ctx->mem, "    %s dq %i\n", id, value);
             } break;
             case ASTNodeType_VAR_DECL: {
                 String id = node->node.VAR_DECL.identifier;
