@@ -25,7 +25,7 @@ bool hashmapSet(Hashmap* hs, String key, s64 value) {
     if(hs->size >= hs->capacity) return FALSE;
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0) index = (index + 1) % hs->capacity;
 
     KVPair_SI pair = {.key = key, .value = value};
     hs->pair[index] = pair;
@@ -36,7 +36,7 @@ bool hashmapGet(Hashmap* hs, String key, s64* value) {
     UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_SI pair = hs->pair[index];
@@ -59,7 +59,7 @@ bool hashmapDataSet(HashmapData* hs, String key, UserDataEntry value) {
     if(hs->size >= hs->capacity) return FALSE;
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0) index = (index + 1) % hs->capacity;
 
     KVPair_SD pair = {.key = key, .value = value};
     hs->pair[index] = pair;
@@ -70,7 +70,7 @@ bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
     UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_SD pair = hs->pair[index];
@@ -93,7 +93,7 @@ bool hashmapFuncNameSet(HashmapFuncName* hs, String key, FuncName value) {
     if(hs->size >= hs->capacity) return FALSE;
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0) index = (index + 1) % hs->capacity;
 
     KVPair_FuncName pair = {.key = key, .value = value};
     hs->pair[index] = pair;
@@ -104,7 +104,7 @@ bool hashmapFuncNameGet(HashmapFuncName* hs, String key, FuncName* value) {
     UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_FuncName pair = hs->pair[index];
@@ -127,7 +127,7 @@ bool hashmapLibNameSet(HashmapLibName* hs, String key, LibName value) {
     if(hs->size >= hs->capacity) return FALSE;
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0) index = (index + 1) % hs->capacity;
 
     KVPair_LibName pair = {.key = key, .value = value};
     hs->pair[index] = pair;
@@ -138,7 +138,7 @@ bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value) {
     UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
-    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_LibName pair = hs->pair[index];

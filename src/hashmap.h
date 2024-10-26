@@ -53,7 +53,7 @@ typedef struct LibName {
     u64 nameRva;
     u64 iatRva;
     u64 imageThunkRva;
-    HashmapFuncName* functions;
+    HashmapFuncName functions;
 } LibName;
 
 typedef struct KVPair_LibName {
