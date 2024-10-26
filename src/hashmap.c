@@ -33,7 +33,6 @@ bool hashmapSet(Hashmap* hs, String key, s64 value) {
 }
 
 bool hashmapGet(Hashmap* hs, String key, s64* value) {
-    UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
     while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
@@ -67,7 +66,6 @@ bool hashmapDataSet(HashmapData* hs, String key, UserDataEntry value) {
 }
 
 bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
-    UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
     while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
@@ -101,7 +99,6 @@ bool hashmapFuncNameSet(HashmapFuncName* hs, String key, FuncName value) {
 }
 
 bool hashmapFuncNameGet(HashmapFuncName* hs, String key, FuncName* value) {
-    UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
     while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
@@ -135,7 +132,6 @@ bool hashmapLibNameSet(HashmapLibName* hs, String key, LibName value) {
 }
 
 bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value) {
-    UNUSED(value); // NOTE: used to suppress a warning
     u64 index = hash(key) % hs->capacity;
 
     while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
