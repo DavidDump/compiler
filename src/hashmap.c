@@ -79,3 +79,71 @@ bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
     }
     return FALSE;
 }
+
+HashmapFuncName hashmapFuncNameInit(Arena* mem, u64 capacity) {
+    HashmapFuncName result = {0};
+    
+    result.pair = arena_alloc(mem, capacity * sizeof(*result.pair));
+    result.capacity = capacity;
+    
+    return result;
+}
+
+bool hashmapFuncNameSet(HashmapFuncName* hs, String key, FuncName value) {
+    if(hs->size >= hs->capacity) return FALSE;
+    u64 index = hash(key) % hs->capacity;
+
+    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
+
+    KVPair_FuncName pair = {.key = key, .value = value};
+    hs->pair[index] = pair;
+    return TRUE;
+}
+
+bool hashmapFuncNameGet(HashmapFuncName* hs, String key, FuncName* value) {
+    UNUSED(value); // NOTE: used to suppress a warning
+    u64 index = hash(key) % hs->capacity;
+
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
+
+    if(StringEquals(hs->pair[index].key, key)) {
+        KVPair_FuncName pair = hs->pair[index];
+        value = &pair.value;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+HashmapLibName hashmapLibNameInit(Arena* mem, u64 capacity) {
+    HashmapLibName result = {0};
+    
+    result.pair = arena_alloc(mem, capacity * sizeof(*result.pair));
+    result.capacity = capacity;
+    
+    return result;
+}
+
+bool hashmapLibNameSet(HashmapLibName* hs, String key, LibName value) {
+    if(hs->size >= hs->capacity) return FALSE;
+    u64 index = hash(key) % hs->capacity;
+
+    while(hs->pair[index].key.length != 0) index = ++index % hs->capacity;
+
+    KVPair_LibName pair = {.key = key, .value = value};
+    hs->pair[index] = pair;
+    return TRUE;
+}
+
+bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value) {
+    UNUSED(value); // NOTE: used to suppress a warning
+    u64 index = hash(key) % hs->capacity;
+
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = ++index % hs->capacity;
+
+    if(StringEquals(hs->pair[index].key, key)) {
+        KVPair_LibName pair = hs->pair[index];
+        value = &pair.value;
+        return TRUE;
+    }
+    return FALSE;
+}
