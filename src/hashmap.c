@@ -40,7 +40,7 @@ bool hashmapGet(Hashmap* hs, String key, s64* value) {
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_SI pair = hs->pair[index];
-        value = &pair.value;
+        *value = pair.value;
         return TRUE;
     }
     return FALSE;
@@ -74,7 +74,7 @@ bool hashmapDataGet(HashmapData* hs, String key, UserDataEntry* value) {
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_SD pair = hs->pair[index];
-        value = &pair.value;
+        *value = pair.value;
         return TRUE;
     }
     return FALSE;
@@ -108,7 +108,7 @@ bool hashmapFuncNameGet(HashmapFuncName* hs, String key, FuncName* value) {
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_FuncName pair = hs->pair[index];
-        value = &pair.value;
+        *value = pair.value;
         return TRUE;
     }
     return FALSE;
@@ -142,7 +142,7 @@ bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value) {
 
     if(StringEquals(hs->pair[index].key, key)) {
         KVPair_LibName pair = hs->pair[index];
-        value = &pair.value;
+        *value = pair.value;
         return TRUE;
     }
     return FALSE;
