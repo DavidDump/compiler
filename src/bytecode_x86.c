@@ -777,3 +777,7 @@ GenContext gen_x86_64_bytecode(Scope* globalScope) {
     gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
     return ctx;
 }
+
+// NOTE: this way of pushing values to the stack might be better,
+//       because the push operation changes the stack pointer:
+//       mov     DWORD PTR [rbp-4], 2
