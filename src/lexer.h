@@ -34,6 +34,7 @@ typedef enum TokenType{
     TokenType_DOT,           // .
     TokenType_DOUBLEDOT,     // ..
     TokenType_TRIPLEDOT,     // ...
+    TokenType_HASHTAG,       // #
     
     // operators
     TokenType_LESS,          // <
@@ -82,6 +83,7 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_DOT]           = "DOT",
     [TokenType_DOUBLEDOT]     = "DOUBLEDOT",
     [TokenType_TRIPLEDOT]     = "TRIPLEDOT",
+    [TokenType_HASHTAG]       = "HASHTAG",
     [TokenType_LESS]          = "LESS",
     [TokenType_LESS_EQ]       = "LESS_EQ",
     [TokenType_GREATER]       = "GREATER",

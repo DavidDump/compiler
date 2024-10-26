@@ -16,6 +16,10 @@ bool isWhitespace(u8 c) {
     return (c == ' ' || c == '\n' || c == '\t' || c == '\v' || c == '\r');
 }
 
+bool isValidVariableNameChar(u8 c) {
+    return (isLetter(c) || isNumber(c) || c == '_');
+}
+
 void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum){
     if(arr->size >= arr->capacity){
         size_t newCap = arr->capacity * 2;
@@ -76,7 +80,7 @@ TokenArray Tokenize(String source, String filename) {
             // keywords and identifiers
             u64 startIndex = i;
             u64 endIndex = i;
-            do c = source.str[++endIndex]; while(isLetter(c) || isNumber(c)); // TODO: add special characters that can be in the middle of a identifier
+            do c = source.str[++endIndex]; while(isValidVariableNameChar(c)); // TODO: add special characters that can be in the middle of a identifier
             if(endIndex >= source.length) break;
             u64 len = endIndex - startIndex;
             
@@ -243,6 +247,11 @@ TokenArray Tokenize(String source, String filename) {
 
             value.str = &source.str[i];
             value.length = len;
+        } else if(c == '#') {
+            // hashtag
+            value.str = &source.str[i];
+            value.length = 1;
+            type = TokenType_HASHTAG;
         } else if(c == '\"') {
             // string literal
             // TODO: propper string literal parsing with escape characters
@@ -262,13 +271,13 @@ TokenArray Tokenize(String source, String filename) {
             lineNum++;
             collumNum = 0;
             continue;
+        } else if(isWhitespace(c)) {
+            collumNum++;
+            continue;
         }
 
         #ifdef COMP_DEBUG
-        else if(isWhitespace(c)) {
-            // NOTE: space is ignored but this case is needed here for debug print
-            continue;
-        } else {
+        else {
             printf("[ERROR] Unhandled char by the tokenizer: \'%c\' at "STR_FMT":%lli:%lli\n", c, STR_PRINT(filename), lineNum, collumNum);
         }
         #endif // COMP_DEBUG
