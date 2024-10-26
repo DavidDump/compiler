@@ -756,6 +756,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             case ASTNodeType_BOOL_LIT:
             case ASTNodeType_SYMBOL:
             case ASTNodeType_TYPE:
+            case ASTNodeType_COMPILER_INST:
                 printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);
                 break;
         }

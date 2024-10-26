@@ -5,6 +5,7 @@
 #include "arena.h"
 #include "string.h"
 #include "lexer.h"
+#include "hashmap.h"
 
 typedef enum ASTNodeType {
     ASTNodeType_NONE,
@@ -28,6 +29,7 @@ typedef enum ASTNodeType {
     ASTNodeType_BOOL_LIT,
     ASTNodeType_SYMBOL,
     ASTNodeType_TYPE,
+    ASTNodeType_COMPILER_INST,
     
     ASTNodeType_COUNT,
 } ASTNodeType;
@@ -55,6 +57,7 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_BOOL_LIT]          = "BOOL_LIT",
     [ASTNodeType_SYMBOL]            = "SYMBOL",
     [ASTNodeType_TYPE]              = "TYPE",
+    [ASTNodeType_COMPILER_INST]     = "COMPILER_INST",
 
     [ASTNodeType_COUNT]             = "COUNT",
 };
@@ -98,14 +101,34 @@ typedef struct Scope{
     StmtList stmts;
 } Scope;
 
-typedef struct _ASTNode{
+typedef enum CompilerInstructionType {
+    CompilerInstructionType_NONE,
+    CompilerInstructionType_LIB,    // #library "kernel32.dll";
+    CompilerInstructionType_EXTERN, // #extern GetStdHandle :: (handle: s64);
+    CompilerInstructionType_COUNT,
+} CompilerInstructionType;
+
+typedef struct CompilerInstruction {
+    CompilerInstructionType type;
+    union {
+        struct LIB {
+            String libName;
+        } LIB;
+        struct EXTERN {
+            String funcName;
+        } EXTERN;
+    } inst;
+} CompilerInstruction;
+
+typedef struct _ASTNode {
     ASTNodeType type;
-    union Node{
+    union Node {
         struct FUNCTION_DEF {
             String identifier;
             ASTNode* type;
             Args args;
             Scope* scope;
+            bool isExtern;
         } FUNCTION_DEF;
         struct FUNCTION_CALL {
             String identifier;
@@ -126,7 +149,7 @@ typedef struct _ASTNode{
         } VAR_REASSIGN;
         struct VAR_CONST {
             String identifier;
-            String value;
+            ASTNode* expr;
         } VAR_CONST;
         struct RET {
             ASTNode* expr;
@@ -184,12 +207,17 @@ typedef struct _ASTNode{
             bool isDynamic; // dynamic or static array
             u64 arraySize;  // size of static array
         } TYPE;
+        struct COMPILER_INST {
+            CompilerInstruction* inst;
+        } COMPILER_INST;
     } node;
 } ASTNode;
 
 typedef struct ParseContext {
     TokenArray tokens;
 	u64 index;
+    HashmapLibName importLibraries;
+    String currentImportLibraryName;
 } ParseContext;
 
 typedef struct Operator {
