@@ -852,10 +852,11 @@ ExpressionEvaluationResult evaluate_expression(ASTNode* expr) {
     return result;
 }
 
-Scope* Parse(TokenArray tokens, Arena* mem) {
+ParseResult Parse(TokenArray tokens, Arena* mem) {
+    ParseResult result = {0};
     ParseContext ctx2 = {.tokens = tokens};
     ParseContext* ctx = &ctx2;
-    ctx->importLibraries = hashmapLibNameInit(mem, 0x1000);
+    ctx->importLibraries = hashmapLibNameInit(mem, 0x100);
 
     Scope* globalScope = parseScopeInit(mem, NULL);
     Scope* currentScope = globalScope;
@@ -1114,7 +1115,7 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
                     node->type = ASTNodeType_COMPILER_INST;
                     node->node.COMPILER_INST.inst = inst;
 
-                    LibName value = {.functions = hashmapFuncNameInit(mem, 0x1000)};
+                    LibName value = {.functions = hashmapFuncNameInit(mem, 0x100)};
                     if(!hashmapLibNameSet(&ctx->importLibraries, key, value)) {
                         UNREACHABLE("hashmap failed to insert");
                     }
@@ -1198,7 +1199,9 @@ Scope* Parse(TokenArray tokens, Arena* mem) {
         }
     }
 
-    return globalScope;
+    result.globalScope = globalScope;
+    result.importLibraries = ctx->importLibraries; // TODO: ExitProcess need to be imported allways
+    return result;
 }
 
 // TODO: check if functions with return type return on all codepaths (typechecking step)

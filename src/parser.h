@@ -231,10 +231,15 @@ typedef struct ExpressionEvaluationResult {
     bool isNegative;
 } ExpressionEvaluationResult;
 
+typedef struct ParseResult {
+    Scope* globalScope;
+    HashmapLibName importLibraries;
+} ParseResult;
+
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
 ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 ASTNode* parseLeaf(ParseContext* ctx, Arena* mem);
-Scope* Parse(TokenArray tokens, Arena* mem);
+ParseResult Parse(TokenArray tokens, Arena* mem);
 ExpressionEvaluationResult evaluate_expression(ASTNode* expr);
 
 #if COMP_DEBUG
