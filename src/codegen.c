@@ -78,12 +78,12 @@ void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
     va_end(args);
 }
 
-void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, char* reg){
+void gen_win_x86_64_nasm_push(AsmGenContext* ctx, StringChain* result, char* reg){
     ctx->stack++;
     genChainPrintf(result, &ctx->mem, "    push %s\n", StringFromCstr(&ctx->mem, reg));
 }
 
-void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg){
+void gen_win_x86_64_nasm_pop(AsmGenContext* ctx, StringChain* result, char* reg){
     if(ctx->stack - 1 < 0){
         printf("[ERROR] Stack underflow\n");
         exit(EXIT_FAILURE);
@@ -92,7 +92,7 @@ void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg){
     genChainPrintf(result, &ctx->mem, "    pop %s\n", StringFromCstr(&ctx->mem, reg));
 }
 
-void genSaveStack(GenContext* ctx){
+void genSaveStack(AsmGenContext* ctx){
     if(ctx->savedStackPointer + 1 > SAVED_STACK_SIZE){
         printf("[ERROR] Call stack overflow\n");
         exit(EXIT_FAILURE);
@@ -100,7 +100,7 @@ void genSaveStack(GenContext* ctx){
     ctx->savedStack[ctx->savedStackPointer++] = ctx->stack;
 }
 
-void genRestoreStack(GenContext* ctx){
+void genRestoreStack(AsmGenContext* ctx){
     if(ctx->savedStackPointer - 1 < 0){
         printf("[ERROR] Call stack underflow\n");
         exit(EXIT_FAILURE);
@@ -109,7 +109,7 @@ void genRestoreStack(GenContext* ctx){
 }
 
 #if 0
-StringChain gen_win_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
+StringChain gen_win_x86_64_nasm_primary(AsmGenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     
     if(expr->type == ASTNodeType_INT_LIT){
@@ -125,9 +125,9 @@ StringChain gen_win_x86_64_nasm_primary(GenContext* ctx, ASTNode* expr){
 }
 #endif
 
-StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr);
+StringChain gen_win_x86_64_nasm_expression(AsmGenContext* ctx, ASTNode* expr);
 
-StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args){
+StringChain gen_win_x86_64_nasm_func_call(AsmGenContext* ctx, String id, Args args){
     StringChain result = {0};
 
     for(u64 i = 0; i < args.size; ++i) {
@@ -158,7 +158,7 @@ StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args)
     return result;
 }
 
-StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr){
+StringChain gen_win_x86_64_nasm_expression(AsmGenContext* ctx, ASTNode* expr){
     StringChain result = {0};
     // TODO: for now hardcode + operator
     if(expr->type == ASTNodeType_INT_LIT){
@@ -225,7 +225,7 @@ StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr){
     return result;
 }
 
-StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, int label){
+StringChain generate_win_x86_64_nasm_condition(AsmGenContext* ctx, ASTNode* expr, int label){
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
     StringChain result = {0};
@@ -266,7 +266,7 @@ bool genHelper_isOperatorArithmetic(String value) {
 }
 
 #define INVALID_IF_LABEL_COUNTER -1
-StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, StringChain* dataSection){
+StringChain generate_win_x86_64_nasm_scope(AsmGenContext* ctx, Scope* globalScope, StringChain* dataSection){
     StringChain result = {0};
     StringChain ifConditions = {0};
     StringChain ifBody = {0};
@@ -550,7 +550,7 @@ StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, 
     return result;
 }
 
-StringChain Generate(GenContext* ctx, Scope* globalScope){
+StringChain Generate(AsmGenContext* ctx, Scope* globalScope){
     ctx->intSize = 8;
 
     // header

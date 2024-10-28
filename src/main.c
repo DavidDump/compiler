@@ -4,7 +4,7 @@
 
 #include "peWriter.h"
 #include "bytecode_x86.h"
-// #include "codegen.h"
+#include "codegen.h"
 #include "types.h"
 #include "parser.h"
 #include "lexer.h"
@@ -37,24 +37,6 @@ String EntireFileRead(Arena* mem, String filePath) {
     }
 }
 
-#if 0
-bool EntireFileWrite(String filePath, StringChain data){
-    FILE* f = fopen((char*)filePath.str, "wb");
-
-    if(f){
-        StringNode* current = data.first;
-        while(current != NULL){
-            fprintf(f, STR_FMT, STR_PRINT(current->str));
-            current = current->next;
-        }
-        fclose(f);
-        return TRUE;
-    }else{
-        printf("[ERROR] Failed to open file: "STR_FMT"\n", STR_PRINT(filePath));
-        return FALSE;
-    }
-}
-#else
 bool EntireFileWrite(String filePath, Buffer data) {
     FILE* f = fopen((char*)filePath.str, "wb");
 
@@ -69,7 +51,6 @@ bool EntireFileWrite(String filePath, Buffer data) {
         return FALSE;
     }
 }
-#endif
 
 // 
 // Main
@@ -136,9 +117,7 @@ int main(int argc, char** argv){
     if(printAST) ASTPrint(parseResult.globalScope);
 #endif // COMP_DEBUG
 
-    #if 1
     GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope, parseResult.funcInfo);
-
     if(StringEndsWith(outFilepath, STR(".bin"))) {
         if(!EntireFileWrite(outFilepath, bytecode.code)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
@@ -150,6 +129,17 @@ int main(int argc, char** argv){
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);
         }
+    } else if(StringEndsWith(outFilepath, STR(".asm"))) {
+        AsmGenContext genContext = {0};
+        StringChain outRaw = Generate(&genContext, parseResult.globalScope);
+        Buffer out = StringChainToBuffer(outRaw);
+
+        if(!EntireFileWrite(outFilepath, out)){
+            printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
+            exit(EXIT_FAILURE);
+        }
+
+        arena_free(&genContext.mem);
     } else {
         s64 index = StringLastIndexOf(outFilepath, '.');
         String format = {0};
@@ -162,20 +152,7 @@ int main(int argc, char** argv){
         printf("[ERROR] unsupported target format: "STR_FMT"\n", STR_PRINT(format));
         exit(EXIT_FAILURE);
     }
-    #endif
 
-#if 0 // NOTE: tmp while doing typechecking
-    GenContext genContext = {0};
-    StringChain outRaw = Generate(&genContext, globalScope);
-
-    bool success = EntireFileWrite(outFilepath, outRaw);
-    if(!success){
-        printf("[ERROR] Failed to write output asm file\n");
-        exit(EXIT_FAILURE);
-    }
-
-    arena_free(&genContext.mem);
-#endif
     arena_free(&readFileMem);
     exit(EXIT_SUCCESS);
 }

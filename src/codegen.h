@@ -23,7 +23,7 @@ typedef struct IdentifierLocations {
 // NOTE: i dont know if the stack pointer get saved any other time other than function calls,
 // but SAVED_STACK_SIZE is basically the callstack depth
 #define SAVED_STACK_SIZE 255
-typedef struct GenContext {
+typedef struct AsmGenContext {
     int stack;
     int savedStack[SAVED_STACK_SIZE];
     int savedStackPointer;
@@ -32,20 +32,8 @@ typedef struct GenContext {
     IdentifierLocations idLoc;
     
     Arena mem;
-} GenContext;
+} AsmGenContext;
 
-void appendIdLoc(IdentifierLocations* idLoc, String key, int value);
-int findIdLoc(IdentifierLocations* idLoc, String key);
-int digitsCount(int value);
-void genChainPrintf(StringChain* result, Arena* mem, char* format, ...);
-void gen_win_x86_64_nasm_push(GenContext* ctx, StringChain* result, char* reg);
-void gen_win_x86_64_nasm_pop(GenContext* ctx, StringChain* result, char* reg);
-void genSaveStack(GenContext* ctx);
-void genRestoreStack(GenContext* ctx);
-StringChain gen_win_x86_64_nasm_expression(GenContext* ctx, ASTNode* expr);
-StringChain gen_win_x86_64_nasm_func_call(GenContext* ctx, String id, Args args);
-StringChain generate_win_x86_64_nasm_condition(GenContext* ctx, ASTNode* expr, int label);
-StringChain generate_win_x86_64_nasm_scope(GenContext* ctx, Scope* globalScope, StringChain* dataSection);
-StringChain Generate(GenContext* ctx, Scope* globalScope);
+StringChain Generate(AsmGenContext* ctx, Scope* globalScope);
 
 #endif // COMP_CODEGEN_H
