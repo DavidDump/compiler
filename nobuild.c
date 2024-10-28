@@ -66,5 +66,8 @@ int main(int argc, char** argv){
     if(!debug) CMD(CXX, CFLAGS, "-o", TARGET, objString);
     else CMD(CXX, CFLAGS, DEBUGFLAGS, "-o", TARGET, objString);
 
+    // generate pdb
+    CMD(PATH("..", "cv2pdb-0.52", "cv2pdb64.exe"), "compiler.exe");
+
     return 0;
 }
