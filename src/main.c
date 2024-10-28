@@ -38,8 +38,8 @@ String EntireFileRead(Arena* mem, String filePath) {
 }
 
 #if 0
-bool EntireFileWrite(const char* filePath, StringChain data){
-    FILE* f = fopen(filePath, "wb");
+bool EntireFileWrite(String filePath, StringChain data){
+    FILE* f = fopen((char*)filePath.str, "wb");
 
     if(f){
         StringNode* current = data.first;
@@ -50,7 +50,7 @@ bool EntireFileWrite(const char* filePath, StringChain data){
         fclose(f);
         return TRUE;
     }else{
-        printf("[ERROR] Failed to open file: %s\n", filePath);
+        printf("[ERROR] Failed to open file: "STR_FMT"\n", STR_PRINT(filePath));
         return FALSE;
     }
 }
@@ -131,13 +131,13 @@ int main(int argc, char** argv){
     if(printTokens) TokensPrint(&tokens);
 #endif // COMP_DEBUG
     
-    Scope* globalScope = Parse(tokens, &readFileMem);
-    UNUSED(globalScope);
+    ParseResult parseResult = Parse(tokens, &readFileMem);
 #ifdef COMP_DEBUG
-    if(printAST) ASTPrint(globalScope);
+    if(printAST) ASTPrint(parseResult.globalScope);
 #endif // COMP_DEBUG
 
-    GenContext bytecode = gen_x86_64_bytecode(globalScope);
+    #if 1
+    GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope);
 
     if(StringEndsWith(outFilepath, STR(".bin"))) {
         if(!EntireFileWrite(outFilepath, bytecode.code)) {
@@ -145,21 +145,7 @@ int main(int argc, char** argv){
             exit(EXIT_FAILURE);
         }
     } else if(StringEndsWith(outFilepath, STR(".exe"))) {
-        ImportNameToRva kernel32Functions[] = {
-            {.name = STR("ExitProcess"), .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
-            // {.name = "GetStdHandle", .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
-            // {.name = "ReadConsoleA", .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
-        };
-        
-        ImportLibrary libs[] = {
-            {
-                .dll = {.name = STR("kernel32.dll"), .nameRva = INVALID_ADDRESS, .iatRva = INVALID_ADDRESS},
-                .imageThunkRva = INVALID_ADDRESS,
-                .functions = kernel32Functions,
-                .functionCount = ARRAY_SIZE(kernel32Functions),
-            },
-        };
-        Buffer exeBytes = genExecutable(libs, ARRAY_SIZE(libs), bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
+        Buffer exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
         // genExecutable(bytecode.code, bytecode.entryPointOffset, libs, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
         // genExecutable(bytecode, entryPointOffset, symbolsToImport, symbolsToPatch, userData, userDataToPatch)
         if(!EntireFileWrite(outFilepath, exeBytes)) {
@@ -178,9 +164,10 @@ int main(int argc, char** argv){
         printf("[ERROR] unsupported target format: "STR_FMT"\n", STR_PRINT(format));
         exit(EXIT_FAILURE);
     }
+    #endif
 
 #if 0 // NOTE: tmp while doing typechecking
-    GenContext genContext = GenContextInit(typeMappings, ARRAY_SIZE(typeMappings), opInfo, ARRAY_SIZE(opInfo));
+    GenContext genContext = {0};
     StringChain outRaw = Generate(&genContext, globalScope);
 
     bool success = EntireFileWrite(outFilepath, outRaw);
@@ -198,12 +185,12 @@ int main(int argc, char** argv){
 // TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
 // TODO: better error messeges when failing to parse an expression
 
-// TODO: implement a symetrical operation to parseing, reverseParse() that takes an AST and generates code,
+// TODO: implement a symetrical operation to parsing, reverseParse() that takes an AST and generates code,
 // maintain multiple versions, to migrate from older versions of the code to newer,
 // keep single parse() and reverseParse() function in separete compilation unit,
 // and build with one depending the version, can be integrated into the build system to build and older version
 // then migrate the code, then build the next version and reapead until the code is up to date
-// this could be usefull later in development when standard libraries already exist and have to be updated
+// this could be useful later in development when standard libraries already exist and have to be updated
 // with syntax changes
 
 // TODO: maybe having an else and elseif ast node doesnt make sense
