@@ -530,6 +530,7 @@ StringChain generate_win_x86_64_nasm_scope(AsmGenContext* ctx, Scope* globalScop
                     ctx->stack = savedStack;
                 }
             } break;
+            case ASTNodeType_COMPILER_INST: break;
 
             case ASTNodeType_ELSE:
             case ASTNodeType_ELSE_IF:
@@ -541,7 +542,6 @@ StringChain generate_win_x86_64_nasm_scope(AsmGenContext* ctx, Scope* globalScop
             case ASTNodeType_BOOL_LIT:
             case ASTNodeType_SYMBOL:
             case ASTNodeType_TYPE:
-            case ASTNodeType_COMPILER_INST:
                 printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);
                 break;
         }
