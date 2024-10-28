@@ -145,9 +145,7 @@ int main(int argc, char** argv){
             exit(EXIT_FAILURE);
         }
     } else if(StringEndsWith(outFilepath, STR(".exe"))) {
-        Buffer exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
-        // genExecutable(bytecode.code, bytecode.entryPointOffset, libs, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch);
-        // genExecutable(bytecode, entryPointOffset, symbolsToImport, symbolsToPatch, userData, userDataToPatch)
+        Buffer exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch, bytecode.entryPointOffset);
         if(!EntireFileWrite(outFilepath, exeBytes)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);

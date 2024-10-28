@@ -196,7 +196,7 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
 
 // names is the locations where imported functions were used, used for patching
 // dataToPatch is the locations where user defined data was refferenced, used for patching
-Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch) {
+Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch, u64 entryPointOffset) {
     // Sections
     IMAGE_SECTION_HEADER sections[3] = {
         [0] = {
@@ -343,8 +343,7 @@ Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, Hashma
     }
 
     // patch entry point
-    // TODO: path the virtual address of main
-    optional_header->AddressOfEntryPoint = text_section_header->VirtualAddress;
+    optional_header->AddressOfEntryPoint = text_section_header->VirtualAddress + entryPointOffset;
 
     exe_buffer.size = text_section_header->PointerToRawData + text_section_header->SizeOfRawData;
 
