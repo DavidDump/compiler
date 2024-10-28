@@ -151,7 +151,7 @@ Buffer StringChainToBuffer(StringChain chain) {
     StringNode* current = chain.first;
     u64 size = 0;
     while(current != NULL) {
-        size = current->str.length;
+        size += current->str.length;
         current = current->next;
     }
     Buffer result = make_buffer(size, PAGE_READWRITE);
