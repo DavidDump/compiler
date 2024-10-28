@@ -425,7 +425,7 @@ void gen_call(GenContext* ctx, String name) {
 // lea rax, [rip + 0xdeadbeef + sizeof(u64)] ; load data
 // mov rax, [rip + 0xdeadbeef]               ; load size
 // read the data field of the entry into reg register
-void _gen_DataInReg(GenContext* ctx, Register reg, String name) {
+void gen_DataInReg(GenContext* ctx, Register reg, String name) {
     // NOTE: the rip address get added to the patched address,
     // so adding the size of u64 offsets the address by 8,
     // meaning instead of reading from the data begining, where the size is stored,
@@ -439,7 +439,7 @@ void _gen_DataInReg(GenContext* ctx, Register reg, String name) {
 }
 
 // read the size field of the entry into reg register
-void _gen_SizeInReg(GenContext* ctx, Register reg, String name) {
+void gen_SizeInReg(GenContext* ctx, Register reg, String name) {
     // NOTE: the rip address get added to the patched address,
     // the address gets added to 0 so in this case we read the size field of the entry
     genInstruction(ctx, INST(mov, OP_REG(reg), OP_RIP(0)));
@@ -469,10 +469,15 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
     String id = funcCall->node.FUNCTION_CALL.identifier;
     Args args = funcCall->node.FUNCTION_CALL.args;
 
-    // TODO: cast
-    for(u64 i = 0; i < (u64)args.size; ++i) {
+    for(u64 i = 0; i < args.size; ++i) {
         ASTNode* arg = args.args[i];
-        assert(arg->type == ASTNodeType_INT_LIT || arg->type == ASTNodeType_BINARY_EXPRESSION);
+        assert(
+            ASTNodeType_INT_LIT ||
+            ASTNodeType_FLOAT_LIT ||
+            ASTNodeType_SYMBOL ||
+            ASTNodeType_FUNCTION_CALL ||
+            ASTNodeType_BINARY_EXPRESSION
+        );
 
         gen_x86_64_expression(ctx, arg);
         if(i == 0) {
@@ -492,7 +497,12 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
         }
     }
 
-    gen_call(ctx, id);
+    // TODO: MASSIVE TEMPORARY SOLUTION FIX IMMEDIATELY!!!!!!
+    if(StringEqualsCstr(id, "WriteFile") || StringEqualsCstr(id, "GetStdHandle")) {
+        gen_callExtern(ctx, id);
+    } else {
+        gen_call(ctx, id);
+    }
 }
 
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
@@ -504,16 +514,37 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
         genInstruction(ctx, inst);
     } else if(expr->type == ASTNodeType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
+    } else if(expr->type == ASTNodeType_STRING_LIT) {
+        // TODO: this branch is implemented in a very scuffed way,
+        //       only here because i needed a quick working version
+        //       potential optimization is to collect all the string literals
+        //       and if two match only store one in the data section
+        //       is it a problem to use the string lit as a key????
+        String lit = expr->node.STRING_LIT.value;
+
+        UserDataEntry value = {
+            .data = &lit.str[1],
+            .dataLen = lit.length - 2,
+            .dataRVA = INVALID_ADDRESS,
+        };
+        if(!hashmapDataSet(&ctx->data, lit, value)) {
+            UNREACHABLE("failed to insert into hashmap");
+        }
+        gen_DataInReg(ctx, RAX, lit);
+    } else if(expr->type == ASTNodeType_BOOL_LIT) {
+        UNIMPLEMENTED("expression generation with bools");
     } else if(expr->type == ASTNodeType_SYMBOL) {
         String id = expr->node.SYMBOL.identifier;
         s64 value;
         if(!hashmapGet(&ctx->variables, id, &value)) {
-            UNREACHABLE("cannot generate expression with a undefined variable");
+            if(!hashmapGet(&ctx->constants, id, &value)) {
+                UNREACHABLE("cannot generate expression with a undefined variable or constant");
+            }
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_IMM32(value)));
+        } else {
+            // NOTE: i think the value has to be negative, because we are looking backwards on the stack
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, -(value * 8))));
         }
-        // NOTE: i think the value has to be negative, becouse we are looking backwards on the stack
-        // TODO: X8 is not always correct, it needs to be X4 if were generating 32bit code
-        Instruction inst = INST(mov, OP_REG(RAX), OP_INDIRECT_SIB(RBP, X8, -value));
-        genInstruction(ctx, inst);
     } else if(expr->type == ASTNodeType_FUNCTION_CALL) {
         gen_x86_64_func_call(ctx, expr);
     } else if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
@@ -620,6 +651,10 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 ASTNode* retType = node->node.FUNCTION_DEF.type;
                 UNUSED(retType);
 
+                // TODO: store information about each function like if its internal or external
+                //       if its external no codegen needs to happen
+                if(!scope->stmts.size) break;
+
                 // NOTE: would be usefull here to generating code into a separate buffer
                 // TODO: jump after function
                 // TODO: make the main entrypoint name customisable
@@ -651,7 +686,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                         genPush(ctx, R9);
                     } else {
                         hashmapSet(&ctx->variables, argId, ctx->stackPointer);
-                        genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_SIB(RBP, X8, i - 3)));
+                        genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, (i - 3) * 8)));
                         genPush(ctx, RAX);
                     }
                 }
@@ -684,9 +719,9 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                     UNREACHABLE("undefined variable");
                 }
                 s64 savedStack = ctx->stackPointer;
-                genInstruction(ctx, INST(lea, OP_REG(RSP), OP_INDIRECT_SIB(RBP, X8, -(value - 1))));
+                genInstruction(ctx, INST(lea, OP_REG(RSP), OP_INDIRECT_OFFSET32(RBP, -((value - 1) * 8))));
                 genPush(ctx, RAX);
-                genInstruction(ctx, INST(lea, OP_REG(RSP), OP_INDIRECT_SIB(RBP, X8, -savedStack)));
+                genInstruction(ctx, INST(lea, OP_REG(RSP), OP_INDIRECT_OFFSET32(RBP, -(savedStack * 8))));
                 // TODO: reseting the stack to its original position is only neccesary if it didnt alrady get reset by the push
                 // ie.: if((savedStack - 1) - (loc - 1) != 1) reset stack pos
                 ctx->stackPointer = savedStack;
@@ -701,8 +736,8 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 ExpressionEvaluationResult exprResult = evaluate_expression(expr);
                 s64 value = exprResult.result <= S64_MAX ? (s64)exprResult.result : S64_MAX;
                 value = exprResult.isNegative ? -value : value;
-                // TODO: assuming numberical constant
-                if(!hashmapSet(&ctx->constats, id, value)) {
+                // TODO: assuming numerical constant
+                if(!hashmapSet(&ctx->constants, id, value)) {
                     UNREACHABLE("hashmap full");
                 }
             } break;
@@ -744,6 +779,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             case ASTNodeType_LOOP: {
                 UNIMPLEMENTED("ASTNodeType_LOOP in codegen");
             } break;
+            case ASTNodeType_COMPILER_INST: break;
             
             case ASTNodeType_ELSE:
             case ASTNodeType_ELSE_IF:
@@ -755,7 +791,6 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             case ASTNodeType_BOOL_LIT:
             case ASTNodeType_SYMBOL:
             case ASTNodeType_TYPE:
-            case ASTNodeType_COMPILER_INST:
                 printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[node->type]);
                 break;
         }
@@ -773,7 +808,7 @@ GenContext gen_x86_64_bytecode(Scope* globalScope) {
     ctx.variables = hashmapInit(&ctx.mem, 0x1000);
     ctx.functions = hashmapInit(&ctx.mem, 0x1000);
     ctx.data  = hashmapDataInit(&ctx.mem, 0x1000);
-    ctx.constats  = hashmapInit(&ctx.mem, 0x1000);
+    ctx.constants = hashmapInit(&ctx.mem, 0x1000);
     
     gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
     return ctx;
@@ -782,3 +817,4 @@ GenContext gen_x86_64_bytecode(Scope* globalScope) {
 // NOTE: this way of pushing values to the stack might be better,
 //       because the push operation changes the stack pointer:
 //       mov     DWORD PTR [rbp-4], 2
+// TODO: maybe dont hardcode all the `* 8` when reading/writing variables
