@@ -29,6 +29,7 @@ bool hashmapSet(Hashmap* hs, String key, s64 value) {
 
     KVPair_SI pair = {.key = key, .value = value};
     hs->pair[index] = pair;
+    hs->size++;
     return TRUE;
 }
 
@@ -62,6 +63,7 @@ bool hashmapDataSet(HashmapData* hs, String key, UserDataEntry value) {
 
     KVPair_SD pair = {.key = key, .value = value};
     hs->pair[index] = pair;
+    hs->size++;
     return TRUE;
 }
 
@@ -95,6 +97,7 @@ bool hashmapFuncNameSet(HashmapFuncName* hs, String key, FuncName value) {
 
     KVPair_FuncName pair = {.key = key, .value = value};
     hs->pair[index] = pair;
+    hs->size++;
     return TRUE;
 }
 
@@ -128,6 +131,7 @@ bool hashmapLibNameSet(HashmapLibName* hs, String key, LibName value) {
 
     KVPair_LibName pair = {.key = key, .value = value};
     hs->pair[index] = pair;
+    hs->size++;
     return TRUE;
 }
 
@@ -143,3 +147,6 @@ bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value) {
     }
     return FALSE;
 }
+
+// TODO: add a linked list of filled entries in hashmap for quick iteration when iterating all filled entries
+// TODO: handle the case when a key is not in the hashmap
