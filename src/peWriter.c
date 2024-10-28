@@ -19,16 +19,18 @@ u64 align_u64(u64 number, u64 alignment) {
     return (u64)(ceil((double)number / alignment) * alignment);
 }
 
-u32 getFunctionRVA(ImportLibrary* libs, u64 libsCount, String name) {
-    // TODO: instead of iterating all the import use a hashmap
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary *lib = &libs[i];
-        for (s32 i = 0; i < lib->functionCount; ++i) {
-            ImportNameToRva *fn = &lib->functions[i];
-            if(StringEquals(fn->name, name)) return fn->iatRva;
+u32 getFunctionRVA(HashmapLibName* libs, String name) {
+    for(u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* pair = &libs->pair[i];
+        if(pair->key.length == 0) continue;
+        LibName* value = &libs->pair[i].value;
+        FuncName result = {0};
+        if(!hashmapFuncNameGet(&value->functions, name, &result)) {
+            UNREACHABLE("a function was not imported");
         }
+        return result.iatRva;
     }
-    UNREACHABLE("a function was not imported");
+    UNREACHABLE("library was not imported");
     return 0; // NOTE: just to silence a warning
 }
 
@@ -41,22 +43,24 @@ u32 genDataRVA(HashmapData* userData, String name) {
     return 0; // NOTE: just to silence a warning
 }
 
-ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapData* userData, IMAGE_SECTION_HEADER *header) {
+ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, IMAGE_SECTION_HEADER *header) {
     #define get_rva() (s32)(header->VirtualAddress + buffer->size)
 
     // NOTE: is it better to precalculate this or just use a dynamic array?
     u64 expected_encoded_size = 0;
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary* lib = &libs[i];
+    for (u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* lib = &libs->pair[i];
+        if(lib->key.length == 0) continue;
         // Aligned to 2 bytes c string of library name
-        expected_encoded_size += align((s32)lib->dll.name.length + 1, 2);
-        for (s32 h = 0; h < lib->functionCount; ++h) {
-            ImportNameToRva* fn = &lib->functions[h];
+        expected_encoded_size += align((s32)lib->key.length + 1, 2);
+        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
+            KVPair_FuncName* fn = &lib->value.functions.pair[h];
+            if(fn->key.length == 0) continue;
 
             // Ordinal Hint, value not required
             expected_encoded_size += sizeof(s16);
             // Aligned to 2 bytes c string of symbol name
-            expected_encoded_size += align((s32)fn->name.length + 1, 2);
+            expected_encoded_size += align((s32)fn->key.length + 1, 2);
             // IAT placeholder for symbol pointer
             expected_encoded_size += sizeof(u64);
             // Image Thunk
@@ -73,13 +77,14 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
         expected_encoded_size += sizeof(u64);
         // Image Thunk zero-termination
         expected_encoded_size += sizeof(IMAGE_IMPORT_DESCRIPTOR);
-
-        // Data section
-        if(userData->size != 0) { // TODO: find out why the memory is corrupted
-            for(u64 h = 0; h < userData->capacity; ++h) {
-                KVPair_SD pair = userData->pair[h];
-                if(pair.key.length != 0) expected_encoded_size += pair.value.dataLen;
-            }
+    }
+    // Data section
+    if(userData->size != 0) { // TODO: find out why the memory is corrupted
+        for(u64 i = 0; i < userData->capacity; ++i) {
+            KVPair_SD pair = userData->pair[i];
+            if(pair.key.length == 0) continue;
+            expected_encoded_size += sizeof(pair.value.dataLen);
+            expected_encoded_size += pair.value.dataLen;
         }
     }
 
@@ -90,31 +95,34 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
 
     Buffer* buffer = &result.buffer;
     // Function names
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary* lib = &libs[i];
-        for (s32 i = 0; i < lib->functionCount; ++i) {
-            ImportNameToRva* function = &lib->functions[i];
-            function->nameRva = get_rva();
+    for (u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* lib = &libs->pair[i];
+        if(lib->key.length == 0) continue;
+        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
+            KVPair_FuncName* function = &lib->value.functions.pair[h];
+            if(function->key.length == 0) continue;
+
+            function->value.nameRva = get_rva();
             buffer_append_s16(buffer, 0); // Ordinal Hint, value not required
-            size_t name_size = function->name.length + 1;
+            size_t name_size = function->key.length + 1;
             s32 aligned_name_size = align((s32)name_size, 2);
-            memcpy(
-                buffer_allocate_size(buffer, aligned_name_size),
-                function->name.str,
-                name_size
-            );
+            u8* buf = buffer_allocate_size(buffer, aligned_name_size);
+            memcpy(buf, function->key.str, name_size);
+            buf[name_size - 1] = 0; // TODO: i dont think the +1 for len is nessecary, but test before change
         }
     }
 
     // IAT
     result.iatRva = get_rva();
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary* lib = &libs[i];
-        lib->dll.iatRva = get_rva();
-        for (s32 i = 0; i < lib->functionCount; ++i) {
-            ImportNameToRva* fn = &lib->functions[i];
-            fn->iatRva = get_rva();
-            buffer_append_u64(buffer, fn->nameRva);
+    for (u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* lib = &libs->pair[i];
+        if(lib->key.length == 0) continue;
+        lib->value.iatRva = get_rva();
+        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
+            KVPair_FuncName* function = &lib->value.functions.pair[h];
+            if(function->key.length == 0) continue;
+            function->value.iatRva = get_rva();
+            buffer_append_u64(buffer, function->value.nameRva);
         }
         // End of IAT list
         buffer_append_u64(buffer, 0);
@@ -122,40 +130,42 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
     result.iatSize = (s32)buffer->size;
 
     // Image Thunks
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary* lib = &libs[i];
-        lib->imageThunkRva = get_rva();
-        for (s32 i = 0; i < lib->functionCount; ++i) {
-            ImportNameToRva* fn = &lib->functions[i];
-            buffer_append_u64(buffer, fn->nameRva);
+    for (u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* lib = &libs->pair[i];
+        if(lib->key.length == 0) continue;
+        lib->value.imageThunkRva = get_rva();
+        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
+            KVPair_FuncName* function = &lib->value.functions.pair[h];
+            if(function->key.length == 0) continue;
+            buffer_append_u64(buffer, function->value.nameRva);
         }
         // End of IAT list
         buffer_append_u64(buffer, 0);
     }
 
     // Library Names
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary* lib = &libs[i];
-        lib->dll.nameRva= get_rva();
-        size_t name_size = lib->dll.name.length + 1;
+    for (u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* lib = &libs->pair[i];
+        if(lib->key.length == 0) continue;
+        lib->value.nameRva= get_rva();
+        size_t name_size = lib->key.length + 1;
         s32 aligned_name_size = align((s32)name_size, 2);
-        memcpy(
-            buffer_allocate_size(buffer, aligned_name_size),
-            lib->dll.name.str,
-            name_size
-        );
+        u8* buf = buffer_allocate_size(buffer, aligned_name_size);
+        memcpy(buf, lib->key.str, name_size);
+        buf[name_size - 1] = 0; // TODO: i dont think the +1 for len is nessecary, but test before change
     }
 
     // Import Directory
     result.importDirectoryRva = get_rva();
-    for (u64 i = 0; i < libsCount; ++i) {
-        ImportLibrary* lib = &libs[i];
+    for (u64 i = 0; i < libs->capacity; ++i) {
+        KVPair_LibName* lib = &libs->pair[i];
+        if(lib->key.length == 0) continue;
 
         IMAGE_IMPORT_DESCRIPTOR *image_import_descriptor = buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR);
         *image_import_descriptor = (IMAGE_IMPORT_DESCRIPTOR){
-            .OriginalFirstThunk = lib->imageThunkRva,
-            .Name = lib->dll.nameRva,
-            .FirstThunk = lib->dll.iatRva,
+            .OriginalFirstThunk = lib->value.imageThunkRva,
+            .Name = lib->value.nameRva,
+            .FirstThunk = lib->value.iatRva,
         };
     }
     result.importDirectorySize = get_rva() - result.importDirectoryRva;
@@ -164,15 +174,13 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
     // Data Section
     if(userData->size != 0) { // TODO: find out why the memory is corrupted
         for(u64 i = 0; i < userData->capacity; ++i) {
-            KVPair_SD pair = userData->pair[i];
-            if(pair.key.length != 0) {
-                UserDataEntry* dataEntry = &userData->pair[i].value;
-                dataEntry->dataRVA = get_rva();
-                
-                buffer_append_u64(buffer, dataEntry->dataLen);
-                u8* bufferMem = buffer_allocate_size(buffer, dataEntry->dataLen);
-                memcpy(bufferMem, dataEntry->data, dataEntry->dataLen);
-            }
+            KVPair_SD* pair = &userData->pair[i];
+            if(pair->key.length == 0) continue;
+
+            pair->value.dataRVA = get_rva();
+            buffer_append_u64(buffer, pair->value.dataLen);
+            u8* bufferMem = buffer_allocate_size(buffer, pair->value.dataLen);
+            memcpy(bufferMem, pair->value.data, pair->value.dataLen);
         }
     }
     
@@ -188,7 +196,7 @@ ParsedDataSection parseDataSection(ImportLibrary* libs, u64 libsCount, HashmapDa
 
 // names is the locations where imported functions were used, used for patching
 // dataToPatch is the locations where user defined data was refferenced, used for patching
-Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch) {
+Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch) {
     // Sections
     IMAGE_SECTION_HEADER sections[3] = {
         [0] = {
@@ -224,7 +232,7 @@ Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer
     s32 virtual_size_of_headers = align(file_size_of_headers, PE32_SECTION_ALIGNMENT);
     rdata_section_header->PointerToRawData = file_size_of_headers;
     rdata_section_header->VirtualAddress = virtual_size_of_headers;
-    ParsedDataSection rdata_section = parseDataSection(libs, libsCount, userData, rdata_section_header);
+    ParsedDataSection rdata_section = parseDataSection(libs, userData, rdata_section_header);
 
     // prepare .text
     u32 codeSizeAligned = align(bytecode.size, PE32_FILE_ALIGNMENT);
@@ -313,7 +321,7 @@ Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer
         AddrToPatch* castNames = (AddrToPatch*)names.mem;
         u8* addrLoc = &beginnigOfCode[castNames[i].offset];
         u32 nextInstructonAddr = (begingIndex + castNames[i].offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
-        u32 funcRVA = getFunctionRVA(libs, libsCount, castNames[i].name);
+        u32 funcRVA = getFunctionRVA(libs, castNames[i].name);
         
         addrLoc[0] = ((funcRVA - nextInstructonAddr) >> (8 * 0)) & 0xff;
         addrLoc[1] = ((funcRVA - nextInstructonAddr) >> (8 * 1)) & 0xff;

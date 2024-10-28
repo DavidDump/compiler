@@ -52,6 +52,6 @@ typedef struct ParsedDataSection {
     s32 importDirectorySize;
 } ParsedDataSection;
 
-Buffer genExecutable(ImportLibrary* libs, u64 libsCount, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch);
+Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch);
 
 #endif // COMP_PE_WRITER_H
