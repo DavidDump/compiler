@@ -497,8 +497,11 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
         }
     }
 
-    // TODO: MASSIVE TEMPORARY SOLUTION FIX IMMEDIATELY!!!!!!
-    if(StringEqualsCstr(id, "WriteFile") || StringEqualsCstr(id, "GetStdHandle")) {
+    FuncInfo value = {0};
+    if(!hashmapFuncInfoGet(&ctx->funcInfo, id, &value)) {
+        UNREACHABLE("function not found in hashmap");
+    }
+    if(value.isExtern) {
         gen_callExtern(ctx, id);
     } else {
         gen_call(ctx, id);
@@ -651,9 +654,11 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 ASTNode* retType = node->node.FUNCTION_DEF.type;
                 UNUSED(retType);
 
-                // TODO: store information about each function like if its internal or external
-                //       if its external no codegen needs to happen
-                if(!scope->stmts.size) break;
+                FuncInfo value = {0};
+                if(!hashmapFuncInfoGet(&ctx->funcInfo, id, &value)) {
+                    UNREACHABLE("function not found in hashmap");
+                }
+                if(value.isExtern) break;
 
                 // NOTE: would be usefull here to generating code into a separate buffer
                 // TODO: jump after function
@@ -797,9 +802,11 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
     }
 }
 
-GenContext gen_x86_64_bytecode(Scope* globalScope) {
+GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo) {
     GenContext ctx = {0};
     ctx.code = make_buffer(0x100, PAGE_READWRITE);
+
+    ctx.funcInfo = funcInfo;
 
     ctx.symbolsToPatch = make_buffer(0x100, PAGE_READWRITE);
     ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE);
@@ -818,3 +825,4 @@ GenContext gen_x86_64_bytecode(Scope* globalScope) {
 //       because the push operation changes the stack pointer:
 //       mov     DWORD PTR [rbp-4], 2
 // TODO: maybe dont hardcode all the `* 8` when reading/writing variables
+// TODO: make sure to preserve non volitile register when entering a function

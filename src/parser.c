@@ -762,10 +762,11 @@ ASTNode* parseFunctionDecl(ParseContext* ctx, Arena* mem, Scope* currentScope, T
 
     if(next.type == TokenType_LSCOPE || next.type == TokenType_SEMICOLON) {
         node->node.FUNCTION_DEF.type = typeVoid(mem);
-        return node;
     } else {
         ERROR(next.loc, "Function declaration needs to have a body, or be marked as #extern");
     }
+
+    return node;
 }
 
 #if 0
@@ -857,6 +858,7 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
     ParseContext ctx2 = {.tokens = tokens};
     ParseContext* ctx = &ctx2;
     ctx->importLibraries = hashmapLibNameInit(mem, 0x100);
+    ctx->funcInfo = hashmapFuncInfoInit(mem, 0x100);
 
     Scope* globalScope = parseScopeInit(mem, NULL);
     Scope* currentScope = globalScope;
@@ -961,6 +963,11 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
                         // constant is a function
                         ASTNode* function = parseFunctionDecl(ctx, mem, currentScope, t);
                         assert(function->node.FUNCTION_DEF.isExtern == FALSE && "`parseFunctionDecl()` should set isExtern to FALSE by default");
+
+                        FuncInfo info = {.isExtern = FALSE};
+                        if(!hashmapFuncInfoSet(&ctx->funcInfo, t.value, info)) {
+                            UNREACHABLE("failed to set hashmap");
+                        }
 
                         // TODO: add the function to the symbol table
                         parseScopeAddSymbol(currentScope, t.value);
@@ -1158,6 +1165,10 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
                     if(!hashmapFuncNameSet(&value.functions, functionName.value, value2)) {
                         UNREACHABLE("hashmap failed to insert");
                     }
+                    FuncInfo info = {.isExtern = TRUE};
+                    if(!hashmapFuncInfoSet(&ctx->funcInfo, functionName.value, info)) {
+                        UNREACHABLE("failed to set hashmap");
+                    }
 
                     parseAddStatement(&currentScope->stmts, node);
                 } else {
@@ -1200,7 +1211,8 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
     }
 
     result.globalScope = globalScope;
-    result.importLibraries = ctx->importLibraries; // TODO: ExitProcess need to be imported allways
+    result.importLibraries = ctx->importLibraries; // TODO: ExitProcess need to be imported always
+    result.funcInfo = ctx->funcInfo;
     return result;
 }
 

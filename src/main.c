@@ -137,7 +137,7 @@ int main(int argc, char** argv){
 #endif // COMP_DEBUG
 
     #if 1
-    GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope);
+    GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope, parseResult.funcInfo);
 
     if(StringEndsWith(outFilepath, STR(".bin"))) {
         if(!EntireFileWrite(outFilepath, bytecode.code)) {

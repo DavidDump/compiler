@@ -45,10 +45,11 @@ typedef enum Scale {
 #include "bytecode_exe_common.h"
 
 #define INVALID_ADDRESS 0xCAFEBABE
-#define SAVED_STACK_SIZE 255
 typedef struct GenContext {
     Arena mem;
     Buffer code;
+
+    HashmapFuncInfo funcInfo; // input arg, info about defined functions
 
     // TODO: this is not good, me not like, make better
     Buffer symbolsToPatch;   // AddrToPatch, external function call, variable or other symbol
@@ -62,7 +63,7 @@ typedef struct GenContext {
     Hashmap variables; // value is the stack offset to the variable
     Hashmap functions; // value is the offset to the begining of the function from the begining of the code buffer
     HashmapData data;  // value is a UserDataEntry, only for string data
-    Hashmap constants;  // value is the value of a constant that should be hardcoded
+    Hashmap constants; // value is the value of a constant that should be hardcoded
 } GenContext;
 
 typedef enum OperandType {
@@ -152,7 +153,7 @@ typedef struct Instruction {
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
-GenContext gen_x86_64_bytecode(Scope* globalScope);
+GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo);
 
 #endif // COMP_BYTECODE_H
 

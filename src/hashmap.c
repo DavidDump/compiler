@@ -148,5 +148,39 @@ bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value) {
     return FALSE;
 }
 
+HashmapFuncInfo hashmapFuncInfoInit(Arena* mem, u64 capacity) {
+    HashmapFuncInfo result = {0};
+    
+    result.pair = arena_alloc(mem, capacity * sizeof(*result.pair));
+    result.capacity = capacity;
+    
+    return result;
+}
+
+bool hashmapFuncInfoSet(HashmapFuncInfo* hs, String key, FuncInfo value) {
+    if(hs->size >= hs->capacity) return FALSE;
+    u64 index = hash(key) % hs->capacity;
+
+    while(hs->pair[index].key.length != 0) index = (index + 1) % hs->capacity;
+
+    KVPair_FuncInfo pair = {.key = key, .value = value};
+    hs->pair[index] = pair;
+    hs->size++;
+    return TRUE;
+}
+
+bool hashmapFuncInfoGet(HashmapFuncInfo* hs, String key, FuncInfo* value) {
+    u64 index = hash(key) % hs->capacity;
+
+    while(hs->pair[index].key.length != 0 && !StringEquals(hs->pair[index].key, key)) index = (index + 1) % hs->capacity;
+
+    if(StringEquals(hs->pair[index].key, key)) {
+        KVPair_FuncInfo pair = hs->pair[index];
+        *value = pair.value;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 // TODO: add a linked list of filled entries in hashmap for quick iteration when iterating all filled entries
 // TODO: handle the case when a key is not in the hashmap

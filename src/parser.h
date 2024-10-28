@@ -219,6 +219,7 @@ typedef struct ParseContext {
 	u64 index;
     HashmapLibName importLibraries;
     String currentImportLibraryName;
+    HashmapFuncInfo funcInfo;
 } ParseContext;
 
 typedef struct Operator {
@@ -234,6 +235,7 @@ typedef struct ExpressionEvaluationResult {
 typedef struct ParseResult {
     Scope* globalScope;
     HashmapLibName importLibraries;
+    HashmapFuncInfo funcInfo;
 } ParseResult;
 
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);

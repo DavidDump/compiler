@@ -67,6 +67,21 @@ typedef struct HashmapLibName {
     u64 size;
 } HashmapLibName;
 
+typedef struct FuncInfo {
+    bool isExtern;
+} FuncInfo;
+
+typedef struct KVPair_FuncInfo {
+    String key;
+    FuncInfo value;
+} KVPair_FuncInfo;
+
+typedef struct HashmapFuncInfo {
+    KVPair_FuncInfo* pair;
+    u64 capacity;
+    u64 size;
+} HashmapFuncInfo;
+
 Hashmap hashmapInit(Arena* mem, u64 capacity);
 bool hashmapSet(Hashmap* hs, String key, s64 value);
 bool hashmapGet(Hashmap* hs, String key, s64* value);
@@ -82,5 +97,9 @@ bool hashmapFuncNameGet(HashmapFuncName* hs, String key, FuncName* value);
 HashmapLibName hashmapLibNameInit(Arena* mem, u64 capacity);
 bool hashmapLibNameSet(HashmapLibName* hs, String key, LibName value);
 bool hashmapLibNameGet(HashmapLibName* hs, String key, LibName* value);
+
+HashmapFuncInfo hashmapFuncInfoInit(Arena* mem, u64 capacity);
+bool hashmapFuncInfoSet(HashmapFuncInfo* hs, String key, FuncInfo value);
+bool hashmapFuncInfoGet(HashmapFuncInfo* hs, String key, FuncInfo* value);
 
 #endif //  COMP_HASHMAP_H
