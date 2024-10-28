@@ -194,3 +194,5 @@ int main(int argc, char** argv){
 // TODO: maybe having an else and elseif ast node doesnt make sense
 // just store all the conditions and their coresponding scopes
 // in an array, and tag the node if it has an else/elseif block
+
+// TODO: write own memory allocator, this one has a bug in it when allocating more memory that fits on one page

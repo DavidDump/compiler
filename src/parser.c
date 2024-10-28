@@ -758,11 +758,11 @@ ASTNode* parseFunctionDecl(ParseContext* ctx, Arena* mem, Scope* currentScope, T
     if(next.type == TokenType_RARROW) {
         node->node.FUNCTION_DEF.type = parseType(ctx, mem);
         next = parseConsume(ctx);
+    } else {
+        node->node.FUNCTION_DEF.type = typeVoid(mem);
     }
 
-    if(next.type == TokenType_LSCOPE || next.type == TokenType_SEMICOLON) {
-        node->node.FUNCTION_DEF.type = typeVoid(mem);
-    } else {
+    if(!(next.type == TokenType_LSCOPE || next.type == TokenType_SEMICOLON)) {
         ERROR(next.loc, "Function declaration needs to have a body, or be marked as #extern");
     }
 

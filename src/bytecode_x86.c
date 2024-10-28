@@ -812,10 +812,10 @@ GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo) {
     ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE);
     ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE);
 
-    ctx.variables = hashmapInit(&ctx.mem, 0x1000);
-    ctx.functions = hashmapInit(&ctx.mem, 0x1000);
-    ctx.data  = hashmapDataInit(&ctx.mem, 0x1000);
-    ctx.constants = hashmapInit(&ctx.mem, 0x1000);
+    ctx.variables = hashmapInit(&ctx.mem, 0x10);
+    ctx.functions = hashmapInit(&ctx.mem, 0x10);
+    ctx.data  = hashmapDataInit(&ctx.mem, 0x10);
+    ctx.constants = hashmapInit(&ctx.mem, 0x10);
     
     gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
     return ctx;
