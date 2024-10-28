@@ -170,12 +170,11 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, UserData
         expected_encoded_size += sizeof(u64);
         // Image Thunk zero-termination
         expected_encoded_size += sizeof(IMAGE_IMPORT_DESCRIPTOR);
-
-        // Data section
-        for(s32 h = 0; h < dataEntryCount; ++h) {
-            UserDataEntry* dataEntry = &dataEntries[h];
-            expected_encoded_size += dataEntry->dataLen + sizeof(u64);
-        }
+    }
+    // Data section
+    for(s32 h = 0; h < dataEntryCount; ++h) {
+        UserDataEntry* dataEntry = &dataEntries[h];
+        expected_encoded_size += dataEntry->dataLen + sizeof(u64);
     }
 
     ParsedDataSection result = {
@@ -187,8 +186,8 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, UserData
     // Function names
     for (s64 i = 0; i < libsCount; ++i) {
         Import_Library *lib = &libs[i];
-        for (s32 i = 0; i < lib->function_count; ++i) {
-            Import_Name_To_Rva *function = &lib->functions[i];
+        for (s32 h = 0; h < lib->function_count; ++h) {
+            Import_Name_To_Rva *function = &lib->functions[h];
             function->name_rva = get_rva();
             buffer_append_s16(buffer, 0); // Ordinal Hint, value not required
             size_t name_size = strlen(function->name) + 1;
@@ -206,8 +205,8 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, UserData
     for (s64 i = 0; i < libsCount; ++i) {
         Import_Library *lib = &libs[i];
         lib->dll.iat_rva = get_rva();
-        for (s32 i = 0; i < lib->function_count; ++i) {
-            Import_Name_To_Rva *fn = &lib->functions[i];
+        for (s32 h = 0; h < lib->function_count; ++h) {
+            Import_Name_To_Rva *fn = &lib->functions[h];
             fn->iat_rva = get_rva();
             buffer_append_u64(buffer, fn->name_rva);
         }
@@ -220,8 +219,8 @@ ParsedDataSection parseDataSection(Import_Library* libs, u64 libsCount, UserData
     for (s64 i = 0; i < libsCount; ++i) {
         Import_Library *lib = &libs[i];
         lib->image_thunk_rva = get_rva();
-        for (s32 i = 0; i < lib->function_count; ++i) {
-            Import_Name_To_Rva *fn = &lib->functions[i];
+        for (s32 h = 0; h < lib->function_count; ++h) {
+            Import_Name_To_Rva *fn = &lib->functions[h];
             buffer_append_u64(buffer, fn->name_rva);
         }
         // End of IAT list
