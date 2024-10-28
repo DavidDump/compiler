@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "arena.h"
+#include "buffer.h"
 
 #define STR_FMT "%.*s"
 #define STR_PRINT(_str_) (int)(_str_).length, (_str_).str
@@ -43,5 +44,6 @@ u64 StringToU64(String value);
 u32 StringToU32(String value);
 bool StringEndsWith(String str, String end);
 s64 StringLastIndexOf(String str, u8 c);
+Buffer StringChainToBuffer(StringChain chain);
 
 #endif // COMP_STRING_H
