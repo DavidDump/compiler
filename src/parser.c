@@ -198,61 +198,72 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_IF: {
-            ASTNode* expr = node->node.IF.expr;
-            Scope* scope = node->node.IF.scope;
+            ConditionalBlocksArray blocks = node->node.IF.blocks;
+            bool hasElse = node->node.IF.hasElse;
+            Scope* elze = node->node.IF.elze;
 
-            genPrintHelper("IF: {\n");
-            genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
-            printf(",\n");
+            // if block, always the 0 index
+            {
+                ConditionalBlock block = blocks.blocks[0];
+                ASTNode* expr = block.expr;
+                Scope* scope = block.scope;
 
-            // statements
-            if(scope->stmts.size > 0) {
-                genPrintHelper("    statements: [\n");
-                for(u64 i = 0; i < scope->stmts.size; ++i) {
-                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                genPrintHelper("IF: {\n");
+                genPrintHelper("    expr:");
+                ASTNodePrint(expr, indent + 1);
+                printf(",\n");
+
+                // statements
+                if(scope->stmts.size > 0) {
+                    genPrintHelper("    statements: [\n");
+                    for(u64 i = 0; i < scope->stmts.size; ++i) {
+                        ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                    }
+                    genPrintHelper("    ],\n");
+                } else {
+                    genPrintHelper("    statements: [],\n");
                 }
-                genPrintHelper("    ],\n");
-            } else {
-                genPrintHelper("    statements: [],\n");
+                genPrintHelper("}\n");
             }
-            genPrintHelper("}\n");
-        } break;
-        case ASTNodeType_ELSE: {
-            genPrintHelper("ELSE: {\n");
-            Scope* scope = node->node.ELSE.scope;
 
-            // statements
-            if(scope->stmts.size > 0) {
-                genPrintHelper("    statements: [\n");
-                for(u64 i = 0; i < scope->stmts.size; ++i) {
-                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+            // else if blocks
+            for(u64 i = 1; i < blocks.count; ++i) {
+                ConditionalBlock block = blocks.blocks[i];
+                ASTNode* expr = block.expr;
+                Scope* scope = block.scope;
+
+                genPrintHelper("ELSE IF: {\n");
+                genPrintHelper("    expr:");
+                ASTNodePrint(expr, indent + 1);
+                printf(",\n");
+
+                // statements
+                if(scope->stmts.size > 0) {
+                    genPrintHelper("    statements: [\n");
+                    for(u64 i = 0; i < scope->stmts.size; ++i) {
+                        ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                    }
+                    genPrintHelper("    ],\n");
+                } else {
+                    genPrintHelper("    statements: [],\n");
                 }
-                genPrintHelper("    ],\n");
-            } else {
-                genPrintHelper("    statements: [],\n");
+                genPrintHelper("}\n");
             }
-        } break;
-        case ASTNodeType_ELSE_IF: {
-            ASTNode* expr = node->node.ELSE_IF.expr;
-            Scope* scope = node->node.ELSE_IF.scope;
 
-            genPrintHelper("ELSE_IF: {\n");
-            genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
-            printf(",\n");
-
-            // statements
-            if(scope->stmts.size > 0) {
-                genPrintHelper("    statements: [\n");
-                for(u64 i = 0; i < scope->stmts.size; ++i) {
-                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+            if(hasElse) {
+                Scope* scope = elze;
+                // statements
+                if(scope->stmts.size > 0) {
+                    genPrintHelper("    statements: [\n");
+                    for(u64 i = 0; i < scope->stmts.size; ++i) {
+                        ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                    }
+                    genPrintHelper("    ],\n");
+                } else {
+                    genPrintHelper("    statements: [],\n");
                 }
-                genPrintHelper("    ],\n");
-            } else {
-                genPrintHelper("    statements: [],\n");
+                genPrintHelper("}\n");
             }
-            genPrintHelper("}\n");
         } break;
         case ASTNodeType_LOOP: {
             ASTNode* expr = node->node.LOOP.expr;
@@ -853,6 +864,221 @@ ExpressionEvaluationResult evaluate_expression(ASTNode* expr) {
     return result;
 }
 
+Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
+    Scope* result = parseScopeInit(mem, parent);
+
+    // scope isnt enclosed by {} instead its just a single statement
+    Token next = parsePeek(ctx, 0);
+    if(next.type != TokenType_LSCOPE) {
+        ASTNode* statement = parseStatement(ctx, mem, parent);
+        parseAddStatement(&result->stmts, statement);
+        return result;
+    }
+
+    // scope consists of multiple statements enclosed by {}
+    while(next.type != TokenType_RSCOPE) {
+        parseConsume(ctx); // {
+        ASTNode* statement = parseStatement(ctx, mem, parent);
+        parseAddStatement(&result->stmts, statement);
+        next = parsePeek(ctx, 0);
+    }
+    parseConsume(ctx); // }
+
+    return result;
+}
+
+void parseAddConditionalBlock(Arena* mem, ConditionalBlocksArray* blocks, ConditionalBlock block) {
+    if(blocks->count >= blocks->capacity){
+        size_t newCap = blocks->capacity * 2;
+        if(newCap == 0) newCap = 1;
+        blocks->blocks = arena_realloc(mem, blocks->blocks, blocks->capacity * sizeof(blocks->blocks[0]), newCap * sizeof(blocks->blocks[0]));
+        blocks->capacity = newCap;
+    }
+
+    blocks->blocks[blocks->count++] = block;
+}
+
+ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
+    ASTNode* result = NodeInit(mem);
+    
+    Token t = parseConsume(ctx);
+    switch(t.type) {
+        case TokenType_RETURN: {
+            result->type = ASTNodeType_RET;
+            result->node.RET.expr = parseExpression(ctx, mem);
+
+            parseCheckSemicolon(ctx);
+        } break;
+        case TokenType_IF: {
+            result->type = ASTNodeType_IF;
+
+            // NOTE: this is kindof stupid, of the order of the parse functions changes the parsing breaks
+            ConditionalBlock ifBlock = {
+                .expr = parseExpression(ctx, mem),
+                .scope = parseScope(ctx, mem, parent),
+            };
+            parseAddConditionalBlock(mem, &result->node.IF.blocks, ifBlock);
+
+            Token next = parsePeek(ctx, 0);
+            while(next.type == TokenType_ELSE) {
+                parseConsume(ctx); // else
+                next = parsePeek(ctx, 0);
+                if(next.type == TokenType_IF) {
+                    // else if
+                    parseConsume(ctx); // if
+                    ConditionalBlock elseIfBlock = {
+                        .expr = parseExpression(ctx, mem),
+                        .scope = parseScope(ctx, mem, parent),
+                    };
+                    parseAddConditionalBlock(mem, &result->node.IF.blocks, elseIfBlock);
+                } else {
+                    // else
+                    result->node.IF.hasElse = TRUE;
+                    result->node.IF.elze = parseScope(ctx, mem, parent);
+                    break;
+                }
+                next = parsePeek(ctx, 0);
+            }
+        } break;
+        case TokenType_LOOP: {
+            result->type = ASTNodeType_LOOP;
+            result->node.LOOP.expr = parseExpression(ctx, mem);
+            result->node.LOOP.scope = parseScope(ctx, mem, parent);
+        } break;
+        case TokenType_INT_LITERAL:
+        case TokenType_STRING_LIT:
+        case TokenType_BOOL_LITERAL:
+        case TokenType_SUB:
+        case TokenType_LPAREN: {
+            // NOTE: technicaly a expression with no effect should be allowed, but it will be ignored during codegen
+            result = parseExpression(ctx, mem);
+
+            parseCheckSemicolon(ctx);
+        } break;
+        case TokenType_LSCOPE: {
+            Scope* scope = parseScope(ctx, mem, parent);
+            // TODO: scope is not a single statement, but should still be valid, should this be its own ASTNode_Type?
+            UNUSED(scope);
+        } break;
+        case TokenType_HASHTAG: {
+            UNIMPLEMENTED("parseCompInstruction");
+            // ASTNode* compInst = parseCompInstruction(ctx, mem);
+        } break;
+        case TokenType_IDENTIFIER: {
+            Token next = parsePeek(ctx, 0);
+            if(next.type == TokenType_LPAREN) {
+                // function call
+                // TODO: right now `foo() + 3;` doesnt parse, but it should, it would be possible to make it work but it requires to rewind the context
+                result = makeFunction(ctx, mem, t);
+                
+                parseCheckSemicolon(ctx);
+                // TODO: `parseScopeAddSymbol()` should also contain the symbols for functions
+            } else if(next.type == TokenType_ASSIGNMENT) {
+                parseConsume(ctx); // =
+                result->type = ASTNodeType_VAR_REASSIGN;
+                result->node.VAR_REASSIGN.identifier = t.value;
+                result->node.VAR_REASSIGN.expr = parseExpression(ctx, mem);
+
+                parseCheckSemicolon(ctx);
+            } else if(next.type == TokenType_INITIALIZER) {
+                parseConsume(ctx); // :=
+                result->type = ASTNodeType_VAR_DECL_ASSIGN;
+                result->node.VAR_DECL_ASSIGN.identifier = t.value;
+                result->node.VAR_DECL_ASSIGN.expr = parseExpression(ctx, mem);
+                // NOTE: parse inferred during typechecking, void assigned here so we  can print the node
+                result->node.VAR_DECL_ASSIGN.type = typeVoid(mem);
+
+                parseScopeAddSymbol(parent, t.value);
+                parseCheckSemicolon(ctx);
+            } else if(next.type == TokenType_COLON) {
+                parseConsume(ctx); // :
+                String identifier = t.value;
+                ASTNode* type = parseType(ctx, mem);
+
+                next = parsePeek(ctx, 0);
+                if(next.type == TokenType_ASSIGNMENT) {
+                    parseConsume(ctx); // =
+                    result->type = ASTNodeType_VAR_DECL_ASSIGN;
+                    result->node.VAR_DECL_ASSIGN.identifier = identifier;
+                    result->node.VAR_DECL_ASSIGN.type = type;
+                    result->node.VAR_DECL_ASSIGN.expr = parseExpression(ctx, mem);
+                } else {
+                    result->type = ASTNodeType_VAR_DECL;
+                    result->node.VAR_DECL.identifier = identifier;
+                    result->node.VAR_DECL.type = type;
+                }
+
+                parseScopeAddSymbol(parent, t.value);
+                parseCheckSemicolon(ctx);
+            } else if(next.type == TokenType_DOUBLECOLON) {
+                // constant
+                // function def
+                UNIMPLEMENTED("");
+                // TODO: `parseScopeAddSymbol()` should also contain the symbols for consts
+            }
+        } break;
+        // NOTE: later when added `using` and `struct` this will be a valid statement begin token
+        // case TokenType_DOT: {} break;
+
+        case TokenType_COUNT:
+        case TokenType_NONE:
+        case TokenType_ELSE:
+        case TokenType_TYPE:
+        case TokenType_SEMICOLON:
+        case TokenType_COLON:
+        case TokenType_RARROW:
+        case TokenType_RSCOPE:
+        case TokenType_RPAREN:
+        case TokenType_LBRACKET:
+        case TokenType_RBRACKET:
+        case TokenType_COMMA:
+        case TokenType_DOT:
+        case TokenType_DOUBLEDOT:
+        case TokenType_TRIPLEDOT:
+        case TokenType_LESS:
+        case TokenType_LESS_EQ:
+        case TokenType_GREATER:
+        case TokenType_GREATER_EQ:
+        case TokenType_NOT_EQUALS:
+        case TokenType_ADD:
+        case TokenType_MUL:
+        case TokenType_DIV:
+        case TokenType_COMPARISON:
+        case TokenType_ASSIGNMENT:
+        case TokenType_DOUBLECOLON:
+        case TokenType_INITIALIZER:
+            printf("[ERROR] Unhandled token type: %s at ("STR_FMT":%i:%i)\n", TokenTypeStr[t.type], STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum);
+            break;
+    }
+
+    return result;
+}
+
+Scope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
+    Scope* globalScope = parseScopeInit(mem, NULL);
+    while(ctx->index < ctx->tokens.size) {
+        ASTNode* statement = parseStatement(ctx, mem, globalScope);
+        parseAddStatement(&globalScope->stmts, statement);
+    }
+    return globalScope;
+}
+
+ParseResult Parse(TokenArray tokens, Arena* mem) {
+    ParseResult result = {0};
+    ParseContext ctx2 = {.tokens = tokens};
+    ParseContext* ctx = &ctx2;
+    ctx->importLibraries = hashmapLibNameInit(mem, 0x100);
+    ctx->funcInfo = hashmapFuncInfoInit(mem, 0x100);
+
+    Scope* globalScope = parseGlobalScope(ctx, mem);
+
+    result.globalScope = globalScope;
+    result.importLibraries = ctx->importLibraries; // TODO: ExitProcess needs to be imported always
+    result.funcInfo = ctx->funcInfo;
+    return result;
+}
+
+#if 0
 ParseResult Parse(TokenArray tokens, Arena* mem) {
     ParseResult result = {0};
     ParseContext ctx2 = {.tokens = tokens};
@@ -1215,6 +1441,7 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
     result.funcInfo = ctx->funcInfo;
     return result;
 }
+#endif
 
 // TODO: check if functions with return type return on all codepaths (typechecking step)
 // TODO: all the keywords that are followed by a scope, should have the option to ommit the scope and use a single statement instead

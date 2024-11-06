@@ -62,7 +62,7 @@ void genChainPrintf(StringChain* result, Arena* mem, char* format, ...) {
             char* buffer = arena_alloc(mem, intLen * sizeof(char));
             // TODO: implement snprintf myself
             snprintf(buffer, intLen, "%i", arg);
-            StringChainAppend(result, mem, (String){.str = (u8*)buffer, .length = intLen});
+            StringChainAppend(result, mem, (String){.str = (u8*)buffer, .length = intLen - 1});
 
             workingStr.str = (u8*)format + 1;
             workingStr.length = 0;
@@ -410,6 +410,8 @@ StringChain generate_win_x86_64_nasm_scope(AsmGenContext* ctx, Scope* globalScop
             } break;
             // TODO: see if some of the StringChainAppendChain calls can be removed adding a string not to the and of the chain but inserting it in the middle
             case ASTNodeType_IF: {
+                // TODO: conditional jump disabled for now after node type rewrite
+#if 0
                 ASTNode* next = node;
                 do{
                     if(next->type != ASTNodeType_IF) i++;
@@ -473,6 +475,7 @@ StringChain generate_win_x86_64_nasm_scope(AsmGenContext* ctx, Scope* globalScop
                 ifBody.last = NULL;
                 ifBody.nodeCount = 0;
                 ifEndLabel = INVALID_IF_LABEL_COUNTER;
+#endif
             } break;
             case ASTNodeType_FUNCTION_CALL: {
                 String id = node->node.FUNCTION_CALL.identifier;
@@ -532,8 +535,6 @@ StringChain generate_win_x86_64_nasm_scope(AsmGenContext* ctx, Scope* globalScop
             } break;
             case ASTNodeType_COMPILER_INST: break;
 
-            case ASTNodeType_ELSE:
-            case ASTNodeType_ELSE_IF:
             case ASTNodeType_BINARY_EXPRESSION:
             case ASTNodeType_UNARY_EXPRESSION:
             case ASTNodeType_INT_LIT:

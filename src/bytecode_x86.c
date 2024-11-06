@@ -765,29 +765,13 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 }
             } break;
             case ASTNodeType_IF: {
-                ASTNode* next = node;
-                do {
-                    if(next->type != ASTNodeType_IF) i++;
-                    if(next->type == ASTNodeType_IF) {
-                        ASTNode* expr = next->node.IF.expr;
-                        Scope* scope = next->node.IF.scope;
-
-                        // conditions
-                        gen_x86_64_condition(ctx, expr);
-
-                        // body
-                        gen_x86_64_scope(ctx, scope, stackToRestore, mainScope);
-                        UNIMPLEMENTED("unfished, need out of order appending for instructions");
-                    }
-                } while(next->type == ASTNodeType_IF || next->type == ASTNodeType_ELSE || next->type == ASTNodeType_ELSE_IF);
+                UNIMPLEMENTED("ASTNodeType_IF in codegen");
             } break;
             case ASTNodeType_LOOP: {
                 UNIMPLEMENTED("ASTNodeType_LOOP in codegen");
             } break;
             case ASTNodeType_COMPILER_INST: break;
             
-            case ASTNodeType_ELSE:
-            case ASTNodeType_ELSE_IF:
             case ASTNodeType_BINARY_EXPRESSION:
             case ASTNodeType_UNARY_EXPRESSION:
             case ASTNodeType_INT_LIT:
