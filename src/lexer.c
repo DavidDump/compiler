@@ -147,7 +147,7 @@ TokenArray Tokenize(String source, String filename) {
                 len = 2;
                 type = TokenType_NOT_EQUALS;
             }
-            assert(len == 2 && "! unary operator currently unsupported");
+            assert(len == 2, "! unary operator currently unsupported");
             
             value.str = &source.str[i];
             value.length = len;
@@ -282,8 +282,8 @@ TokenArray Tokenize(String source, String filename) {
         }
         #endif // COMP_DEBUG
         
-        assert(value.length != 0);
-        assert(type != 0);
+        assert(value.length != 0, "");
+        assert(type != 0, "");
         TokenArrayAddToken(&result, value, type, filename, lineNum, collumNum);
         
         collumNum += value.length;

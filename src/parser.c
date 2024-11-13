@@ -3,7 +3,6 @@
 
 #include <stdlib.h> // exit(), EXIT_FAILURE
 #include <stdio.h> // printf
-#include <assert.h>
 
 void parseAddStatement(StmtList* list, ASTNode* node){
     if(list->size >= list->capacity){
@@ -17,7 +16,7 @@ void parseAddStatement(StmtList* list, ASTNode* node){
 }
 
 void parseAddArg(Args* args, ASTNode* node){
-    // assert(node->type == ASTNodeType_VAR_DECL); // NOTE: read the Args struct for type info
+    // assert(node->type == ASTNodeType_VAR_DECL, ""); // NOTE: read the Args struct for type info
     if(args->size >= args->capacity){
         size_t newCap = args->capacity * 2;
         if(newCap == 0) newCap = 1;
@@ -30,14 +29,14 @@ void parseAddArg(Args* args, ASTNode* node){
 
 ASTNode* NodeInit(Arena* mem){
     ASTNode* node = arena_alloc(mem, sizeof(ASTNode));
-    assert(node && "Failed to allocate AST node");
+    assert(node, "Failed to allocate AST node");
     node->type = ASTNodeType_NONE; // NOTE: might not be necessary
     return node;
 }
 
 CompilerInstruction* CompInstInit(Arena* mem) {
     CompilerInstruction* result = arena_alloc(mem, sizeof(CompilerInstruction));
-    assert(result && "Failed to allocate CompilerInstruction");
+    assert(result, "Failed to allocate CompilerInstruction");
     result->type = CompilerInstructionType_NONE; // NOTE: might not be necessary
     return result;
 }
@@ -942,7 +941,7 @@ ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
             ERROR(next.loc, "#extern needs to be followed by a function declaration");
         }
         ASTNode* func = parseStatement(ctx, mem, parent);
-        assert(func->type == ASTNodeType_FUNCTION_DEF && "#extern needs to be followed by a function declaration");
+        assert(func->type == ASTNodeType_FUNCTION_DEF, "#extern needs to be followed by a function declaration");
         func->node.FUNCTION_DEF.isExtern = TRUE;
         parseCheckSemicolon(ctx);
         parseAddStatement(&parent->stmts, func);
@@ -1097,7 +1096,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
 
                 if(isFunctionDef(ctx)) {
                     result = parseFunctionDecl(ctx, mem, parent, t);
-                    assert(result->node.FUNCTION_DEF.isExtern == FALSE && "`parseFunctionDecl()` should set isExtern to FALSE by default");
+                    assert(result->node.FUNCTION_DEF.isExtern == FALSE, "`parseFunctionDecl()` should set isExtern to FALSE by default");
                     
                     FuncInfo info = {0};
 

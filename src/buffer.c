@@ -1,6 +1,5 @@
 #include "buffer.h"
 
-#include <assert.h>
 #include <windows.h>
 
 Buffer make_buffer(u64 capacity, u32 permission_flags) {
@@ -11,7 +10,7 @@ Buffer make_buffer(u64 capacity, u32 permission_flags) {
 }
 
 void* buffer_allocate_size(Buffer* buffer, u64 byte_size) {
-    assert(buffer->size + byte_size <= buffer->capacity && "Buffer ran out of memory");
+    assert(buffer->size + byte_size <= buffer->capacity, "Buffer ran out of memory");
     void *target = buffer->mem + buffer->size;
     buffer->size += byte_size;
     return target;
