@@ -1,3 +1,4 @@
+#if 0
 #include "codegen.h"
 
 void appendIdLoc(IdentifierLocations* idLoc, String key, int value){
@@ -575,3 +576,4 @@ StringChain Generate(AsmGenContext* ctx, Scope* globalScope){
 
     return result;
 }
+#endif
