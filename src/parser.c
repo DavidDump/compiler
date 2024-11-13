@@ -426,8 +426,14 @@ ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
     result->type = ASTNodeType_FUNCTION_CALL;
     result->node.FUNCTION_CALL.identifier = next.value;
 
-    Args args = {0};
     Token token = parsePeek(ctx, 0);
+    if(token.type == TokenType_RPAREN) {
+        parseConsume(ctx); // )
+        return result;
+    }
+
+    Args args = {0};
+    // NOTE: this could be while(TRUE) { ... }
     while(token.type != TokenType_RPAREN) {
         ASTNode* expr = parseExpression(ctx, mem);
         parseAddArg(&args, expr);
@@ -496,7 +502,7 @@ ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
         ASTNode* result = parseExpression(ctx, mem);
         Token token = parseConsume(ctx);
         if(token.type != TokenType_RPAREN) {
-            printf("[ERROR] Expected closing paranthesis, got: %s ", TokenTypeStr[token.type]);
+            printf("[ERROR] "STR_FMT":%i:%i Expected closing paranthesis, got: %s\n", STR_PRINT(token.loc.filename), token.loc.line, token.loc.collum, TokenTypeStr[token.type]);
             exit(EXIT_FAILURE);
         }
         return result;
@@ -565,12 +571,10 @@ ASTNode* parseExpression(ParseContext* ctx, Arena* mem) {
 }
 
 bool parseCheckSemicolon(ParseContext* ctx){
-    Token next = parsePeek(ctx, 0);
+    Token next = parseConsume(ctx);
     if(next.type != TokenType_SEMICOLON){
-        ERROR(next.loc, "Statement needs to end with ;");
-        exit(EXIT_FAILURE);
+        ERROR_VA(next.loc, "Statement needs to end with ; got: %s", TokenTypeStr[next.type]);
     }
-    parseConsume(ctx);
     return TRUE;
 }
 
@@ -760,21 +764,17 @@ ASTNode* parseFunctionDecl(ParseContext* ctx, Arena* mem, Scope* currentScope, T
     node->node.FUNCTION_DEF.isExtern = FALSE;
 
     // args
-    Scope* functionScope = parseScopeInit(mem, currentScope);
+    Scope* functionScope = parseScopeInit(mem, currentScope); // TODO: dont init the scope here
     node->node.FUNCTION_DEF.args = parseFunctionDeclArgs(ctx, functionScope);
     node->node.FUNCTION_DEF.scope = functionScope;
 
     // ret type
-    Token next = parseConsume(ctx);
+    Token next = parsePeek(ctx, 0);
     if(next.type == TokenType_RARROW) {
+        parseConsume(ctx); // ->
         node->node.FUNCTION_DEF.type = parseType(ctx, mem);
-        next = parseConsume(ctx);
     } else {
         node->node.FUNCTION_DEF.type = typeVoid(mem);
-    }
-
-    if(!(next.type == TokenType_LSCOPE || next.type == TokenType_SEMICOLON)) {
-        ERROR(next.loc, "Function declaration needs to have a body, or be marked as #extern");
     }
 
     return node;
@@ -864,6 +864,8 @@ ExpressionEvaluationResult evaluate_expression(ASTNode* expr) {
     return result;
 }
 
+// if the context points to a `{` parse multiple statements,
+// else only add one statement to the scope
 Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     Scope* result = parseScopeInit(mem, parent);
 
@@ -876,8 +878,8 @@ Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     }
 
     // scope consists of multiple statements enclosed by {}
+    parseConsume(ctx); // {
     while(next.type != TokenType_RSCOPE) {
-        parseConsume(ctx); // {
         ASTNode* statement = parseStatement(ctx, mem, parent);
         parseAddStatement(&result->stmts, statement);
         next = parsePeek(ctx, 0);
@@ -896,6 +898,83 @@ void parseAddConditionalBlock(Arena* mem, ConditionalBlocksArray* blocks, Condit
     }
 
     blocks->blocks[blocks->count++] = block;
+}
+
+// TODO: temporary
+//       the #library instruction is only here until dll parsing
+//       the #extern instruction should be after the :: in funton def, not at the begining of the line
+ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
+    ASTNode* result = NodeInit(mem);
+    result->type = ASTNodeType_COMPILER_INST;
+    
+    Token next = parseConsume(ctx);
+    if(next.type != TokenType_IDENTIFIER) {
+        ERROR(next.loc, "# needs to be followed by the name of a valid compiler instruction");
+    }
+
+    if(StringEqualsCstr(next.value, "library")) {
+        next = parseConsume(ctx);
+        if(next.type != TokenType_STRING_LIT) {
+            ERROR(next.loc, "#library needs to be followed by a string");
+        }
+        String key = {.str = &next.value.str[1], .length = next.value.length - 2}; // remove the `"` around the string
+
+        CompilerInstruction* inst = CompInstInit(mem);
+        inst->type = CompilerInstructionType_LIB;
+        inst->inst.LIB.libName = key;
+
+        result->node.COMPILER_INST.inst = inst;
+
+        LibName value = {.functions = hashmapFuncNameInit(mem, 0x100)};
+        if(!hashmapLibNameSet(&ctx->importLibraries, key, value)) {
+            UNREACHABLE("hashmap failed to insert");
+        }
+        ctx->currentImportLibraryName = key;
+
+        // TODO: this needs to be checked here,
+        //       the exter command uses parse statement to parse the function declaration,
+        //       which consumes the semicolon, so for consisternt behaviour of the `parseCompInstruction()` function,
+        //       all paths need to consume the semicolon
+        parseCheckSemicolon(ctx);
+    } else if(StringEqualsCstr(next.value, "extern")) {
+        next = parsePeek(ctx, 0);
+        if(next.type != TokenType_IDENTIFIER) {
+            ERROR(next.loc, "#extern needs to be followed by a function declaration");
+        }
+        ASTNode* func = parseStatement(ctx, mem, parent);
+        assert(func->type == ASTNodeType_FUNCTION_DEF && "#extern needs to be followed by a function declaration");
+        func->node.FUNCTION_DEF.isExtern = TRUE;
+        parseCheckSemicolon(ctx);
+        parseAddStatement(&parent->stmts, func);
+        String functionName = func->node.FUNCTION_DEF.identifier;
+
+        CompilerInstruction* inst = CompInstInit(mem);
+        inst->type = CompilerInstructionType_EXTERN;
+        inst->inst.EXTERN.funcName = functionName;
+
+        result->node.COMPILER_INST.inst = inst;
+
+        LibName value = {0};
+        if(!hashmapLibNameGet(&ctx->importLibraries, ctx->currentImportLibraryName, &value)) {
+            UNREACHABLE("cant find library to import frunction from, either hashmap ran out of space or no #library specified");
+        }
+        FuncName value2 = {0};
+        if(!hashmapFuncNameSet(&value.functions, functionName, value2)) {
+            UNREACHABLE("hashmap failed to insert");
+        }
+    }
+
+    return result;
+}
+
+bool isFunctionDef(ParseContext* ctx) {
+    Token one = parsePeek(ctx, 0);
+    Token two = parsePeek(ctx, 1);
+    Token three = parsePeek(ctx, 2);
+    return (
+        (one.type == TokenType_LPAREN && two.type == TokenType_RPAREN) || // foo :: ();
+        (one.type == TokenType_LPAREN && two.type == TokenType_IDENTIFIER && three.type == TokenType_COLON) // foo :: (bar: ...)
+    );
 }
 
 ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
@@ -961,8 +1040,10 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
             UNUSED(scope);
         } break;
         case TokenType_HASHTAG: {
-            UNIMPLEMENTED("parseCompInstruction");
-            // ASTNode* compInst = parseCompInstruction(ctx, mem);
+            result = parseCompInstruction(ctx, mem, parent);
+            
+            // NOTE: cheking semicolon is not needed, gets checked in `parseCompInstruction()`
+            // parseCheckSemicolon(ctx);
         } break;
         case TokenType_IDENTIFIER: {
             Token next = parsePeek(ctx, 0);
@@ -988,7 +1069,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 // NOTE: parse inferred during typechecking, void assigned here so we  can print the node
                 result->node.VAR_DECL_ASSIGN.type = typeVoid(mem);
 
-                parseScopeAddSymbol(parent, t.value);
+                // parseScopeAddSymbol(parent, t.value); // TODO: this symbol should go in the current scope not the parent
                 parseCheckSemicolon(ctx);
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
@@ -1008,13 +1089,42 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                     result->node.VAR_DECL.type = type;
                 }
 
-                parseScopeAddSymbol(parent, t.value);
+                // parseScopeAddSymbol(parent, t.value); // TODO: this symbol should go in the current scope not the parent
                 parseCheckSemicolon(ctx);
             } else if(next.type == TokenType_DOUBLECOLON) {
-                // constant
-                // function def
-                UNIMPLEMENTED("");
+                parseConsume(ctx); // ::
                 // TODO: `parseScopeAddSymbol()` should also contain the symbols for consts
+
+                if(isFunctionDef(ctx)) {
+                    result = parseFunctionDecl(ctx, mem, parent, t);
+                    assert(result->node.FUNCTION_DEF.isExtern == FALSE && "`parseFunctionDecl()` should set isExtern to FALSE by default");
+                    
+                    FuncInfo info = {0};
+
+                    next = parsePeek(ctx, 0);
+                    if(next.type == TokenType_SEMICOLON) {
+                        // NOTE: dont consume the semicolon
+                        //       the only case when there is a semicolon here is when the function is external,
+                        //       which means the semicolon will be checked after this returns
+                        info.isExtern = TRUE;
+                    } else if(next.type == TokenType_LSCOPE) {
+                        info.isExtern = FALSE;
+                        result->node.FUNCTION_DEF.scope = parseScope(ctx, mem, parent);
+                    } else {
+                        // error
+                        ERROR_VA(next.loc, "function definition needs to have a scope or end with semicolon, got: %s", TokenTypeStr[next.type]);
+                    }
+
+                    // NOTE: this might not be necesarry, gets added when returned???
+                    if(!hashmapFuncInfoSet(&ctx->funcInfo, t.value, info)) {
+                        UNREACHABLE("failed to set hashmap");
+                    }
+                } else {
+                    result = parseExpression(ctx, mem);
+                    parseCheckSemicolon(ctx);
+                }
+            } else {
+                ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }
         } break;
         // NOTE: later when added `using` and `struct` this will be a valid statement begin token
