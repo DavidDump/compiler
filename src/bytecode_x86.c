@@ -502,7 +502,14 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
         UNREACHABLE("function not found in hashmap");
     }
     if(value.isExtern) {
+        // NOTE: "In the Microsoft x64 calling convention, it is the caller's responsibility to allocate 32 bytes of "shadow space"
+        //       on the stack right before calling the function, and to pop the stack after the call."
+        //       -wikipedia, https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
+        genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM8(32)));
+        ctx->stackPointer -= 4;
         gen_callExtern(ctx, id);
+        genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM8(32)));
+        ctx->stackPointer += 4;
     } else {
         gen_call(ctx, id);
     }
@@ -804,18 +811,18 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
 
 GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo) {
     GenContext ctx = {0};
-    ctx.code = make_buffer(0x100, PAGE_READWRITE);
+    ctx.code = make_buffer(0x1000, PAGE_READWRITE); // TODO: make dynamic
 
     ctx.funcInfo = funcInfo;
 
-    ctx.symbolsToPatch = make_buffer(0x100, PAGE_READWRITE);
-    ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE);
-    ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE);
+    ctx.symbolsToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
+    ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
+    ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
 
-    ctx.variables = hashmapInit(&ctx.mem, 0x10);
-    ctx.functions = hashmapInit(&ctx.mem, 0x10);
-    ctx.data  = hashmapDataInit(&ctx.mem, 0x10);
-    ctx.constants = hashmapInit(&ctx.mem, 0x10);
+    ctx.variables = hashmapInit(&ctx.mem, 0x10); // TODO: make dynamic
+    ctx.functions = hashmapInit(&ctx.mem, 0x10); // TODO: make dynamic
+    ctx.data  = hashmapDataInit(&ctx.mem, 0x10); // TODO: make dynamic
+    ctx.constants = hashmapInit(&ctx.mem, 0x10); // TODO: make dynamic
     
     gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
     return ctx;
