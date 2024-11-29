@@ -1,3 +1,4 @@
+#if 0
 #ifndef COMP_CODEGEN_H
 #define COMP_CODEGEN_H
 
@@ -37,3 +38,4 @@ typedef struct AsmGenContext {
 StringChain Generate(AsmGenContext* ctx, Scope* globalScope);
 
 #endif // COMP_CODEGEN_H
+#endif

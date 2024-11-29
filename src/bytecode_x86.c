@@ -19,9 +19,9 @@
 // the rm value is also a register but it is used based on the addressing mode, if rm = RSP(4) and mode is indirect, a SIB must follow, if mod = 0 and rm = RBP(5) it means absolute address?? [0x1234]
 // in DIRECT addressing mode, if both operands are registers: reg = dst, rm = src, add reg rm
 void genModRMByte(GenContext* ctx, AddressingMode mod, Register reg, Register rm) {
-    assert(mod < 4);  // 2 bit number
-    assert(reg < 16); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
-    assert(rm < 16);  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
+    assert(mod < 4, "");  // 2 bit number
+    assert(reg < 16, ""); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
+    assert(rm < 16, "");  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     u8 modRmByte = ((mod & 3) << 6) | ((reg & 7) << 3) | ((rm & 7) << 0);
     buffer_append_u8(&ctx->code, modRmByte);
 }
@@ -37,9 +37,9 @@ void genModRMByte(GenContext* ctx, AddressingMode mod, Register reg, Register rm
 // index is a register that stores the index to use, rsp means no index, it cant be used as an index
 // base is a register that stores the base to use, base = RBP(5) is a special case, if in the ModR/M byte mod = 0 base is ignored
 void genSIBByte(GenContext* ctx, Scale scale, Register index, Register base) {
-    assert(scale < 4);  // 2 bit number
-    assert(index < 16); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
-    assert(base < 16);  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
+    assert(scale < 4, "");  // 2 bit number
+    assert(index < 16, ""); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
+    assert(base < 16, "");  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     u8 sibByte = ((scale & 3) << 6) | ((index & 7) << 3) | ((base & 7) << 0);
     buffer_append_u8(&ctx->code, sibByte);
 }
@@ -60,10 +60,10 @@ void genSIBByte(GenContext* ctx, Scale scale, Register index, Register base) {
 // x is the register in the index field SIB byte
 // b can be the register in the rm field of the ModR/M, base field of the SIB byte or reg field of the ModR/M byte if it is used as an opcode
 void genRexByte(GenContext* ctx, u8 w, Register r, Register x, Register b) {
-    assert(w == 0 || w == 1);
-    assert(r < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    assert(x < 16); // 1 bit number, but 16 registers, only the top bit is extracted
-    assert(b < 16); // 1 bit number, but 16 registers, only the top bit is extracted
+    assert(w == 0 || w == 1, "");
+    assert(r < 16, ""); // 1 bit number, but 16 registers, only the top bit is extracted
+    assert(x < 16, ""); // 1 bit number, but 16 registers, only the top bit is extracted
+    assert(b < 16, ""); // 1 bit number, but 16 registers, only the top bit is extracted
     u8 rexByte = 0x40 | (w << 3) | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0);
     buffer_append_u8(&ctx->code, rexByte);
 }
@@ -108,15 +108,15 @@ void EmitDirect(GenContext* ctx, Register reg, Register rm) {
 // op rax, [rcx]
 // reg = RAX, rm = RCX
 void EmitIndirect(GenContext* ctx, Register reg, Register rm) {
-    assert((reg & 7) != RSP);
-    assert((reg & 7) != RBP);
+    assert((reg & 7) != RSP, "");
+    assert((reg & 7) != RBP, "");
     genModRMByte(ctx, INDIRECT_NO_DISPLACE, reg, rm);
 }
 
 // op rax, [rcx + 0x12]
 // reg = RAX, rm = RCX, displacement = 0x12
 void EmitIndirectDisplaced8(GenContext* ctx, Register reg, Register rm, u8 displacement) {
-    assert((rm & 7) != RSP);
+    assert((rm & 7) != RSP, "");
     genModRMByte(ctx, INDIRECT_08_DISPLACE, reg, rm);
     Emit8(ctx, displacement);
 }
@@ -124,7 +124,7 @@ void EmitIndirectDisplaced8(GenContext* ctx, Register reg, Register rm, u8 displ
 // op rax, [rcx + 0x12345678]
 // reg = RAX, rm = RCX, displacement = 0x12345678
 void EmitIndirectDisplaced32(GenContext* ctx, u8 reg, Register rm, u32 displacement) {
-    assert((rm & 7) != RSP);
+    assert((rm & 7) != RSP, "");
     genModRMByte(ctx, INDIRECT_32_DISPLACE, reg, rm);
     Emit32(ctx, displacement);
 }
@@ -132,7 +132,7 @@ void EmitIndirectDisplaced32(GenContext* ctx, u8 reg, Register rm, u32 displacem
 // op rax, [rcx + 4*rdx]
 // reg = RAX, rm = RCX, index = RDX, scale = X4
 void EmitIndirectSIB(GenContext* ctx, u8 reg, Register rm, Register index, Scale scale) {
-    assert((rm & 7) != RBP);
+    assert((rm & 7) != RBP, "");
     genModRMByte(ctx, INDIRECT_NO_DISPLACE, reg, RSP);
     genSIBByte(ctx, scale, index, rm);
 }
@@ -398,8 +398,7 @@ void genInstruction(GenContext* ctx, Instruction inst) {
         
         return;
     }
-    printf("[ERROR] Could not find encoding for instruction: %s %s %s\n", MnemonicStr[inst.name], OperandTypeStr[inst.ops[0].type], OperandTypeStr[inst.ops[1].type]);
-    assert(FALSE);
+    assertf(FALSE, "Could not find encoding for instruction: %s %s %s", MnemonicStr[inst.name], OperandTypeStr[inst.ops[0].type], OperandTypeStr[inst.ops[1].type]);
 }
 
 void gen_callExtern(GenContext* ctx, String name) {
@@ -465,7 +464,7 @@ void genPop(GenContext* ctx, Register reg) {
 }
 
 void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
-    assert(funcCall->type == ASTNodeType_FUNCTION_CALL);
+    assert(funcCall->type == ASTNodeType_FUNCTION_CALL, "");
     String id = funcCall->node.FUNCTION_CALL.identifier;
     Args args = funcCall->node.FUNCTION_CALL.args;
 
@@ -476,7 +475,8 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
             ASTNodeType_FLOAT_LIT ||
             ASTNodeType_SYMBOL ||
             ASTNodeType_FUNCTION_CALL ||
-            ASTNodeType_BINARY_EXPRESSION
+            ASTNodeType_BINARY_EXPRESSION,
+            ""
         );
 
         gen_x86_64_expression(ctx, arg);
@@ -601,7 +601,7 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
 void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
-    assert(expr->type == ASTNodeType_BINARY_EXPRESSION);
+    assert(expr->type == ASTNodeType_BINARY_EXPRESSION, "");
     ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
     ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
     String op = expr->node.BINARY_EXPRESSION.operator;
@@ -772,29 +772,13 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 }
             } break;
             case ASTNodeType_IF: {
-                ASTNode* next = node;
-                do {
-                    if(next->type != ASTNodeType_IF) i++;
-                    if(next->type == ASTNodeType_IF) {
-                        ASTNode* expr = next->node.IF.expr;
-                        Scope* scope = next->node.IF.scope;
-
-                        // conditions
-                        gen_x86_64_condition(ctx, expr);
-
-                        // body
-                        gen_x86_64_scope(ctx, scope, stackToRestore, mainScope);
-                        UNIMPLEMENTED("unfished, need out of order appending for instructions");
-                    }
-                } while(next->type == ASTNodeType_IF || next->type == ASTNodeType_ELSE || next->type == ASTNodeType_ELSE_IF);
+                UNIMPLEMENTED("ASTNodeType_IF in codegen");
             } break;
             case ASTNodeType_LOOP: {
                 UNIMPLEMENTED("ASTNodeType_LOOP in codegen");
             } break;
             case ASTNodeType_COMPILER_INST: break;
             
-            case ASTNodeType_ELSE:
-            case ASTNodeType_ELSE_IF:
             case ASTNodeType_BINARY_EXPRESSION:
             case ASTNodeType_UNARY_EXPRESSION:
             case ASTNodeType_INT_LIT:

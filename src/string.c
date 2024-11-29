@@ -109,7 +109,7 @@ u64 StringToU64(String value) {
     // TODO: cast
     for(u64 i = 0; i < (u64)value.length; ++i) {
         u8 c = value.str[i];
-        assert('0' <= c && c <= '9' && "can only convert numbers");
+        assert('0' <= c && c <= '9', "can only convert numbers");
         // if(result > UINT64_MAX / 10); // overflow
         result *= 10;
         // if(result > UINT64_MAX - (c - '0')); // overflow
@@ -124,7 +124,7 @@ u32 StringToU32(String value) {
 
     for(u64 i = 0; i < value.length; ++i) {
         u8 c = value.str[i];
-        assert('0' <= c && c <= '9' && "can only convert numbers");
+        assert('0' <= c && c <= '9', "can only convert numbers");
         // if(result > UINT32_MAX / 10); // overflow
         result *= 10;
         // if(result > UINT32_MAX - (c - '0')); // overflow

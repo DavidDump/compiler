@@ -1,6 +1,5 @@
 #include <stdio.h>  // fopen(), fseek(), ftell(), fread(), fclose(), printf(), 
 #include <string.h> // strlen(), memcpy()
-#include <assert.h> // assert()
 
 #include "peWriter.h"
 #include "bytecode_x86.h"
@@ -129,17 +128,6 @@ int main(int argc, char** argv){
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);
         }
-    } else if(StringEndsWith(outFilepath, STR(".asm"))) {
-        AsmGenContext genContext = {0};
-        StringChain outRaw = Generate(&genContext, parseResult.globalScope);
-        Buffer out = StringChainToBuffer(outRaw);
-
-        if(!EntireFileWrite(outFilepath, out)){
-            printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
-            exit(EXIT_FAILURE);
-        }
-
-        arena_free(&genContext.mem);
     } else {
         s64 index = StringLastIndexOf(outFilepath, '.');
         String format = {0};

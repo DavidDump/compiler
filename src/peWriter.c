@@ -4,7 +4,6 @@
 #include <windows.h>
 #include <winnt.h>
 #include <math.h>
-#include <assert.h>
 #include <time.h>
 #include <stdio.h>
 
@@ -184,8 +183,8 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
         }
     }
     
-    assert(buffer->size == expected_encoded_size);
-    assert(buffer->size < UINT32_MAX);
+    assert(buffer->size == expected_encoded_size, "");
+    assert(buffer->size < UINT32_MAX, "");
 
     header->Misc.VirtualSize = (s32)buffer->size;
     header->SizeOfRawData = (s32)align_u64(buffer->size, PE32_FILE_ALIGNMENT);

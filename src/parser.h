@@ -18,8 +18,6 @@ typedef enum ASTNodeType {
     ASTNodeType_VAR_CONST,
     ASTNodeType_RET,
     ASTNodeType_IF,
-    ASTNodeType_ELSE,
-    ASTNodeType_ELSE_IF,
     ASTNodeType_LOOP,
     ASTNodeType_BINARY_EXPRESSION,
     ASTNodeType_UNARY_EXPRESSION,
@@ -46,8 +44,6 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_VAR_CONST]         = "VAR_CONST",
     [ASTNodeType_RET]               = "RET",
     [ASTNodeType_IF]                = "IF",
-    [ASTNodeType_ELSE]              = "ELSE",
-    [ASTNodeType_ELSE_IF]           = "ELSE_IF",
     [ASTNodeType_LOOP]              = "LOOP",
     [ASTNodeType_BINARY_EXPRESSION] = "BINARY_EXPRESSION",
     [ASTNodeType_UNARY_EXPRESSION]  = "UNARY_EXPRESSION",
@@ -120,6 +116,17 @@ typedef struct CompilerInstruction {
     } inst;
 } CompilerInstruction;
 
+typedef struct ConditionalBlock {
+    ASTNode* expr;
+    Scope* scope;
+} ConditionalBlock;
+
+typedef struct ConditionalBlocksArray {
+    ConditionalBlock* blocks;
+    u64 count;
+    u64 capacity;
+} ConditionalBlocksArray;
+
 typedef struct _ASTNode {
     ASTNodeType type;
     union Node {
@@ -177,16 +184,10 @@ typedef struct _ASTNode {
             String value;
         } BOOL_LIT;
         struct IF {
-            ASTNode* expr;
-            Scope* scope;
+            ConditionalBlocksArray blocks;
+            bool hasElse;
+            Scope* elze;
         } IF;
-        struct ELSE {
-            Scope* scope;
-        } ELSE;
-        struct ELSE_IF {
-            ASTNode* expr;
-            Scope* scope;
-        } ELSE_IF;
         struct LOOP {
             ASTNode* expr;
             Scope* scope;
@@ -243,6 +244,7 @@ ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 ASTNode* parseLeaf(ParseContext* ctx, Arena* mem);
 ParseResult Parse(TokenArray tokens, Arena* mem);
 ExpressionEvaluationResult evaluate_expression(ASTNode* expr);
+ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent);
 
 #if COMP_DEBUG
 void ASTPrint(Scope* root);
