@@ -141,7 +141,7 @@ bool StringEndsWith(String str, String end) {
 }
 
 s64 StringLastIndexOf(String str, u8 c) {
-    for(s64 i = (s64)str.length; i >= 0; --c) {
+    for(s64 i = (s64)str.length; i >= 0; --i) {
         if(str.str[i] == c) return i;
     }
     return -1;

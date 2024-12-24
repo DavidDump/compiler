@@ -5,10 +5,14 @@
 #include "arena.h"
 #include "buffer.h"
 
+// used for printing String type, usage:
+//     String foo = STR("test string");
+//     printf("some text in the format string: "STR_FMT"\n", STR_PRINT(foo));
 #define STR_FMT "%.*s"
 #define STR_PRINT(_str_) (int)(_str_).length, (_str_).str
 
-#define STR(_cstr_) StringFromCstrLit(_cstr_)
+// #define STR(_cstr_) StringFromCstrLit(_cstr_)
+#define STR(_cstr_) (String){.str = (u8*)(_cstr_), .length = sizeof(_cstr_) - 1}
 
 typedef struct String {
     u8* str;
