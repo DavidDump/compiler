@@ -1,7 +1,7 @@
 // Example code for printing hello world using win32 API
 STD_HANDLE_STDOUT :: -12;
 
-foo :: (name: u64) -> u64 {
+bar :: (name: u64) -> u64 {
     go := name + 1;
     return 1 + 1;
 }
@@ -13,6 +13,14 @@ foo :: (name: u64) -> u64 {
 
 main :: () -> u8 {
     stdout := GetStdHandle(STD_HANDLE_STDOUT);
-    WriteFile(stdout, "Hello world", 11, 0, 0);
+    foo := "Hello world";
+    WriteFile(stdout, foo, 11, 0, 0);
+    asd := (1 + add(3, 1)) * 2;
+    baz := bar(asd);
+    WriteFile(stdout, " new string here", 16, 0, 0);
     return 0;
+}
+
+add :: (a: s64, b: s64) -> s64 {
+    return a + b;
 }
