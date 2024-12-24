@@ -75,10 +75,16 @@ int main(int argc, char** argv){
     String outFilepath = STR("output.asm");
     for(int i = 0; i < argc; i++){
         if(strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0){
-            outFilepath = STR(argv[i + 1]);
+            char* name = argv[i + 1];
+            u64 len = strlen(name);
+            outFilepath.str = (u8*)name;
+            outFilepath.length = len;
             i++;
         }else if(strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--input") == 0){
-            inFilepath = STR(argv[i + 1]);
+            char* name = argv[i + 1];
+            u64 len = strlen(name);
+            inFilepath.str = (u8*)name;
+            inFilepath.length = len;
             i++;
         }
 #ifdef COMP_DEBUG
@@ -123,7 +129,7 @@ int main(int argc, char** argv){
             exit(EXIT_FAILURE);
         }
     } else if(StringEndsWith(outFilepath, STR(".exe"))) {
-        Buffer exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch, bytecode.entryPointOffset);
+        Buffer exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch, &bytecode.functions, bytecode.functionsToPatch, bytecode.entryPointOffset);
         if(!EntireFileWrite(outFilepath, exeBytes)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);
@@ -146,7 +152,6 @@ int main(int argc, char** argv){
 }
 
 // TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
-// TODO: better error messeges when failing to parse an expression
 
 // TODO: implement a symetrical operation to parsing, reverseParse() that takes an AST and generates code,
 // maintain multiple versions, to migrate from older versions of the code to newer,
@@ -155,9 +160,5 @@ int main(int argc, char** argv){
 // then migrate the code, then build the next version and reapead until the code is up to date
 // this could be useful later in development when standard libraries already exist and have to be updated
 // with syntax changes
-
-// TODO: maybe having an else and elseif ast node doesnt make sense
-// just store all the conditions and their coresponding scopes
-// in an array, and tag the node if it has an else/elseif block
 
 // TODO: write own memory allocator, this one has a bug in it when allocating more memory that fits on one page
