@@ -1,5 +1,6 @@
 #include "peWriter.h"
 #include "bytecode_exe_common.h"
+#include "hashmap.h"
 
 #include <windows.h>
 #include <winnt.h>
@@ -195,7 +196,7 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
 
 // names is the locations where imported functions were used, used for patching
 // dataToPatch is the locations where user defined data was refferenced, used for patching
-Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch, u64 entryPointOffset) {
+Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch, Hashmap* funcCalls, Buffer funcsToPatch, u64 entryPointOffset) {
     // Sections
     IMAGE_SECTION_HEADER sections[3] = {
         [0] = {
@@ -311,15 +312,15 @@ Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, Hashma
     // .text segment
     exe_buffer.size = text_section_header->PointerToRawData;
 
-    u32 begingIndex = exe_buffer.size;
-    u8* beginnigOfCode = buffer_allocate_size(&exe_buffer, codeSizeAligned);
-    memcpy(beginnigOfCode, bytecode.mem, bytecode.size);
+    u32 beginingIndex = exe_buffer.size;
+    u8* beginingOfCode = buffer_allocate_size(&exe_buffer, codeSizeAligned);
+    memcpy(beginingOfCode, bytecode.mem, bytecode.size);
 
-    // patch the funcion call locations
+    // patch the external funcion call locations
     for(u64 i = 0; i < names.size/sizeof(AddrToPatch); ++i) {
         AddrToPatch* castNames = (AddrToPatch*)names.mem;
-        u8* addrLoc = &beginnigOfCode[castNames[i].offset];
-        u32 nextInstructonAddr = (begingIndex + castNames[i].offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+        u8* addrLoc = &beginingOfCode[castNames[i].offset];
+        u32 nextInstructonAddr = (beginingIndex + castNames[i].offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
         u32 funcRVA = getFunctionRVA(libs, castNames[i].name);
         
         addrLoc[0] = ((funcRVA - nextInstructonAddr) >> (8 * 0)) & 0xff;
@@ -328,14 +329,33 @@ Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, Hashma
         addrLoc[3] = ((funcRVA - nextInstructonAddr) >> (8 * 3)) & 0xff;
     }
     
+    // patch the internal function call locations
+    for(u64 i = 0; i < funcsToPatch.size/sizeof(AddrToPatch); ++i) {
+        AddrToPatch* castNames = (AddrToPatch*)funcsToPatch.mem;
+        u64 offset = castNames[i].offset;
+        String name = castNames[i].name;
+        u8* addrLoc = &beginingOfCode[offset];
+        u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+        s64 addr = 0;
+        if(!hashmapGet(funcCalls, name, &addr)) {
+            assertf(FALSE, "[UNREACHABLE] Failed to get the location of a function during pe writing: "STR_FMT"\n", STR_PRINT(name));
+        }
+        u32 funcRVA = (beginingIndex + addr) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+
+        addrLoc[0] = ((funcRVA - nextInstructonAddr) >> (8 * 0)) & 0xff;
+        addrLoc[1] = ((funcRVA - nextInstructonAddr) >> (8 * 1)) & 0xff;
+        addrLoc[2] = ((funcRVA - nextInstructonAddr) >> (8 * 2)) & 0xff;
+        addrLoc[3] = ((funcRVA - nextInstructonAddr) >> (8 * 3)) & 0xff;
+    }
+
     // patch the data reference locations
     for(u64 i = 0; i < dataToPatch.size/sizeof(AddrToPatch); ++i) {
         AddrToPatch* castData = (AddrToPatch*)dataToPatch.mem;
         u64 offset = castData[i].offset;
         String name = castData[i].name;
         
-        u8* addrLoc = &beginnigOfCode[offset];
-        u32 nextInstructonAddr = (begingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+        u8* addrLoc = &beginingOfCode[offset];
+        u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
         u32 dataRVA = genDataRVA(userData, name);
 
         *(u32*)addrLoc += dataRVA - nextInstructonAddr;

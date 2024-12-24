@@ -169,10 +169,9 @@ void EmitIndirectAbsolute(GenContext* ctx, u8 reg, u32 displacement) {
 }
 
 bool isZeroStruct(InstructionEncoding* enc) {
-    u8* testValBuffer = (u8*)&(InstructionEncoding){0};
-    u64 size = sizeof(*enc);
-    u8* encBuff = (u8*)enc;
-    return memcmp(encBuff, testValBuffer, size) == 0;
+    InstructionEncoding* testValBuffer = &(InstructionEncoding){0};
+    u64 size = sizeof(InstructionEncoding);
+    return memcmp(enc, testValBuffer, size) == 0;
 }
 
 bool checkTypesMatch(OperandType operandType, OpType encodingOperandType) {
@@ -225,8 +224,8 @@ bool checkTypesMatch(OperandType operandType, OpType encodingOperandType) {
 }
 
 void genInstruction(GenContext* ctx, Instruction inst) {
-    InstructionEncoding* instructionEncodings =  encodings[inst.name];
-    for(u64 i = 0; i < MAX_ENCODING_FOR_INSTRUCTION; i++) {
+    InstructionEncoding* instructionEncodings = encodings[inst.name];
+    for(u64 i = 0; i < MAX_ENCODING_FOR_INSTRUCTION; ++i) {
         InstructionEncoding encoding = instructionEncodings[i];
         if(isZeroStruct(&encoding)) break;
         if(!checkTypesMatch(inst.ops[0].type, encoding.opTypes[0]) || !checkTypesMatch(inst.ops[1].type, encoding.opTypes[1])) continue;
@@ -413,7 +412,7 @@ void gen_callExtern(GenContext* ctx, String name) {
 
 void gen_call(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
-    genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
+    genInstruction(ctx, INST(call, OP_IMM32(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
     *buffer_allocate(&ctx->functionsToPatch, AddrToPatch) = (AddrToPatch){
         .name = name,
@@ -663,12 +662,15 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
 
                 FuncInfo value = {0};
                 if(!hashmapFuncInfoGet(&ctx->funcInfo, id, &value)) {
-                    UNREACHABLE("function not found in hashmap");
+                    assertf(FALSE, "[UNREACHABLE] Function not found in hashmap: "STR_FMT"\n", STR_PRINT(id));
                 }
                 if(value.isExtern) break;
 
+                if(!hashmapSet(&ctx->functions, id, ctx->code.size)) {
+                    assertf(FALSE, "[UNREACHABLE] Failed to save the location where function: "STR_FMT" is generated\n", STR_PRINT(id));
+                }
+
                 // NOTE: would be usefull here to generating code into a separate buffer
-                // TODO: jump after function
                 // TODO: make the main entrypoint name customisable
                 bool mainFunction = StringEqualsCstr(id, "main");
                 if(mainFunction) ctx->entryPointOffset = ctx->code.size;
@@ -678,8 +680,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 s64 savedStack = ctx->stackPointer;
 
                 // function arguments
-                // TODO: cast
-                for(u64 i = 0; i < (u64)args.size; ++i) {
+                for(u64 i = 0; i < args.size; ++i) {
                     String argId = args.args[i]->node.VAR_DECL.identifier;
                     ASTNode* argType = args.args[i]->node.VAR_DECL.type;
                     UNUSED(argType);

@@ -77,6 +77,7 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         // Opcode      | Instruction   | Op/En | 64-bit Mode | Compat/Leg Mode | Description
         // E8 cw       | CALL rel16    | D     | N.S.        | Valid           | Call near, relative, displacement relative to next instruction.
         // E8 cd       | CALL rel32    | D     | Valid       | Valid           | Call near, relative, displacement relative to next instruction. 32-bit displacement sign extended to 64-bits in 64-bit mode.
+        {.type = InstructionType_64BIT, .opcode = 0xE8, .opTypes[0] = OpType_IMM32},
         // FF /2       | CALL r/m16    | M     | N.E.        | Valid           | Call near, absolute indirect, address given in r/m16.
         // FF /2       | CALL r/m32    | M     | N.E.        | Valid           | Call near, absolute indirect, address given in r/m32.
         // FF /2       | CALL r/m64    | M     | Valid       | N.E.            | Call near, absolute indirect, address given in r/m64.
