@@ -465,10 +465,10 @@ void genPop(GenContext* ctx, Register reg) {
 void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
     assert(funcCall->type == ASTNodeType_FUNCTION_CALL, "");
     String id = funcCall->node.FUNCTION_CALL.identifier;
-    Args args = funcCall->node.FUNCTION_CALL.args;
+    Array(ASTNodePtr) args = funcCall->node.FUNCTION_CALL.args;
 
     for(u64 i = 0; i < args.size; ++i) {
-        ASTNode* arg = args.args[i];
+        ASTNode* arg = args.data[i];
         assert(
             ASTNodeType_INT_LIT ||
             ASTNodeType_FLOAT_LIT ||
@@ -632,9 +632,8 @@ void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
 
 // stackToRestore is the value set to the stack in the GenContext when generating a ret instruction
 void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool mainScope) {
-    // TODO: cast
-    for(u64 i = 0; i < (u64)scope->stmts.size; ++i) {
-        ASTNode* node = scope->stmts.statements[i];
+    for(u64 i = 0; i < scope->statements.size; ++i) {
+        ASTNode* node = scope->statements.data[i];
 
         switch(node->type) {
             case ASTNodeType_NONE:
@@ -659,7 +658,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
             case ASTNodeType_FUNCTION_DEF: {
                 String id = node->node.FUNCTION_DEF.identifier;
                 Scope* scope = node->node.FUNCTION_DEF.scope;
-                Args args = node->node.FUNCTION_DEF.args;
+                Array(FunctionArg) args = node->node.FUNCTION_DEF.args;
                 ASTNode* retType = node->node.FUNCTION_DEF.type;
                 UNUSED(retType);
 
@@ -684,8 +683,8 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
 
                 // function arguments
                 for(u64 i = 0; i < args.size; ++i) {
-                    String argId = args.args[i]->node.VAR_DECL.identifier;
-                    ASTNode* argType = args.args[i]->node.VAR_DECL.type;
+                    String argId = args.data[i].id;
+                    ASTNode* argType = args.data[i].type;
                     UNUSED(argType);
 
                     if(i == 0) {
@@ -807,6 +806,8 @@ GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) fun
     ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
     ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
 
+    // TODO: use arena allocator
+    // TODO: make the default size something sane
     HashmapInit(ctx.variables, 0x10);
     HashmapInit(ctx.functions, 0x10);
     HashmapInit(ctx.data, 0x10);

@@ -116,7 +116,7 @@ int main(int argc, char** argv){
     Arena readFileMem = {0}; // source file is stored in here
     String sourceRaw = EntireFileRead(&readFileMem, inFilepath);
 
-    TokenArray tokens = Tokenize(sourceRaw, inFilepath);
+    Array(Token) tokens = Tokenize(&readFileMem, sourceRaw, inFilepath);
 #ifdef COMP_DEBUG
     if(printTokens) TokensPrint(&tokens);
 #endif // COMP_DEBUG

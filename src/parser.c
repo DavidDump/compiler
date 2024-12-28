@@ -4,29 +4,6 @@
 #include <stdlib.h> // exit(), EXIT_FAILURE
 #include <stdio.h> // printf
 
-void parseAddStatement(StmtList* list, ASTNode* node){
-    if(list->size >= list->capacity){
-        size_t newCap = list->capacity * 2;
-        if(newCap == 0) newCap = 1;
-        list->statements = arena_realloc(&list->mem, list->statements, list->capacity * sizeof(list->statements[0]), newCap * sizeof(list->statements[0]));
-        list->capacity = newCap;
-    }
-
-    list->statements[list->size++] = node;
-}
-
-void parseAddArg(Args* args, ASTNode* node){
-    // assert(node->type == ASTNodeType_VAR_DECL, ""); // NOTE: read the Args struct for type info
-    if(args->size >= args->capacity){
-        size_t newCap = args->capacity * 2;
-        if(newCap == 0) newCap = 1;
-        args->args = arena_realloc(&args->mem, args->args, args->capacity * sizeof(args->args[0]), newCap * sizeof(args->args[0]));
-        args->capacity = newCap;
-    }
-
-    args->args[args->size++] = node;
-}
-
 ASTNode* NodeInit(Arena* mem){
     ASTNode* node = arena_alloc(mem, sizeof(ASTNode));
     assert(node, "Failed to allocate AST node");
@@ -102,7 +79,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
         case ASTNodeType_FUNCTION_DEF: {
             String id = node->node.FUNCTION_DEF.identifier;
             ASTNode* retType = node->node.FUNCTION_DEF.type;
-            Args args = node->node.FUNCTION_DEF.args;
+            Array(FunctionArg) args = node->node.FUNCTION_DEF.args;
             Scope* scope = node->node.FUNCTION_DEF.scope;
 
             genPrintHelper("FUNCTION_DEF: {\n");
@@ -115,8 +92,8 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             if(args.size > 0) {
                 genPrintHelper("    args: [\n");
                 for(u64 i = 0; i < args.size; ++i) {
-                    String argId = args.args[i]->node.VAR_DECL.identifier;
-                    ASTNode* argType = args.args[i]->node.VAR_DECL.type;
+                    String argId = args.data[i].id;
+                    ASTNode* argType = args.data[i].type;
 
                     genPrintHelper("        {id: "STR_FMT", type: ", STR_PRINT(argId));
                     ASTNodePrint(argType, indent);
@@ -128,10 +105,10 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             }
             
             // statements
-            if(scope->stmts.size > 0) {
+            if(scope->statements.size > 0) {
                 genPrintHelper("    statements: [\n");
-                for(u64 i = 0; i < scope->stmts.size; ++i) {
-                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                for(u64 i = 0; i < scope->statements.size; ++i) {
+                    ASTNodePrint(scope->statements.data[i], indent + 2);
                 }
                 genPrintHelper("    ],\n");
             } else {
@@ -197,13 +174,13 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_IF: {
-            ConditionalBlocksArray blocks = node->node.IF.blocks;
+            Array(ConditionalBlock) blocks = node->node.IF.blocks;
             bool hasElse = node->node.IF.hasElse;
             Scope* elze = node->node.IF.elze;
 
             // if block, always the 0 index
             {
-                ConditionalBlock block = blocks.blocks[0];
+                ConditionalBlock block = blocks.data[0];
                 ASTNode* expr = block.expr;
                 Scope* scope = block.scope;
 
@@ -213,10 +190,10 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
                 printf(",\n");
 
                 // statements
-                if(scope->stmts.size > 0) {
+                if(scope->statements.size > 0) {
                     genPrintHelper("    statements: [\n");
-                    for(u64 i = 0; i < scope->stmts.size; ++i) {
-                        ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                    for(u64 i = 0; i < scope->statements.size; ++i) {
+                        ASTNodePrint(scope->statements.data[i], indent + 2);
                     }
                     genPrintHelper("    ],\n");
                 } else {
@@ -226,8 +203,8 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             }
 
             // else if blocks
-            for(u64 i = 1; i < blocks.count; ++i) {
-                ConditionalBlock block = blocks.blocks[i];
+            for(u64 i = 1; i < blocks.size; ++i) {
+                ConditionalBlock block = blocks.data[i];
                 ASTNode* expr = block.expr;
                 Scope* scope = block.scope;
 
@@ -237,10 +214,10 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
                 printf(",\n");
 
                 // statements
-                if(scope->stmts.size > 0) {
+                if(scope->statements.size > 0) {
                     genPrintHelper("    statements: [\n");
-                    for(u64 i = 0; i < scope->stmts.size; ++i) {
-                        ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                    for(u64 i = 0; i < scope->statements.size; ++i) {
+                        ASTNodePrint(scope->statements.data[i], indent + 2);
                     }
                     genPrintHelper("    ],\n");
                 } else {
@@ -252,10 +229,10 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             if(hasElse) {
                 Scope* scope = elze;
                 // statements
-                if(scope->stmts.size > 0) {
+                if(scope->statements.size > 0) {
                     genPrintHelper("    statements: [\n");
-                    for(u64 i = 0; i < scope->stmts.size; ++i) {
-                        ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                    for(u64 i = 0; i < scope->statements.size; ++i) {
+                        ASTNodePrint(scope->statements.data[i], indent + 2);
                     }
                     genPrintHelper("    ],\n");
                 } else {
@@ -274,10 +251,10 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             printf(",\n");
 
             // statements
-            if(scope->stmts.size > 0) {
+            if(scope->statements.size > 0) {
                 genPrintHelper("    statements: [\n");
-                for(u64 i = 0; i < scope->stmts.size; ++i) {
-                    ASTNodePrint(scope->stmts.statements[i], indent + 2);
+                for(u64 i = 0; i < scope->statements.size; ++i) {
+                    ASTNodePrint(scope->statements.data[i], indent + 2);
                 }
                 genPrintHelper("    ],\n");
             } else {
@@ -287,7 +264,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
         } break;
         case ASTNodeType_FUNCTION_CALL: {
             String id = node->node.FUNCTION_CALL.identifier;
-            Args args = node->node.FUNCTION_CALL.args;
+            Array(ASTNodePtr) args = node->node.FUNCTION_CALL.args;
 
             genPrintHelper("FUNCTION_CALL: {\n");
             genPrintHelper("    id: "STR_FMT"\n", STR_PRINT(id));
@@ -297,7 +274,7 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
                 genPrintHelper("    args: [\n");
                 for(u64 i = 0; i < args.size; ++i) {
                     for(u64 h = 0; h < indent + 2; ++h) printf("    ");
-                    ASTNodePrint(args.args[i], indent + 1);
+                    ASTNodePrint(args.data[i], indent + 1);
                     printf(",\n");
                 }
                 genPrintHelper("    ],\n");
@@ -326,8 +303,8 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
 #undef genPrintHelper
 
 void ASTPrint(Scope* root){
-    for(u64 i = 0; i < root->stmts.size; ++i) {
-        ASTNodePrint(root->stmts.statements[i], 0);
+    for(u64 i = 0; i < root->statements.size; ++i) {
+        ASTNodePrint(root->statements.data[i], 0);
     }
 }
 #endif // COMP_DEBUG
@@ -335,20 +312,20 @@ void ASTPrint(Scope* root){
 // return what the parse context is pointong to then advance
 Token parseConsume(ParseContext* ctx){
 	if (ctx->index + 1 > ctx->tokens.size) return (Token){0};
-	return ctx->tokens.tokens[ctx->index++];
+	return ctx->tokens.data[ctx->index++];
 }
 
 // return what the parse context is pointon to without advancing
 Token parsePeek(ParseContext* ctx, int num){
 	if (ctx->index + num > ctx->tokens.size) return (Token){0};
-	return ctx->tokens.tokens[ctx->index + num];
+	return ctx->tokens.data[ctx->index + num];
 }
 
-bool parseScopeContainsSymbol(Scope* scope, String symbol){
+bool parseScopeContainsSymbol(Scope* scope, String symbol) {
     Scope* workingScope = scope;
     while(workingScope){
-        for(int i = 0; i < workingScope->symbolSize; i++){
-            if(StringEquals(workingScope->symbolTable[i], symbol)){
+        for(u64 i = 0; i < workingScope->symbols.size; ++i) {
+            if(StringEquals(workingScope->symbols.data[i], symbol)) {
                 return TRUE;
             }
         }
@@ -431,11 +408,11 @@ ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
         return result;
     }
 
-    Args args = {0};
+    Array(ASTNodePtr) args = {0};
     // NOTE: this could be while(TRUE) { ... }
     while(token.type != TokenType_RPAREN) {
         ASTNode* expr = parseExpression(ctx, mem);
-        parseAddArg(&args, expr);
+        ArrayAppend(args, expr);
 
         token = parseConsume(ctx);
         if(token.type == TokenType_RPAREN) break;
@@ -577,36 +554,13 @@ bool parseCheckSemicolon(ParseContext* ctx){
     return TRUE;
 }
 
-void parseScopeAddChild(Scope* parent, Scope* child){
-    if(parent == NULL) return;
-    if(parent->childrenSize >= parent->childrenCapacity){
-        size_t newCap = parent->childrenCapacity * 2;
-        if(newCap == 0) newCap = 1;
-        parent->children = arena_realloc(&parent->mem, parent->children, parent->childrenCapacity * sizeof(parent->children[0]), newCap * sizeof(parent->children[0]));
-        parent->childrenCapacity = newCap;
-    }
-
-    parent->children[parent->childrenSize++] = child;
-}
-
 Scope* parseScopeInit(Arena* mem, Scope* parent){
     Scope* result = arena_alloc(mem, sizeof(Scope));
     result->parent = parent;
 
-    parseScopeAddChild(parent, result);
+    if(parent) ArrayAppend(parent->children, result);
 
     return result;
-}
-
-void parseScopeAddSymbol(Scope* scope, String symbol){
-    if(scope->symbolSize >= scope->symbolCapacity){
-        size_t newCap = scope->symbolCapacity * 2;
-        if(newCap == 0) newCap = 1;
-        scope->symbolTable = arena_realloc(&scope->mem, scope->symbolTable, scope->symbolCapacity * sizeof(scope->symbolTable[0]), newCap * sizeof(scope->symbolTable[0]));
-        scope->symbolCapacity = newCap;
-    }
-
-    scope->symbolTable[scope->symbolSize++] = symbol;
 }
 
 ASTNode* typeVoid(Arena* mem){
@@ -697,57 +651,43 @@ ASTNode* parseType(ParseContext* ctx, Arena* mem) {
 }
 
 // the ctx needs to point at '('
-Args parseFunctionDeclArgs(ParseContext* ctx, Scope* scope){
-    Args result = {0};
+Array(FunctionArg) parseFunctionDeclArgs(ParseContext* ctx, Scope* scope) {
+    Array(FunctionArg) result = {0};
     
     Token next = parseConsume(ctx);
-    if(next.type != TokenType_LPAREN){
+    if(next.type != TokenType_LPAREN) {
         ERROR(next.loc, "Function arguments need to be inside parenthesis");
         exit(EXIT_FAILURE);
     }
-    for(u64 i = ctx->index; i < ctx->tokens.size; i++){
-        next = parsePeek(ctx, 0);
-        if(next.type == TokenType_IDENTIFIER){
-            parseConsume(ctx);
-            parseScopeAddSymbol(scope, next.value);
-            Token id = next;
 
-            next = parseConsume(ctx);
-            if(next.type != TokenType_COLON){
-                ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
-                exit(EXIT_FAILURE);
-            }
-
-            // next = parsePeek(ctx, 0);
-            // if(next.type != TokenType_TYPE){
-            //     ERROR(next.loc, "Function argument needs a type");
-            //     exit(EXIT_FAILURE);
-            // }
-            // parseConsume(ctx);
-
-            ASTNode* node = NodeInit(&result.mem);
-            node->type = ASTNodeType_VAR_DECL;
-            node->node.VAR_DECL.identifier = id.value;
-            node->node.VAR_DECL.type = parseType(ctx, &result.mem);
-
-            parseAddArg(&result, node);
-
-            next = parsePeek(ctx, 0);
-            if(next.type == TokenType_COMMA){
-                parseConsume(ctx);
-                continue;
-            }else if(next.type == TokenType_RPAREN){
-                parseConsume(ctx);
-                break;
-            }else{
-                ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
-                exit(EXIT_FAILURE);
-            }
-        }else if(next.type == TokenType_RPAREN){
-            parseConsume(ctx);
-            break;
-        }else{
+    for(u64 i = ctx->index; i < ctx->tokens.size; i++) {
+        next = parseConsume(ctx);
+        if(next.type == TokenType_RPAREN) break;
+        if(next.type != TokenType_IDENTIFIER) {
             ERROR(next.loc, "Function argument needs an identifier");
+        }
+
+        ArrayAppend(scope->symbols, next.value);
+        Token id = next;
+
+        next = parseConsume(ctx);
+        if(next.type != TokenType_COLON){
+            ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
+        }
+
+        FunctionArg arg = {0};
+        arg.id = id.value;
+        arg.type = parseType(ctx, &scope->mem); // TODO: this function requiring an arena will eventually get removed
+        // arg.initialValue = ; // TODO: currently we dont support value initializer parsing
+        ArrayAppend(result, arg);
+
+        next = parseConsume(ctx);
+        if(next.type == TokenType_COMMA) {
+            continue;
+        } else if(next.type == TokenType_RPAREN) {
+            break;
+        } else {
+            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
             exit(EXIT_FAILURE);
         }
     }
@@ -872,7 +812,7 @@ Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     Token next = parsePeek(ctx, 0);
     if(next.type != TokenType_LSCOPE) {
         ASTNode* statement = parseStatement(ctx, mem, parent);
-        parseAddStatement(&result->stmts, statement);
+        ArrayAppend(result->statements, statement);
         return result;
     }
 
@@ -880,23 +820,12 @@ Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     parseConsume(ctx); // {
     while(next.type != TokenType_RSCOPE) {
         ASTNode* statement = parseStatement(ctx, mem, parent);
-        parseAddStatement(&result->stmts, statement);
+        ArrayAppend(result->statements, statement);
         next = parsePeek(ctx, 0);
     }
     parseConsume(ctx); // }
 
     return result;
-}
-
-void parseAddConditionalBlock(Arena* mem, ConditionalBlocksArray* blocks, ConditionalBlock block) {
-    if(blocks->count >= blocks->capacity){
-        size_t newCap = blocks->capacity * 2;
-        if(newCap == 0) newCap = 1;
-        blocks->blocks = arena_realloc(mem, blocks->blocks, blocks->capacity * sizeof(blocks->blocks[0]), newCap * sizeof(blocks->blocks[0]));
-        blocks->capacity = newCap;
-    }
-
-    blocks->blocks[blocks->count++] = block;
 }
 
 // TODO: temporary
@@ -926,6 +855,7 @@ ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
 
         LibName value = {0};
         value.functions = arena_alloc(mem, sizeof(Hashmap(String, FuncName)));
+        // TODO: use arena allocator
         HashmapInit(*value.functions, 0x100);
         if(!HashmapSet(String, LibName)(&ctx->importLibraries, key, value)) {
             UNREACHABLE("hashmap failed to insert");
@@ -946,7 +876,7 @@ ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
         assert(func->type == ASTNodeType_FUNCTION_DEF, "#extern needs to be followed by a function declaration");
         func->node.FUNCTION_DEF.isExtern = TRUE;
         parseCheckSemicolon(ctx);
-        parseAddStatement(&parent->stmts, func);
+        ArrayAppend(parent->statements, func);
         String functionName = func->node.FUNCTION_DEF.identifier;
 
         CompilerInstruction* inst = CompInstInit(mem);
@@ -997,7 +927,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 .expr = parseExpression(ctx, mem),
                 .scope = parseScope(ctx, mem, parent),
             };
-            parseAddConditionalBlock(mem, &result->node.IF.blocks, ifBlock);
+            ArrayAppend(result->node.IF.blocks, ifBlock);
 
             Token next = parsePeek(ctx, 0);
             while(next.type == TokenType_ELSE) {
@@ -1010,7 +940,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                         .expr = parseExpression(ctx, mem),
                         .scope = parseScope(ctx, mem, parent),
                     };
-                    parseAddConditionalBlock(mem, &result->node.IF.blocks, elseIfBlock);
+                    ArrayAppend(result->node.IF.blocks, elseIfBlock);
                 } else {
                     // else
                     result->node.IF.hasElse = TRUE;
@@ -1123,7 +1053,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 } else {
                     result->type = ASTNodeType_VAR_CONST;
                     result->node.VAR_CONST.identifier = t.value;
-                    result->node.VAR_CONST.expr = parseExpression(ctx, mem);;
+                    result->node.VAR_CONST.expr = parseExpression(ctx, mem);
 
                     parseCheckSemicolon(ctx);
                 }
@@ -1172,15 +1102,16 @@ Scope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
     Scope* globalScope = parseScopeInit(mem, NULL);
     while(ctx->index < ctx->tokens.size) {
         ASTNode* statement = parseStatement(ctx, mem, globalScope);
-        parseAddStatement(&globalScope->stmts, statement);
+        ArrayAppend(globalScope->statements, statement);
     }
     return globalScope;
 }
 
-ParseResult Parse(TokenArray tokens, Arena* mem) {
+ParseResult Parse(Array(Token) tokens, Arena* mem) {
     ParseResult result = {0};
     ParseContext ctx2 = {.tokens = tokens};
     ParseContext* ctx = &ctx2;
+    // TODO: use arena allocator
     HashmapInit(ctx->importLibraries, 0x100);
     HashmapInit(ctx->funcInfo, 0x100);
 

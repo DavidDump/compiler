@@ -20,23 +20,6 @@ bool isValidVariableNameChar(u8 c) {
     return (isLetter(c) || isNumber(c) || c == '_');
 }
 
-void TokenArrayAddToken(TokenArray* arr, String value, TokenType type, String filename, int line, int collum){
-    if(arr->size >= arr->capacity){
-        size_t newCap = arr->capacity * 2;
-        if(newCap == 0) newCap = 1;
-        arr->tokens = arena_realloc(&arr->mem, arr->tokens, arr->size * sizeof(arr->tokens[0]), newCap * sizeof(arr->tokens[0]));
-        arr->capacity = newCap;
-    }
-
-    Token tok = {0};
-    tok.value = value;
-    tok.type = type;
-    tok.loc.filename = filename;
-    tok.loc.line = line;
-    tok.loc.collum = collum;
-    arr->tokens[arr->size++] = tok;
-}
-
 bool isType(String value) {
     return (
         StringEqualsCstr(value, "u8")     ||
@@ -57,8 +40,8 @@ bool isType(String value) {
     );
 }
 
-TokenArray Tokenize(String source, String filename) {
-    TokenArray result = {0};
+Array(Token) Tokenize(Arena* mem, String source, String filename) {
+    Array(Token) result = {0};
     u64 lineNum = 1;
     u64 collumNum = 1;
     String value = {0};
@@ -284,7 +267,16 @@ TokenArray Tokenize(String source, String filename) {
         
         assert(value.length != 0, "");
         assert(type != 0, "");
-        TokenArrayAddToken(&result, value, type, filename, lineNum, collumNum);
+
+        Token token = {
+            .value = value,
+            .type = type,
+            .loc.filename = filename,
+            .loc.line = lineNum,
+            .loc.collum = collumNum,
+        };
+        // TODO: use arena allocator
+        ArrayAppend(result, token);
         
         collumNum += value.length;
         i += value.length - 1;
@@ -318,13 +310,13 @@ void TokenPrintAsTable(Token t, int locWidth, int symbolNameWidth, int symbolWid
     printf(" }\n");
 }
 
-void TokensPrint(TokenArray* tokens){
+void TokensPrint(Array(Token)* tokens){
     // collect collum width information
     int locWidth = 0;
     int symbolNameWidth = 0;
     int symbolWidth = 0;
     for(u64 i = 0; i < tokens->size; i++){
-        Token t = tokens->tokens[i];
+        Token t = tokens->data[i];
         #define BUFFER_SIZE 1024
         char buffer[BUFFER_SIZE] = {0};
 
@@ -341,7 +333,7 @@ void TokensPrint(TokenArray* tokens){
 
     // print the table
     for(u64 i = 0; i < tokens->size; i++){
-        Token t = tokens->tokens[i];
+        Token t = tokens->data[i];
         TokenPrintAsTable(t, locWidth, symbolNameWidth, symbolWidth);
     }
 }

@@ -4,6 +4,7 @@
 #include "types.h"
 #include "string.h"
 #include "common.h"
+#include "dataStructures.h"
 
 typedef struct Location{
     String filename;
@@ -104,21 +105,19 @@ static char* TokenTypeStr[TokenType_COUNT + 1] = {
 };
 #pragma GCC diagnostic pop
 
-typedef struct Token{
+typedef struct Token {
     TokenType type;
     String value;
     Location loc;
 } Token;
 
-typedef struct TokenArray{
-    Token* tokens;
-    u64 size;
-    u64 capacity;
-    Arena mem;
-} TokenArray;
+defArray(Token);
 
-TokenArray Tokenize(String source, String filenameCstring);
-void TokensPrint(TokenArray* tokens);
+Array(Token) Tokenize(Arena* mem, String source, String filenameCstring);
+
+#ifdef COMP_DEBUG
+void TokensPrint(Array(Token)* tokens);
 void TokenPrint(Token t);
+#endif // COMP_DEBUG
 
 #endif // COMP_LEXER_H

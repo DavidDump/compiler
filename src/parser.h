@@ -59,42 +59,33 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
 };
 #pragma GCC diagnostic pop
 
-typedef struct _ASTNode ASTNode;
+typedef struct ASTNode ASTNode;
+typedef ASTNode* ASTNodePtr;
 
-// TODO: args in general need to be cleaned up
-typedef struct Args {
-    // the type of this node has to be:
-    // on FUNCTION_DEF  - VAR_DECL
-    // on FUNCTION_CALL - expressions: BINARY_EXPRESSION or UNARY_EXPRESSION
-    ASTNode** args;
-    u64 size;
-    u64 capacity;
+defArray(ASTNodePtr);
+defArray(String);
 
-    Arena mem;
-} Args;
+// used when defining arguments during function declaration
+typedef struct FunctionArg {
+    String id;
+    ASTNode* type; // TODO: needs to be a type, types will be their own struct eventually
+    ASTNode* initialValue; // the expression this argument should be initialized with
+} FunctionArg;
 
-typedef struct StmtList {
-    ASTNode** statements;
-    u64 size;
-    u64 capacity;
+defArray(FunctionArg);
 
-    Arena mem;
-} StmtList;
+typedef struct Scope Scope;
+typedef Scope* ScopePtr;
 
-typedef struct Scope{
+defArray(ScopePtr);
+
+typedef struct Scope {
     Arena mem;
 
-    String* symbolTable;
-    int symbolSize;
-    int symbolCapacity;
-
-    struct Scope* parent;
-
-    struct Scope** children;
-    int childrenSize;
-    int childrenCapacity;
-
-    StmtList stmts;
+    Scope* parent;
+    Array(ScopePtr) children; // maybe?
+    Array(String) symbols; // symbols defined in this scope
+    Array(ASTNodePtr) statements;
 } Scope;
 
 typedef enum CompilerInstructionType {
@@ -121,25 +112,21 @@ typedef struct ConditionalBlock {
     Scope* scope;
 } ConditionalBlock;
 
-typedef struct ConditionalBlocksArray {
-    ConditionalBlock* blocks;
-    u64 count;
-    u64 capacity;
-} ConditionalBlocksArray;
+defArray(ConditionalBlock);
 
-typedef struct _ASTNode {
+typedef struct ASTNode {
     ASTNodeType type;
     union Node {
         struct FUNCTION_DEF {
             String identifier;
             ASTNode* type;
-            Args args;
+            Array(FunctionArg) args;
             Scope* scope;
             bool isExtern;
         } FUNCTION_DEF;
         struct FUNCTION_CALL {
             String identifier;
-            Args args;
+            Array(ASTNodePtr) args; // binary expressions should be their own struct
         } FUNCTION_CALL;
         struct VAR_DECL {
             String identifier;
@@ -184,7 +171,7 @@ typedef struct _ASTNode {
             String value;
         } BOOL_LIT;
         struct IF {
-            ConditionalBlocksArray blocks;
+            Array(ConditionalBlock) blocks;
             bool hasElse;
             Scope* elze;
         } IF;
@@ -216,7 +203,7 @@ typedef struct _ASTNode {
 } ASTNode;
 
 typedef struct ParseContext {
-    TokenArray tokens;
+    Array(Token) tokens;
 	u64 index;
     Hashmap(String, LibName) importLibraries;
     String currentImportLibraryName;
@@ -242,7 +229,7 @@ typedef struct ParseResult {
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
 ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 ASTNode* parseLeaf(ParseContext* ctx, Arena* mem);
-ParseResult Parse(TokenArray tokens, Arena* mem);
+ParseResult Parse(Array(Token) tokens, Arena* mem);
 ExpressionEvaluationResult evaluate_expression(ASTNode* expr);
 ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent);
 
