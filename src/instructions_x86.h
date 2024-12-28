@@ -63,7 +63,7 @@ typedef enum Mnemonic {
     lea_,
     inc_,
     dec_,
-    // jmp_,
+    jmp_,
     // NOTE: less and greater are used for signed comparison
     //       below and above are used for unsigned comparison
     je_,

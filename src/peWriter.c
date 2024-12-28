@@ -140,7 +140,7 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
         };
     }
     result.importDirectorySize = get_rva() - result.importDirectoryRva;
-    *buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR) = (IMAGE_IMPORT_DESCRIPTOR) {0};
+    if(libs->size > 0) *buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR) = (IMAGE_IMPORT_DESCRIPTOR) {0};
 
     // Data Section
     if(userData->size != 0) { // TODO: find out why the memory is corrupted

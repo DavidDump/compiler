@@ -152,6 +152,8 @@ typedef struct Instruction {
 
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
+defArray(u64);
+
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
 GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo);
 

@@ -15,6 +15,7 @@ const char* MnemonicStr[Mnemonic_COUNT] = {
     [lea_]  = "lea",
     [inc_]  = "inc",
     [dec_]  = "dec",
+    [jmp_]  = "jmp",
     [je_]   = "je",
     [jne_]  = "jne",
     [jl_]   = "jl",
@@ -280,6 +281,21 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0xFF, .modRMType = ModRMType_EXT, .opcodeExtension = 1, .opTypes[0] = OpType_RM},
         // 48+rw         | DEC r16     | O     | N.E.        | Valid           | Decrement r16 by 1.
         // 48+rd         | DEC r32     | O     | N.E.        | Valid           | Decrement r32 by 1.
+    },
+    [jmp_]  = {
+        // Opcode      | Instruction  | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // EB cb       | JMP rel8     | D     | Valid       | Valid           | Jump short, RIP = RIP + 8-bit displacement sign extended to 64-bits.
+        // E9 cw       | JMP rel16    | D     | N.S.        | Valid           | Jump near, relative, displacement relative to next instruction. Not supported in 64-bit mode.
+        // E9 cd       | JMP rel32    | D     | Valid       | Valid           | Jump near, relative, RIP = RIP + 32-bit displacement sign extended to 64-bits.
+        {.type = InstructionType_64BIT, .opcode = 0xE9, .opTypes[0] = OpType_IMM32},
+        // FF /4       | JMP r/m16    | M     | N.S.        | Valid           | Jump near, absolute indirect, address = zero-extended r/m16. Not supported in 64-bit mode.
+        // FF /4       | JMP r/m32    | M     | N.S.        | Valid           | Jump near, absolute indirect, address given in r/m32. Not supported in 64-bit mode.
+        // FF /4       | JMP r/m64    | M     | Valid       | N.E.            | Jump near, absolute indirect, RIP = 64-Bit offset from register or memory.
+        // EA cd       | JMP ptr16:16 | S     | Inv.        | Valid           | Jump far, absolute, address given in operand.
+        // EA cp       | JMP ptr16:32 | S     | Inv.        | Valid           | Jump far, absolute, address given in operand.
+        // FF /5       | JMP m16:16   | M     | Valid       | Valid           | Jump far, absolute indirect, address given in m16:16.
+        // FF /5       | JMP m16:32   | M     | Valid       | Valid           | Jump far, absolute indirect, address given in m16:32.
+        // REX.W FF /5 | JMP m16:64   | M     | Valid       | N.E.            | Jump far, absolute indirect, address given in m16:64.
     },
     [je_] = {
         // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description

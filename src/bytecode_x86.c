@@ -597,7 +597,9 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
     }
 }
 
-void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
+// return the offset, from the begining of the code buffer, to the jump instruction target address that needs to be patched
+// offset = offset + 4 + scopeLen
+u64 gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
     assert(expr->type == ASTNodeType_BINARY_EXPRESSION, "");
@@ -613,24 +615,36 @@ void gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
 
     // TODO: the encoding used to generate the jump needs to be selected based on the distance to the target
     // TODO: signed and unsigned jump after comparison is different
-    u32 offset = 0;
-    UNIMPLEMENTED("offset calculation not finished");
     if(StringEqualsCstr(op, "==")) {
-        genInstruction(ctx, INST(je, OP_IMM32(offset)));
+        genInstruction(ctx, INST(jne, OP_IMM32(0)));
     } else if(StringEqualsCstr(op, "!=")) {
-        genInstruction(ctx, INST(jne, OP_IMM32(offset)));
+        genInstruction(ctx, INST(je, OP_IMM32(0)));
     } else if(StringEqualsCstr(op, "<")) {
-        genInstruction(ctx, INST(jl, OP_IMM32(offset)));
+        genInstruction(ctx, INST(jge, OP_IMM32(0)));
     } else if(StringEqualsCstr(op, ">")) {
-        genInstruction(ctx, INST(jg, OP_IMM32(offset)));
+        genInstruction(ctx, INST(jle, OP_IMM32(0)));
     } else if(StringEqualsCstr(op, "<=")) {
-        genInstruction(ctx, INST(jle, OP_IMM32(offset)));
+        genInstruction(ctx, INST(jg, OP_IMM32(0)));
     } else if(StringEqualsCstr(op, ">=")) {
-        genInstruction(ctx, INST(jge, OP_IMM32(offset)));
+        genInstruction(ctx, INST(jl, OP_IMM32(0)));
     }
+
+    return ctx->code.size - 4;
+}
+
+// patch a jump
+// patchTarget is the offset from the begining of the buffer in ctx to patch
+// targetAddress is the offset from the begining of the buffer in ctx, where the jump should point to
+void gen_patchAddress(GenContext* ctx, u64 patchTarget, u64 targetAddress) {
+    u64 offset = targetAddress - (patchTarget + 4);
+    ctx->code.mem[patchTarget + 0] = (offset >> (8 * 0)) & 0xFF;
+    ctx->code.mem[patchTarget + 1] = (offset >> (8 * 1)) & 0xFF;
+    ctx->code.mem[patchTarget + 2] = (offset >> (8 * 2)) & 0xFF;
+    ctx->code.mem[patchTarget + 3] = (offset >> (8 * 3)) & 0xFF;
 }
 
 // stackToRestore is the value set to the stack in the GenContext when generating a ret instruction
+// mainScope specifies if a ExitProcess call should be generated when exiting the scope
 void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool mainScope) {
     for(u64 i = 0; i < scope->statements.size; ++i) {
         ASTNode* node = scope->statements.data[i];
@@ -775,7 +789,50 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 }
             } break;
             case ASTNodeType_IF: {
-                UNIMPLEMENTED("ASTNodeType_IF in codegen");
+                Array(ConditionalBlock) blocks = node->node.IF.blocks;
+                Scope* elze = node->node.IF.elze;
+                bool hasElse = node->node.IF.hasElse;
+                Array(u64) patchTargets = {0};
+
+                // if condition
+                {
+                    ConditionalBlock firstBlock = blocks.data[0];
+                    u64 patchTarget = gen_x86_64_condition(ctx, firstBlock.expr);
+                    gen_x86_64_scope(ctx, firstBlock.scope, stackToRestore, mainScope);
+
+                    if(hasElse) {
+                        genInstruction(ctx, INST(jmp, OP_IMM32(0)));
+                        ArrayAppend(patchTargets, ctx->code.size - 4);
+                    }
+
+                    gen_patchAddress(ctx, patchTarget, ctx->code.size);
+                }
+
+                // optional else if conditions
+                for(u64 h = 1; h < blocks.size; ++h) {
+                    ConditionalBlock block = blocks.data[h];
+                    u64 patchTarget = gen_x86_64_condition(ctx, block.expr);
+                    gen_x86_64_scope(ctx, block.scope, stackToRestore, mainScope);
+
+                    bool isLastBlock = !(h + 1 < blocks.size);
+                    if(!(isLastBlock && !hasElse)) {
+                        genInstruction(ctx, INST(jmp, OP_IMM32(0)));
+                        ArrayAppend(patchTargets, ctx->code.size - 4);
+                    }
+
+                    gen_patchAddress(ctx, patchTarget, ctx->code.size);
+                }
+
+                // optional else block
+                if(hasElse) {
+                    gen_x86_64_scope(ctx, elze, stackToRestore, mainScope);
+                }
+
+                // do all the patches
+                for(u64 h = 0; h < patchTargets.size; ++h) {
+                    u64 patchTarget = patchTargets.data[h];
+                    gen_patchAddress(ctx, patchTarget, ctx->code.size);
+                }
             } break;
             case ASTNodeType_LOOP: {
                 UNIMPLEMENTED("ASTNodeType_LOOP in codegen");
