@@ -31,6 +31,11 @@ typedef uint64_t u64;
 // Hashmaps
 // 
 
+#ifndef HashmapAlloc
+#include <stdlib.h>
+#define HashmapAlloc(_count_, _byteSize_) calloc(_count_, _byteSize_)
+#endif
+
 #define DJB2_INIT 5381
 u64 djb2(u64 hash, u8* buffer, u64 size);
 
@@ -53,9 +58,8 @@ u64 djb2(u64 hash, u8* buffer, u64 size);
     KVPair(_keyType_, _valType_)* last;        \
 } Hashmap(_keyType_, _valType_)
 
-// TODO: make allocator configurable
 #define HashmapInit(_hashmap_, _capacity_) do { \
-    (_hashmap_).pairs = calloc(_capacity_, sizeof(*(_hashmap_).pairs)); \
+    (_hashmap_).pairs = HashmapAlloc(_capacity_, sizeof(*(_hashmap_).pairs)); \
     (_hashmap_).capacity = _capacity_; \
 } while(0)
 
@@ -128,6 +132,15 @@ bool (hashmapGet##_keyType_##_valType_)(Hashmap(_keyType_, _valType_)* hs, _keyT
 // Dynamic Arrays
 // 
 
+#ifndef ArrayAlloc
+#include <stdlib.h>
+#define ArrayAlloc(_oldPtr_, _byteSize_) realloc(_oldPtr_, _byteSize_)
+#endif
+
+#ifndef ArrayInitialCapacity
+#define ArrayInitialCapacity 1
+#endif
+
 #define Array(_type_) Array##_type_
 #define defArray(_type_) typedef struct Array(_type_) { \
     _type_* data; \
@@ -135,13 +148,11 @@ bool (hashmapGet##_keyType_##_valType_)(Hashmap(_keyType_, _valType_)* hs, _keyT
     u64 size; \
 } Array(_type_)
 
-// TODO: make allocator configurable
-#define ArrayInitialCapacity 1
 #define ArrayAppend(_array_, _value_) do { \
     if((_array_).size >= (_array_).capacity) { \
         size_t newCap = (_array_).capacity * 2; \
         if(newCap == 0) newCap = ArrayInitialCapacity; \
-        (_array_).data = realloc((_array_).data, newCap * sizeof(*(_array_).data)); \
+        (_array_).data = ArrayAlloc((_array_).data, newCap * sizeof(*(_array_).data)); \
         (_array_).capacity = newCap; \
     } \
     (_array_).data[(_array_).size] = (_value_); \
