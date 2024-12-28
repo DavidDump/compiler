@@ -1,6 +1,10 @@
 // Example 01
 // Demonstrate the basic language syntax
 
+// kinda sucks need to be added to all windows apps
+#library "kernel32.dll";
+#extern ExitProcess :: (code: s64);
+
 // main function has the same signature as main in C
 // actually main is slighly different because arrays are sized even after passing them around, so there is no need for argc
 main :: (args: string[...]) -> u8 {
