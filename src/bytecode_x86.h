@@ -5,7 +5,7 @@
 #include "arena.h"
 #include "buffer.h"
 #include "instructions_x86.h"
-#include "hashmap.h"
+#include "dataStructuresDefs.h"
 #include "parser.h"
 
 // Register values used in the Mod/RM byte
@@ -49,7 +49,7 @@ typedef struct GenContext {
     Arena mem;
     Buffer code;
 
-    HashmapFuncInfo funcInfo; // input arg, info about defined functions
+    Hashmap(String, FuncInfo) funcInfo; // input arg, info about defined functions
 
     // TODO: this is not good, me not like, make better
     Buffer symbolsToPatch;   // AddrToPatch, external function call, variable or other symbol
@@ -60,10 +60,10 @@ typedef struct GenContext {
     s64 stackPointer;     // keeping track of the stack pointer for variables
     u64 entryPointOffset; // the offset from the begining of the code buffer to the entry point
 
-    Hashmap variables; // value is the stack offset to the variable
-    Hashmap functions; // value is the offset to the begining of the function from the begining of the code buffer
-    HashmapData data;  // value is a UserDataEntry, only for string data
-    Hashmap constants; // value is the value of a constant that should be hardcoded
+    Hashmap(String, s64) variables; // value is the stack offset to the variable
+    Hashmap(String, s64) functions; // value is the offset to the begining of the function from the begining of the code buffer
+    Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
+    Hashmap(String, s64) constants; // value is the value of a constant that should be hardcoded
 } GenContext;
 
 typedef enum OperandType {
@@ -153,7 +153,7 @@ typedef struct Instruction {
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
 void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
-GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo);
+GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo);
 
 #endif // COMP_BYTECODE_H
 

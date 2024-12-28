@@ -5,7 +5,7 @@
 #include "arena.h"
 #include "string.h"
 #include "lexer.h"
-#include "hashmap.h"
+#include "dataStructuresDefs.h"
 
 typedef enum ASTNodeType {
     ASTNodeType_NONE,
@@ -218,9 +218,9 @@ typedef struct _ASTNode {
 typedef struct ParseContext {
     TokenArray tokens;
 	u64 index;
-    HashmapLibName importLibraries;
+    Hashmap(String, LibName) importLibraries;
     String currentImportLibraryName;
-    HashmapFuncInfo funcInfo;
+    Hashmap(String, FuncInfo) funcInfo;
 } ParseContext;
 
 typedef struct Operator {
@@ -235,8 +235,8 @@ typedef struct ExpressionEvaluationResult {
 
 typedef struct ParseResult {
     Scope* globalScope;
-    HashmapLibName importLibraries;
-    HashmapFuncInfo funcInfo;
+    Hashmap(String, LibName) importLibraries;
+    Hashmap(String, FuncInfo) funcInfo;
 } ParseResult;
 
 ASTNode* parseExpression(ParseContext* ctx, Arena* mem);

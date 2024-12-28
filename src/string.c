@@ -1,5 +1,6 @@
 #include "string.h"
 #include "common.h"
+#include "dataStructures.h"
 
 #include <string.h> // strlen(), memcpy()
 
@@ -165,4 +166,8 @@ Buffer StringChainToBuffer(StringChain chain) {
     }
 
     return result;
+}
+
+u64 StringHash(String str) {
+    return djb2(DJB2_INIT, str.str, str.length);
 }

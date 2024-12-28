@@ -1,6 +1,10 @@
 #include <stdio.h>  // fopen(), fseek(), ftell(), fread(), fclose(), printf(), 
 #include <string.h> // strlen(), memcpy()
 
+#define DATA_STRUCT_IMPLEMENTATION
+#include "dataStructures.h"
+#undef DATA_STRUCT_IMPLEMENTATION
+
 #include "peWriter.h"
 #include "bytecode_x86.h"
 #include "codegen.h"

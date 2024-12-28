@@ -3,7 +3,7 @@
 
 #include "common.h"
 #include "buffer.h"
-#include "hashmap.h"
+#include "dataStructuresDefs.h"
 
 // NOTE: all the information about the PE32 format is from the MSDN documentation page
 // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
@@ -52,6 +52,6 @@ typedef struct ParsedDataSection {
     s32 importDirectorySize;
 } ParsedDataSection;
 
-Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch, Hashmap* funcCalls, Buffer funcsToPatch, u64 entryPointOffset);
+Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer names, Hashmap(String, UserDataEntry)* userData, Buffer dataToPatch, Hashmap(String, s64)* funcCalls, Buffer funcsToPatch, u64 entryPointOffset);
 
 #endif // COMP_PE_WRITER_H

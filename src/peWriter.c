@@ -1,6 +1,5 @@
 #include "peWriter.h"
 #include "bytecode_exe_common.h"
-#include "hashmap.h"
 
 #include <windows.h>
 #include <winnt.h>
@@ -19,44 +18,36 @@ u64 align_u64(u64 number, u64 alignment) {
     return (u64)(ceil((double)number / alignment) * alignment);
 }
 
-u32 getFunctionRVA(HashmapLibName* libs, String name) {
-    for(u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* pair = &libs->pair[i];
-        if(pair->key.length == 0) continue;
-        LibName* value = &libs->pair[i].value;
+// TODO: test if this function stil works, slightly changed during hashmap refactor
+u32 getFunctionRVA(Hashmap(String, LibName)* libs, String name) {
+    HashmapFor(String, LibName, lib, libs) {
         FuncName result = {0};
-        if(!hashmapFuncNameGet(&value->functions, name, &result)) {
-            UNREACHABLE("a function was not imported");
+        if(HashmapGet(String, FuncName)(lib->value.functions, name, &result)) {
+            return result.iatRva;
         }
-        return result.iatRva;
     }
-    UNREACHABLE("library was not imported");
+    UNREACHABLE("function could not be found in imported libraries");
     return 0; // NOTE: just to silence a warning
 }
 
-u32 genDataRVA(HashmapData* userData, String name) {
+u32 genDataRVA(Hashmap(String, UserDataEntry)* userData, String name) {
     UserDataEntry value;
-    if(hashmapDataGet(userData, name, &value)) {
+    if(HashmapGet(String, UserDataEntry)(userData, name, &value)) {
         return value.dataRVA;
     }
     UNREACHABLE("a data entry could not be found");
     return 0; // NOTE: just to silence a warning
 }
 
-ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, IMAGE_SECTION_HEADER *header) {
+ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(String, UserDataEntry)* userData, IMAGE_SECTION_HEADER *header) {
     #define get_rva() (s32)(header->VirtualAddress + buffer->size)
 
     // NOTE: is it better to precalculate this or just use a dynamic array?
     u64 expected_encoded_size = 0;
-    for (u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* lib = &libs->pair[i];
-        if(lib->key.length == 0) continue;
+    HashmapFor(String, LibName, lib, libs) {
         // Aligned to 2 bytes c string of library name
         expected_encoded_size += align((s32)lib->key.length + 1, 2);
-        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
-            KVPair_FuncName* fn = &lib->value.functions.pair[h];
-            if(fn->key.length == 0) continue;
-
+        HashmapFor(String, FuncName, fn, lib->value.functions) {
             // Ordinal Hint, value not required
             expected_encoded_size += sizeof(s16);
             // Aligned to 2 bytes c string of symbol name
@@ -80,11 +71,9 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
     }
     // Data section
     if(userData->size != 0) { // TODO: find out why the memory is corrupted
-        for(u64 i = 0; i < userData->capacity; ++i) {
-            KVPair_SD pair = userData->pair[i];
-            if(pair.key.length == 0) continue;
-            expected_encoded_size += sizeof(pair.value.dataLen);
-            expected_encoded_size += pair.value.dataLen;
+        for(KVPair(String, UserDataEntry)* pair = userData->first; pair != NULL; pair = pair->next) {
+            expected_encoded_size += sizeof(pair->value.dataLen);
+            expected_encoded_size += pair->value.dataLen;
         }
     }
 
@@ -95,34 +84,25 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
 
     Buffer* buffer = &result.buffer;
     // Function names
-    for (u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* lib = &libs->pair[i];
-        if(lib->key.length == 0) continue;
-        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
-            KVPair_FuncName* function = &lib->value.functions.pair[h];
-            if(function->key.length == 0) continue;
-
-            function->value.nameRva = get_rva();
+    HashmapFor(String, LibName, lib, libs) {
+        HashmapFor(String, FuncName, fn, lib->value.functions) {
+            fn->value.nameRva = get_rva();
             buffer_append_s16(buffer, 0); // Ordinal Hint, value not required
-            size_t name_size = function->key.length + 1;
+            size_t name_size = fn->key.length + 1;
             s32 aligned_name_size = align((s32)name_size, 2);
             u8* buf = buffer_allocate_size(buffer, aligned_name_size);
-            memcpy(buf, function->key.str, name_size);
+            memcpy(buf, fn->key.str, name_size);
             buf[name_size - 1] = 0; // TODO: i dont think the +1 for len is nessecary, but test before change
         }
     }
 
     // IAT
     result.iatRva = get_rva();
-    for (u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* lib = &libs->pair[i];
-        if(lib->key.length == 0) continue;
+    HashmapFor(String, LibName, lib, libs) {
         lib->value.iatRva = get_rva();
-        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
-            KVPair_FuncName* function = &lib->value.functions.pair[h];
-            if(function->key.length == 0) continue;
-            function->value.iatRva = get_rva();
-            buffer_append_u64(buffer, function->value.nameRva);
+        HashmapFor(String, FuncName, fn, lib->value.functions) {
+            fn->value.iatRva = get_rva();
+            buffer_append_u64(buffer, fn->value.nameRva);
         }
         // End of IAT list
         buffer_append_u64(buffer, 0);
@@ -130,23 +110,17 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
     result.iatSize = (s32)buffer->size;
 
     // Image Thunks
-    for (u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* lib = &libs->pair[i];
-        if(lib->key.length == 0) continue;
+    HashmapFor(String, LibName, lib, libs) {
         lib->value.imageThunkRva = get_rva();
-        for (u64 h = 0; h < lib->value.functions.capacity; ++h) {
-            KVPair_FuncName* function = &lib->value.functions.pair[h];
-            if(function->key.length == 0) continue;
-            buffer_append_u64(buffer, function->value.nameRva);
+        HashmapFor(String, FuncName, fn, lib->value.functions) {
+            buffer_append_u64(buffer, fn->value.nameRva);
         }
         // End of IAT list
         buffer_append_u64(buffer, 0);
     }
 
     // Library Names
-    for (u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* lib = &libs->pair[i];
-        if(lib->key.length == 0) continue;
+    HashmapFor(String, LibName, lib, libs) {
         lib->value.nameRva= get_rva();
         size_t name_size = lib->key.length + 1;
         s32 aligned_name_size = align((s32)name_size, 2);
@@ -157,10 +131,7 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
 
     // Import Directory
     result.importDirectoryRva = get_rva();
-    for (u64 i = 0; i < libs->capacity; ++i) {
-        KVPair_LibName* lib = &libs->pair[i];
-        if(lib->key.length == 0) continue;
-
+    HashmapFor(String, LibName, lib, libs) {
         IMAGE_IMPORT_DESCRIPTOR *image_import_descriptor = buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR);
         *image_import_descriptor = (IMAGE_IMPORT_DESCRIPTOR){
             .OriginalFirstThunk = lib->value.imageThunkRva,
@@ -173,14 +144,11 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
 
     // Data Section
     if(userData->size != 0) { // TODO: find out why the memory is corrupted
-        for(u64 i = 0; i < userData->capacity; ++i) {
-            KVPair_SD* pair = &userData->pair[i];
-            if(pair->key.length == 0) continue;
-
-            pair->value.dataRVA = get_rva();
-            buffer_append_u64(buffer, pair->value.dataLen);
-            u8* bufferMem = buffer_allocate_size(buffer, pair->value.dataLen);
-            memcpy(bufferMem, pair->value.data, pair->value.dataLen);
+        HashmapFor(String, UserDataEntry, data, userData) {
+            data->value.dataRVA = get_rva();
+            buffer_append_u64(buffer, data->value.dataLen);
+            u8* bufferMem = buffer_allocate_size(buffer, data->value.dataLen);
+            memcpy(bufferMem, data->value.data, data->value.dataLen);
         }
     }
     
@@ -196,7 +164,7 @@ ParsedDataSection parseDataSection(HashmapLibName* libs, HashmapData* userData, 
 
 // names is the locations where imported functions were used, used for patching
 // dataToPatch is the locations where user defined data was refferenced, used for patching
-Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, HashmapData* userData, Buffer dataToPatch, Hashmap* funcCalls, Buffer funcsToPatch, u64 entryPointOffset) {
+Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer names, Hashmap(String, UserDataEntry)* userData, Buffer dataToPatch, Hashmap(String, s64)* funcCalls, Buffer funcsToPatch, u64 entryPointOffset) {
     // Sections
     IMAGE_SECTION_HEADER sections[3] = {
         [0] = {
@@ -269,7 +237,7 @@ Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, Hashma
         .SizeOfInitializedData = rdata_section_header->SizeOfRawData,
         .AddressOfEntryPoint = 0,
         .BaseOfCode = text_section_header->VirtualAddress,
-        .ImageBase = 0,                  // NOTE: Does not matter as we are using dynamic base
+        .ImageBase = 0, // NOTE: Does not matter as we are using dynamic base
         .SectionAlignment = PE32_SECTION_ALIGNMENT,
         .FileAlignment = PE32_FILE_ALIGNMENT,
         .MajorOperatingSystemVersion = PE32_MIN_WIN_VERSION,
@@ -337,7 +305,7 @@ Buffer genExecutable(HashmapLibName* libs, Buffer bytecode, Buffer names, Hashma
         u8* addrLoc = &beginingOfCode[offset];
         u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
         s64 addr = 0;
-        if(!hashmapGet(funcCalls, name, &addr)) {
+        if(!HashmapGet(String, s64)(funcCalls, name, &addr)) {
             assertf(FALSE, "[UNREACHABLE] Failed to get the location of a function during pe writing: "STR_FMT"\n", STR_PRINT(name));
         }
         u32 funcRVA = (beginingIndex + addr) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;

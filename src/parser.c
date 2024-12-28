@@ -924,8 +924,10 @@ ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
 
         result->node.COMPILER_INST.inst = inst;
 
-        LibName value = {.functions = hashmapFuncNameInit(mem, 0x100)};
-        if(!hashmapLibNameSet(&ctx->importLibraries, key, value)) {
+        LibName value = {0};
+        value.functions = arena_alloc(mem, sizeof(Hashmap(String, FuncName)));
+        HashmapInit(*value.functions, 0x100);
+        if(!HashmapSet(String, LibName)(&ctx->importLibraries, key, value)) {
             UNREACHABLE("hashmap failed to insert");
         }
         ctx->currentImportLibraryName = key;
@@ -954,11 +956,11 @@ ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
         result->node.COMPILER_INST.inst = inst;
 
         LibName value = {0};
-        if(!hashmapLibNameGet(&ctx->importLibraries, ctx->currentImportLibraryName, &value)) {
+        if(!HashmapGet(String, LibName)(&ctx->importLibraries, ctx->currentImportLibraryName, &value)) {
             UNREACHABLE("cant find library to import frunction from, either hashmap ran out of space or no #library specified");
         }
         FuncName value2 = {0};
-        if(!hashmapFuncNameSet(&value.functions, functionName, value2)) {
+        if(!HashmapSet(String, FuncName)(value.functions, functionName, value2)) {
             UNREACHABLE("hashmap failed to insert");
         }
     }
@@ -1115,7 +1117,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                     }
 
                     // NOTE: this might not be necesarry, gets added when returned???
-                    if(!hashmapFuncInfoSet(&ctx->funcInfo, t.value, info)) {
+                    if(!HashmapSet(String, FuncInfo)(&ctx->funcInfo, t.value, info)) {
                         UNREACHABLE("failed to set hashmap");
                     }
                 } else {
@@ -1179,8 +1181,8 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
     ParseResult result = {0};
     ParseContext ctx2 = {.tokens = tokens};
     ParseContext* ctx = &ctx2;
-    ctx->importLibraries = hashmapLibNameInit(mem, 0x100);
-    ctx->funcInfo = hashmapFuncInfoInit(mem, 0x100);
+    HashmapInit(ctx->importLibraries, 0x100);
+    HashmapInit(ctx->funcInfo, 0x100);
 
     Scope* globalScope = parseGlobalScope(ctx, mem);
 
@@ -1191,5 +1193,3 @@ ParseResult Parse(TokenArray tokens, Arena* mem) {
 }
 
 // TODO: check if functions with return type return on all codepaths (typechecking step)
-// TODO: all the keywords that are followed by a scope, should have the option to ommit the scope and use a single statement instead
-// TODO: make statement parsing better, handle single instruction statements, handle globalScope and currentScope in a better way

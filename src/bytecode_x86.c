@@ -497,7 +497,7 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall) {
     }
 
     FuncInfo value = {0};
-    if(!hashmapFuncInfoGet(&ctx->funcInfo, id, &value)) {
+    if(!HashmapGet(String, FuncInfo)(&ctx->funcInfo, id, &value)) {
         UNREACHABLE("function not found in hashmap");
     }
     if(value.isExtern) {
@@ -536,7 +536,7 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
             .dataLen = lit.length - 2,
             .dataRVA = INVALID_ADDRESS,
         };
-        if(!hashmapDataSet(&ctx->data, lit, value)) {
+        if(!HashmapSet(String, UserDataEntry)(&ctx->data, lit, value)) {
             UNREACHABLE("failed to insert into hashmap");
         }
         gen_DataInReg(ctx, RAX, lit);
@@ -545,8 +545,8 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr) {
     } else if(expr->type == ASTNodeType_SYMBOL) {
         String id = expr->node.SYMBOL.identifier;
         s64 value;
-        if(!hashmapGet(&ctx->variables, id, &value)) {
-            if(!hashmapGet(&ctx->constants, id, &value)) {
+        if(!HashmapGet(String, s64)(&ctx->variables, id, &value)) {
+            if(!HashmapGet(String, s64)(&ctx->constants, id, &value)) {
                 UNREACHABLE("cannot generate expression with a undefined variable or constant");
             }
             genInstruction(ctx, INST(mov, OP_REG(RAX), OP_IMM32(value)));
@@ -650,7 +650,10 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 UNUSED(type);
 
                 gen_x86_64_expression(ctx, exprNode); // gen code for the expression, store in rax??
-                hashmapSet(&ctx->variables, id, ctx->stackPointer); // store the variable location on the stack in the context
+                // store the variable location on the stack in the context
+                if(!HashmapSet(String, s64)(&ctx->variables, id, ctx->stackPointer)) {
+                    UNREACHABLE("failed to insert into hashmap");
+                }
                 genPush(ctx, RAX); // push the variable value to the stack
             } break;
             case ASTNodeType_FUNCTION_DEF: {
@@ -661,12 +664,12 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 UNUSED(retType);
 
                 FuncInfo value = {0};
-                if(!hashmapFuncInfoGet(&ctx->funcInfo, id, &value)) {
+                if(!HashmapGet(String, FuncInfo)(&ctx->funcInfo, id, &value)) {
                     assertf(FALSE, "[UNREACHABLE] Function not found in hashmap: "STR_FMT"\n", STR_PRINT(id));
                 }
                 if(value.isExtern) break;
 
-                if(!hashmapSet(&ctx->functions, id, ctx->code.size)) {
+                if(!HashmapSet(String, s64)(&ctx->functions, id, ctx->code.size)) {
                     assertf(FALSE, "[UNREACHABLE] Failed to save the location where function: "STR_FMT" is generated\n", STR_PRINT(id));
                 }
 
@@ -686,19 +689,19 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                     UNUSED(argType);
 
                     if(i == 0) {
-                        hashmapSet(&ctx->variables, argId, ctx->stackPointer);
+                        if(!HashmapSet(String, s64)(&ctx->variables, argId, ctx->stackPointer)) UNREACHABLE("failed to insert into hashmap");
                         genPush(ctx, RCX);
                     } else if(i == 1) {
-                        hashmapSet(&ctx->variables, argId, ctx->stackPointer);
+                        if(!HashmapSet(String, s64)(&ctx->variables, argId, ctx->stackPointer)) UNREACHABLE("failed to insert into hashmap");
                         genPush(ctx, RDX);
                     } else if(i == 2) {
-                        hashmapSet(&ctx->variables, argId, ctx->stackPointer);
+                        if(!HashmapSet(String, s64)(&ctx->variables, argId, ctx->stackPointer)) UNREACHABLE("failed to insert into hashmap");
                         genPush(ctx, R8);
                     } else if(i == 3) {
-                        hashmapSet(&ctx->variables, argId, ctx->stackPointer);
+                        if(!HashmapSet(String, s64)(&ctx->variables, argId, ctx->stackPointer)) UNREACHABLE("failed to insert into hashmap");
                         genPush(ctx, R9);
                     } else {
-                        hashmapSet(&ctx->variables, argId, ctx->stackPointer);
+                        if(!HashmapSet(String, s64)(&ctx->variables, argId, ctx->stackPointer)) UNREACHABLE("failed to insert into hashmap");
                         genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, (i - 3) * 8)));
                         genPush(ctx, RAX);
                     }
@@ -716,7 +719,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 ASTNode* type = node->node.VAR_DECL.type;
                 UNUSED(type);
 
-                hashmapSet(&ctx->variables, id, ctx->stackPointer);
+                if(!HashmapSet(String, s64)(&ctx->variables, id, ctx->stackPointer)) UNREACHABLE("failed to insert into hashmap");
                 // NOTE: 8 is the byte size of a 64 stack slot, maybe sould not be hardcoded
                 genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM8(8)));
                 ctx->stackPointer++;
@@ -728,7 +731,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 gen_x86_64_expression(ctx, exprNode);
 
                 s64 value;
-                if(!hashmapGet(&ctx->variables, id, &value)) {
+                if(!HashmapGet(String, s64)(&ctx->variables, id, &value)) {
                     UNREACHABLE("undefined variable");
                 }
                 s64 savedStack = ctx->stackPointer;
@@ -750,7 +753,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
                 s64 value = exprResult.result <= S64_MAX ? (s64)exprResult.result : S64_MAX;
                 value = exprResult.isNegative ? -value : value;
                 // TODO: assuming numerical constant
-                if(!hashmapSet(&ctx->constants, id, value)) {
+                if(!HashmapSet(String, s64)(&ctx->constants, id, value)) {
                     UNREACHABLE("hashmap full");
                 }
             } break;
@@ -794,7 +797,7 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
     }
 }
 
-GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo) {
+GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo) {
     GenContext ctx = {0};
     ctx.code = make_buffer(0x1000, PAGE_READWRITE); // TODO: make dynamic
 
@@ -804,10 +807,10 @@ GenContext gen_x86_64_bytecode(Scope* globalScope, HashmapFuncInfo funcInfo) {
     ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
     ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
 
-    ctx.variables = hashmapInit(&ctx.mem, 0x10); // TODO: make dynamic
-    ctx.functions = hashmapInit(&ctx.mem, 0x10); // TODO: make dynamic
-    ctx.data  = hashmapDataInit(&ctx.mem, 0x10); // TODO: make dynamic
-    ctx.constants = hashmapInit(&ctx.mem, 0x10); // TODO: make dynamic
+    HashmapInit(ctx.variables, 0x10);
+    HashmapInit(ctx.functions, 0x10);
+    HashmapInit(ctx.data, 0x10);
+    HashmapInit(ctx.constants, 0x10);
     
     gen_x86_64_scope(&ctx, globalScope, 0, FALSE);
     return ctx;
