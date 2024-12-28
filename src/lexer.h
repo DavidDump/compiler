@@ -1,7 +1,6 @@
 #ifndef COMP_LEXER_H
 #define COMP_LEXER_H
 
-#include "types.h"
 #include "string.h"
 #include "common.h"
 #include "dataStructures.h"

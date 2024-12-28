@@ -7,8 +7,6 @@
 
 #include "peWriter.h"
 #include "bytecode_x86.h"
-#include "codegen.h"
-#include "types.h"
 #include "parser.h"
 #include "lexer.h"
 #include "string.h"
