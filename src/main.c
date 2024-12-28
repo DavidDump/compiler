@@ -40,11 +40,11 @@ String EntireFileRead(Arena* mem, String filePath) {
     }
 }
 
-bool EntireFileWrite(String filePath, Buffer data) {
+bool EntireFileWrite(String filePath, Array(u8) data) {
     FILE* f = fopen((char*)filePath.str, "wb");
 
     if(f) {
-        size_t res = fwrite(data.mem, 1, data.size, f);
+        size_t res = fwrite(data.data, 1, data.size, f);
         
         fclose(f);
         if(res != data.size) return FALSE;
@@ -133,7 +133,7 @@ int main(int argc, char** argv){
             exit(EXIT_FAILURE);
         }
     } else if(StringEndsWith(outFilepath, STR(".exe"))) {
-        Buffer exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch, &bytecode.functions, bytecode.functionsToPatch, bytecode.entryPointOffset);
+        Array(u8) exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch, &bytecode.functions, bytecode.functionsToPatch, bytecode.entryPointOffset);
         if(!EntireFileWrite(outFilepath, exeBytes)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);

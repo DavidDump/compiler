@@ -23,7 +23,7 @@ void genModRMByte(GenContext* ctx, AddressingMode mod, Register reg, Register rm
     assert(reg < 16, ""); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     assert(rm < 16, "");  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     u8 modRmByte = ((mod & 3) << 6) | ((reg & 7) << 3) | ((rm & 7) << 0);
-    buffer_append_u8(&ctx->code, modRmByte);
+    ArrayAppend(ctx->code, modRmByte);
 }
 
 // SIB byte:
@@ -41,7 +41,7 @@ void genSIBByte(GenContext* ctx, Scale scale, Register index, Register base) {
     assert(index < 16, ""); // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     assert(base < 16, "");  // 3 bit number, but 16 registers, the top bit is encoded in REX byte
     u8 sibByte = ((scale & 3) << 6) | ((index & 7) << 3) | ((base & 7) << 0);
-    buffer_append_u8(&ctx->code, sibByte);
+    ArrayAppend(ctx->code, sibByte);
 }
 
 // REX byte:
@@ -65,11 +65,11 @@ void genRexByte(GenContext* ctx, u8 w, Register r, Register x, Register b) {
     assert(x < 16, ""); // 1 bit number, but 16 registers, only the top bit is extracted
     assert(b < 16, ""); // 1 bit number, but 16 registers, only the top bit is extracted
     u8 rexByte = 0x40 | (w << 3) | ((r >> 3) << 2) | ((x >> 3) << 1) | ((b >> 3) << 0);
-    buffer_append_u8(&ctx->code, rexByte);
+    ArrayAppend(ctx->code, rexByte);
 }
 
 void Emit8(GenContext* ctx, u8 data) {
-    buffer_append_u8(&ctx->code, data);
+    ArrayAppend(ctx->code, data);
 }
 
 void Emit16(GenContext* ctx, u16 data) {
@@ -404,20 +404,22 @@ void gen_callExtern(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
-    *buffer_allocate(&ctx->symbolsToPatch, AddrToPatch) = (AddrToPatch){
+    AddrToPatch patch = {
         .name = name,
         .offset = offset,
     };
+    ArrayAppend(ctx->symbolsToPatch, patch);
 }
 
 void gen_call(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_IMM32(0xDEADBEEF)));
     int offset = ctx->code.size - 4;
-    *buffer_allocate(&ctx->functionsToPatch, AddrToPatch) = (AddrToPatch){
+    AddrToPatch patch = {
         .name = name,
         .offset = offset,
     };
+    ArrayAppend(ctx->functionsToPatch, patch);
 }
 
 // lea rax, [rip + 0xdeadbeef + sizeof(u64)] ; load data
@@ -430,10 +432,11 @@ void gen_DataInReg(GenContext* ctx, Register reg, String name) {
     // instead it reads the data stored in the entry
     genInstruction(ctx, INST(lea, OP_REG(reg), OP_RIP(sizeof(u64))));
     int offset = ctx->code.size - 4;
-    *buffer_allocate(&ctx->dataToPatch, AddrToPatch) = (AddrToPatch){
+    AddrToPatch patch = {
         .name = name,
         .offset = offset,
     };
+    ArrayAppend(ctx->dataToPatch, patch);
 }
 
 // read the size field of the entry into reg register
@@ -442,10 +445,11 @@ void gen_SizeInReg(GenContext* ctx, Register reg, String name) {
     // the address gets added to 0 so in this case we read the size field of the entry
     genInstruction(ctx, INST(mov, OP_REG(reg), OP_RIP(0)));
     int offset = ctx->code.size - 4;
-    *buffer_allocate(&ctx->dataToPatch, AddrToPatch) = (AddrToPatch){
+    AddrToPatch patch = {
         .name = name,
         .offset = offset,
     };
+    ArrayAppend(ctx->dataToPatch, patch);
 }
 
 // 
@@ -637,10 +641,10 @@ u64 gen_x86_64_condition(GenContext* ctx, ASTNode* expr) {
 // targetAddress is the offset from the begining of the buffer in ctx, where the jump should point to
 void gen_patchAddress(GenContext* ctx, u64 patchTarget, u64 targetAddress) {
     u64 offset = targetAddress - (patchTarget + 4);
-    ctx->code.mem[patchTarget + 0] = (offset >> (8 * 0)) & 0xFF;
-    ctx->code.mem[patchTarget + 1] = (offset >> (8 * 1)) & 0xFF;
-    ctx->code.mem[patchTarget + 2] = (offset >> (8 * 2)) & 0xFF;
-    ctx->code.mem[patchTarget + 3] = (offset >> (8 * 3)) & 0xFF;
+    ctx->code.data[patchTarget + 0] = (offset >> (8 * 0)) & 0xFF;
+    ctx->code.data[patchTarget + 1] = (offset >> (8 * 1)) & 0xFF;
+    ctx->code.data[patchTarget + 2] = (offset >> (8 * 2)) & 0xFF;
+    ctx->code.data[patchTarget + 3] = (offset >> (8 * 3)) & 0xFF;
 }
 
 // stackToRestore is the value set to the stack in the GenContext when generating a ret instruction
@@ -855,13 +859,8 @@ void gen_x86_64_scope(GenContext* ctx, Scope* scope, s64 stackToRestore, bool ma
 
 GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo) {
     GenContext ctx = {0};
-    ctx.code = make_buffer(0x1000, PAGE_READWRITE); // TODO: make dynamic
 
     ctx.funcInfo = funcInfo;
-
-    ctx.symbolsToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
-    ctx.functionsToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
-    ctx.dataToPatch = make_buffer(0x100, PAGE_READWRITE); // TODO: make dynamic
 
     // TODO: use arena allocator
     // TODO: make the default size something sane

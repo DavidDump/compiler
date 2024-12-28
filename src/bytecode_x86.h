@@ -3,7 +3,6 @@
 
 #include "common.h"
 #include "arena.h"
-#include "buffer.h"
 #include "instructions_x86.h"
 #include "dataStructuresDefs.h"
 #include "parser.h"
@@ -47,14 +46,13 @@ typedef enum Scale {
 #define INVALID_ADDRESS 0xCAFEBABE
 typedef struct GenContext {
     Arena mem;
-    Buffer code;
+    Array(u8) code;
 
     Hashmap(String, FuncInfo) funcInfo; // input arg, info about defined functions
 
-    // TODO: this is not good, me not like, make better
-    Buffer symbolsToPatch;   // AddrToPatch, external function call, variable or other symbol
-    Buffer functionsToPatch; // AddrToPatch, internal function call
-    Buffer dataToPatch;      // AddrToPatch, data defined in the .data section
+    Array(AddrToPatch) symbolsToPatch;   // external function call, variable or other symbol
+    Array(AddrToPatch) functionsToPatch; // internal function call
+    Array(AddrToPatch) dataToPatch;      // data defined in the .data section
 
     // u32 freeRegisterMask;
     s64 stackPointer;     // keeping track of the stack pointer for variables

@@ -2,7 +2,7 @@
 #define COMP_PE_WRITER_H
 
 #include "common.h"
-#include "buffer.h"
+#include "bytecode_exe_common.h"
 #include "dataStructuresDefs.h"
 
 // NOTE: all the information about the PE32 format is from the MSDN documentation page
@@ -45,13 +45,13 @@ enum {
 };
 
 typedef struct ParsedDataSection {
-    Buffer buffer;
+    Array(u8) buffer;
     s32 iatRva;
     s32 iatSize;
     s32 importDirectoryRva;
     s32 importDirectorySize;
 } ParsedDataSection;
 
-Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer names, Hashmap(String, UserDataEntry)* userData, Buffer dataToPatch, Hashmap(String, s64)* funcCalls, Buffer funcsToPatch, u64 entryPointOffset);
+Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Array(AddrToPatch) names, Hashmap(String, UserDataEntry)* userData, Array(AddrToPatch) dataToPatch, Hashmap(String, s64)* funcCalls, Array(AddrToPatch) funcsToPatch, u64 entryPointOffset);
 
 #endif // COMP_PE_WRITER_H

@@ -1,5 +1,4 @@
 #include "peWriter.h"
-#include "bytecode_exe_common.h"
 
 #include <windows.h>
 #include <winnt.h>
@@ -18,7 +17,25 @@ u64 align_u64(u64 number, u64 alignment) {
     return (u64)(ceil((double)number / alignment) * alignment);
 }
 
-// TODO: test if this function stil works, slightly changed during hashmap refactor
+#define buffer_allocate(_buffer_, _type_) (_type_*)buffer_allocate_size(_buffer_, sizeof(_type_))
+u8* buffer_allocate_size(Array(u8)* buffer, u64 size) {
+    u64 begin = buffer->size;
+    for(u64 i = 0; i < size; ++i) ArrayAppend(*buffer, 0);
+    return &buffer->data[begin];
+}
+
+void buffer_append_s16(Array(u8)* buffer, s16 data) {
+    *buffer_allocate(buffer, s16) = data;
+}
+
+void buffer_append_u64(Array(u8)* buffer, u64 data) {
+    *buffer_allocate(buffer, u64) = data;
+}
+
+void buffer_append_s32(Array(u8)* buffer, s32 data) {
+    *buffer_allocate(buffer, s32) = data;
+}
+
 u32 getFunctionRVA(Hashmap(String, LibName)* libs, String name) {
     HashmapFor(String, LibName, lib, libs) {
         FuncName result = {0};
@@ -41,48 +58,9 @@ u32 genDataRVA(Hashmap(String, UserDataEntry)* userData, String name) {
 
 ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(String, UserDataEntry)* userData, IMAGE_SECTION_HEADER *header) {
     #define get_rva() (s32)(header->VirtualAddress + buffer->size)
+    ParsedDataSection result = {0};
+    Array(u8)* buffer = &result.buffer;
 
-    // NOTE: is it better to precalculate this or just use a dynamic array?
-    u64 expected_encoded_size = 0;
-    HashmapFor(String, LibName, lib, libs) {
-        // Aligned to 2 bytes c string of library name
-        expected_encoded_size += align((s32)lib->key.length + 1, 2);
-        HashmapFor(String, FuncName, fn, lib->value.functions) {
-            // Ordinal Hint, value not required
-            expected_encoded_size += sizeof(s16);
-            // Aligned to 2 bytes c string of symbol name
-            expected_encoded_size += align((s32)fn->key.length + 1, 2);
-            // IAT placeholder for symbol pointer
-            expected_encoded_size += sizeof(u64);
-            // Image Thunk
-            expected_encoded_size += sizeof(u64);
-        }
-        // NOTE: in the example code this was done once per imported function,
-        // but in the actual emiter we only add one descriptor per imported library, it still works
-        // Import Directory
-        expected_encoded_size += sizeof(IMAGE_IMPORT_DESCRIPTOR);
-
-        // IAT zero-termination
-        expected_encoded_size += sizeof(u64);
-        // Import Directory zero-termination
-        expected_encoded_size += sizeof(u64);
-        // Image Thunk zero-termination
-        expected_encoded_size += sizeof(IMAGE_IMPORT_DESCRIPTOR);
-    }
-    // Data section
-    if(userData->size != 0) { // TODO: find out why the memory is corrupted
-        for(KVPair(String, UserDataEntry)* pair = userData->first; pair != NULL; pair = pair->next) {
-            expected_encoded_size += sizeof(pair->value.dataLen);
-            expected_encoded_size += pair->value.dataLen;
-        }
-    }
-
-    ParsedDataSection result = {
-        // FIXME dynamically resize the buffer
-        .buffer = make_buffer(expected_encoded_size, PAGE_READWRITE),
-    };
-
-    Buffer* buffer = &result.buffer;
     // Function names
     HashmapFor(String, LibName, lib, libs) {
         HashmapFor(String, FuncName, fn, lib->value.functions) {
@@ -152,7 +130,6 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
         }
     }
     
-    assert(buffer->size == expected_encoded_size, "");
     assert(buffer->size < UINT32_MAX, "");
 
     header->Misc.VirtualSize = (s32)buffer->size;
@@ -164,7 +141,7 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
 
 // names is the locations where imported functions were used, used for patching
 // dataToPatch is the locations where user defined data was refferenced, used for patching
-Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer names, Hashmap(String, UserDataEntry)* userData, Buffer dataToPatch, Hashmap(String, s64)* funcCalls, Buffer funcsToPatch, u64 entryPointOffset) {
+Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Array(AddrToPatch) names, Hashmap(String, UserDataEntry)* userData, Array(AddrToPatch) dataToPatch, Hashmap(String, s64)* funcCalls, Array(AddrToPatch) funcsToPatch, u64 entryPointOffset) {
     // Sections
     IMAGE_SECTION_HEADER sections[3] = {
         [0] = {
@@ -211,8 +188,8 @@ Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer nam
 
     // total size of image
     s32 virtualSizeOfImage = text_section_header->VirtualAddress + align(text_section_header->SizeOfRawData, PE32_SECTION_ALIGNMENT);
-    u64 max_exe_buffer = file_size_of_headers + rdata_section_header->SizeOfRawData + text_section_header->SizeOfRawData;
-    Buffer exe_buffer = make_buffer(max_exe_buffer, PAGE_READWRITE);
+    // u64 max_exe_buffer = file_size_of_headers + rdata_section_header->SizeOfRawData + text_section_header->SizeOfRawData;
+    Array(u8) exe_buffer = {0};
 
     IMAGE_DOS_HEADER *dos_header = buffer_allocate(&exe_buffer, IMAGE_DOS_HEADER);
     *dos_header = (IMAGE_DOS_HEADER){
@@ -274,7 +251,7 @@ Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer nam
     // .rdata section
     exe_buffer.size = rdata_section_header->PointerToRawData;
     u8* mem = buffer_allocate_size(&exe_buffer, rdata_section.buffer.size);
-    memcpy(mem, rdata_section.buffer.mem, rdata_section.buffer.size);
+    memcpy(mem, rdata_section.buffer.data, rdata_section.buffer.size);
     exe_buffer.size = rdata_section_header->PointerToRawData + rdata_section_header->SizeOfRawData;
 
     // .text segment
@@ -282,14 +259,16 @@ Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer nam
 
     u32 beginingIndex = exe_buffer.size;
     u8* beginingOfCode = buffer_allocate_size(&exe_buffer, codeSizeAligned);
-    memcpy(beginingOfCode, bytecode.mem, bytecode.size);
+    memcpy(beginingOfCode, bytecode.data, bytecode.size);
 
     // patch the external funcion call locations
-    for(u64 i = 0; i < names.size/sizeof(AddrToPatch); ++i) {
-        AddrToPatch* castNames = (AddrToPatch*)names.mem;
-        u8* addrLoc = &beginingOfCode[castNames[i].offset];
-        u32 nextInstructonAddr = (beginingIndex + castNames[i].offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
-        u32 funcRVA = getFunctionRVA(libs, castNames[i].name);
+    for(u64 i = 0; i < names.size; ++i) {
+        u64 offset = names.data[i].offset;
+        String name = names.data[i].name;
+
+        u8* addrLoc = &beginingOfCode[offset];
+        u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
+        u32 funcRVA = getFunctionRVA(libs, name);
         
         addrLoc[0] = ((funcRVA - nextInstructonAddr) >> (8 * 0)) & 0xff;
         addrLoc[1] = ((funcRVA - nextInstructonAddr) >> (8 * 1)) & 0xff;
@@ -298,10 +277,10 @@ Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer nam
     }
     
     // patch the internal function call locations
-    for(u64 i = 0; i < funcsToPatch.size/sizeof(AddrToPatch); ++i) {
-        AddrToPatch* castNames = (AddrToPatch*)funcsToPatch.mem;
-        u64 offset = castNames[i].offset;
-        String name = castNames[i].name;
+    for(u64 i = 0; i < funcsToPatch.size; ++i) {
+        u64 offset = funcsToPatch.data[i].offset;
+        String name = funcsToPatch.data[i].name;
+
         u8* addrLoc = &beginingOfCode[offset];
         u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
         s64 addr = 0;
@@ -317,10 +296,9 @@ Buffer genExecutable(Hashmap(String, LibName)* libs, Buffer bytecode, Buffer nam
     }
 
     // patch the data reference locations
-    for(u64 i = 0; i < dataToPatch.size/sizeof(AddrToPatch); ++i) {
-        AddrToPatch* castData = (AddrToPatch*)dataToPatch.mem;
-        u64 offset = castData[i].offset;
-        String name = castData[i].name;
+    for(u64 i = 0; i < dataToPatch.size; ++i) {
+        u64 offset = dataToPatch.data[i].offset;
+        String name = dataToPatch.data[i].name;
         
         u8* addrLoc = &beginingOfCode[offset];
         u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;

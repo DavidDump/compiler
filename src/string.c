@@ -148,26 +148,6 @@ s64 StringLastIndexOf(String str, u8 c) {
     return -1;
 }
 
-Buffer StringChainToBuffer(StringChain chain) {
-    StringNode* current = chain.first;
-    u64 size = 0;
-    while(current != NULL) {
-        size += current->str.length;
-        current = current->next;
-    }
-    Buffer result = make_buffer(size, PAGE_READWRITE);
-
-    current = chain.first;
-    while(current != NULL) {
-        String str = current->str;
-        u8* buf = buffer_allocate_size(&result, str.length);
-        memcpy(buf, str.str, str.length);
-        current = current->next;
-    }
-
-    return result;
-}
-
 u64 StringHash(String str) {
     return djb2(DJB2_INIT, str.str, str.length);
 }
