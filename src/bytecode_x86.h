@@ -55,14 +55,19 @@ typedef struct GenContext {
     Array(AddrToPatch) dataToPatch;      // data defined in the .data section
 
     // u32 freeRegisterMask;
-    s64 stackPointer;     // keeping track of the stack pointer for variables
     u64 entryPointOffset; // the offset from the begining of the code buffer to the entry point
 
-    Hashmap(String, s64) variables; // value is the stack offset to the variable
     Hashmap(String, s64) functions; // value is the offset to the begining of the function from the begining of the code buffer
     Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
     Hashmap(String, s64) constants; // value is the value of a constant that should be hardcoded
 } GenContext;
+
+typedef struct GenScope {
+    struct GenScope* parent;
+    Hashmap(String, s64) localVars; // key: name of variable, value: position on the stack in the stackframe
+    u64 stackPointer;
+    bool isMainScope; // indicates if the return instruction should generate a regular return or a ExitProcess()
+} GenScope;
 
 typedef enum OperandType {
     OPERAND_NONE,
@@ -152,7 +157,10 @@ typedef struct Instruction {
 
 defArray(u64);
 
-void gen_x86_64_expression(GenContext* ctx, ASTNode* expr);
+void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope);
+void genGenericScope(GenContext* ctx, Scope* scope, GenScope* parentScope);
+void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope);
+void gen_x86_64_expression(GenContext* ctx, ASTNode* expr, GenScope* localScope);
 GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo);
 
 #endif // COMP_BYTECODE_H
