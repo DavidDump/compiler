@@ -1,3 +1,38 @@
+#library "kernel32.dll";
+#extern ExitProcess :: (code: s64);
+
+main2 :: () -> u8 {
+    foo := 5;
+    bar := 0;
+
+    it_1 := 4;
+    loop it_1 != 0 {
+        foo = foo + 1;
+        it_2 := foo;
+        loop it_2 != 0 {
+            bar = bar + 1;
+            it_2 = it_2 - 1;
+        }
+        it_1 = it_1 - 1;
+    }
+
+    return bar;
+}
+
+main3 :: () -> u8 {
+    foo := 5;
+    bar := 0;
+
+    loop 4 {
+        foo = foo + 1;
+        loop foo {
+            bar = bar + 1;
+        }
+    }
+
+    return bar;
+}
+
 main :: (args: string[...]) -> u8 {
     foo := 5;
     

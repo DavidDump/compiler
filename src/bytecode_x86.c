@@ -870,18 +870,57 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
                 genGenericScope(ctx, elze, localScope);
             }
 
-            // do all the patches
-            for(u64 h = 0; h < patchTargets.size; ++h) {
-                u64 patchTarget = patchTargets.data[h];
-                gen_patchAddress(ctx, patchTarget, ctx->code.size);
-            }
+                // do all the patches
+                for(u64 h = 0; h < patchTargets.size; ++h) {
+                    u64 patchTarget = patchTargets.data[h];
+                    gen_patchAddress(ctx, patchTarget, ctx->code.size);
+                }
         } break;
         case ASTNodeType_LOOP: {
-            UNIMPLEMENTED("ASTNodeType_LOOP");
+            ASTNode* expr = statement->node.LOOP.expr;
+            Scope* scope = statement->node.LOOP.scope;
+            
+            if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
+                // check condition every iteration
+                u64 conditionAddress = ctx->code.size;
+                u64 patchTarget = gen_x86_64_condition(ctx, expr, localScope);
+                genGenericScope(ctx, scope, localScope);
+
+                u64 addressAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
+                genInstruction(ctx, INST(jmp, OP_IMM32(conditionAddress - addressAfterJmp)));
+                gen_patchAddress(ctx, patchTarget, ctx->code.size);
+            } else {
+                // iterate n amount of times
+
+                // declare the loop count variable
+                gen_x86_64_expression(ctx, expr, localScope);
+                s64 loopCountStackLocation = localScope->stackPointer;
+                genPush(ctx, localScope, RAX);
+
+                // condition and scope
+                u64 addrAtCmp = ctx->code.size;
+                genInstruction(ctx, INST(cmp, OP_INDIRECT_OFFSET32(RBP, -(loopCountStackLocation * 8)), OP_IMM32(0))); // TODO: not correct
+                genInstruction(ctx, INST(je, OP_IMM32(0))); // jmp after scope
+                u64 firstJmpToPatch = ctx->code.size - 4;
+                genGenericScope(ctx, scope, localScope);
+                genInstruction(ctx, INST(dec, OP_INDIRECT_OFFSET32(RBP, -(loopCountStackLocation * 8)))); // TODO: not correct
+                u64 addrAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
+                genInstruction(ctx, INST(jmp, OP_IMM32(addrAtCmp - addrAfterJmp))); // jmp to condition
+                u64 addrAfterLoop = ctx->code.size;
+                gen_patchAddress(ctx, firstJmpToPatch, addrAfterLoop);
+
+                // unallocate the loopCountIterator variable
+                genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM8(8)));
+                localScope->stackPointer--;
+
+                // NOTE: this is pretty stupid, jumping twice in unnecessary
+                //       if we know the number of iterations its more optimal to just
+                //       do the cmp and jmp after the scope and only have one jump
+            }
         } break;
 
         case ASTNodeType_COMPILER_INST: break;
-
+        
         case ASTNodeType_BINARY_EXPRESSION:
         case ASTNodeType_UNARY_EXPRESSION:
         case ASTNodeType_INT_LIT:
@@ -919,8 +958,4 @@ GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) fun
     return ctx;
 }
 
-// NOTE: this way of pushing values to the stack might be better,
-//       because the push operation changes the stack pointer:
-//       mov     DWORD PTR [rbp-4], 2
-// TODO: maybe dont hardcode all the `* 8` when reading/writing variables
 // TODO: make sure to preserve non volitile register when entering a function
