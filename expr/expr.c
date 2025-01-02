@@ -11,6 +11,8 @@ typedef struct String {
     u64 length;
 } String;
 
+#define STR(_cstr_) (String){.str = (u8*)(_cstr_), .length = sizeof(_cstr_) - 1}
+
 typedef enum TokenType {
     TokenType_NONE,
     TokenType_NUMBER,
@@ -79,14 +81,14 @@ typedef struct Function {
 typedef struct Expr {
     ExprType type;
     union {
-        Primary primary;
-        Primary variable;
-        Function function;
+        Primary primary;   // ExprType_Number
+        Primary variable;  // ExprType_Variable
+        Function function; // ExprType_Function
         struct {
             Token op;
             struct Expr* lhs;
             struct Expr* rhs;
-        } expr;
+        } expr;            // ExprType_Expr
     };
 } Expr;
 
@@ -401,6 +403,106 @@ Expr* parseExpression(ParseContext* ctx) {
 
 #include "printTree.c"
 
+#define BUFF_SIZE 1024
+#define formatf(_result_, _arena_, _format_, ...) do { \
+    char buff[BUFF_SIZE] = {0}; \
+    u64 len = snprintf(buff, BUFF_SIZE, (_format_), __VA_ARGS__); \
+    u8* stringBuffer = arena_alloc((_arena_), len * sizeof(u8)); \
+    memcpy(stringBuffer, buff, len); \
+    (_result_).str = stringBuffer; \
+    (_result_).length = len; \
+} while(0)
+
+// result should be in rax
+String exprToAsm(Arena* mem, Expr* expr) {
+    switch(expr->type) {
+        case ExprType_NONE: {
+            UNIMPLEMENTED("ExprType_NONE");
+        } break;
+        case ExprType_Number: {
+            // mov rax, number
+            Token number = expr->primary.token;
+
+            String result = {0};
+            formatf(result, mem, "mov rax, %.*s\n", number.value.length, number.value.str);
+            return result;
+        } break;
+        case ExprType_Expr: {
+            Token op = expr->expr.op;
+            Expr* lhs = expr->expr.lhs;
+            Expr* rhs = expr->expr.rhs;
+
+            String first = {0};
+            String firstPost = {0};
+            String second = {0};
+            String secondPost = {0};
+            String extra = {0};
+
+            char buff[BUFF_SIZE] = {0};
+            u64 len = 0;
+            if (op.type == TokenType_ADD) {
+                first = exprToAsm(mem, lhs);
+                firstPost = STR("push rax\n");
+                second = exprToAsm(mem, rhs);
+                secondPost = STR("pop rcx\n");
+                len = snprintf(buff, BUFF_SIZE, "add rax, rcx\n");
+            } else if (op.type == TokenType_SUB) {
+                first = exprToAsm(mem, rhs);
+                firstPost = STR("push rax\n");
+                second = exprToAsm(mem, lhs);
+                secondPost = STR("pop rcx\n");
+                len = snprintf(buff, BUFF_SIZE, "sub rax, rcx\n");
+            } else if (op.type == TokenType_MUL) {
+                first = exprToAsm(mem, lhs);
+                firstPost = STR("push rax\n");
+                second = exprToAsm(mem, rhs);
+                secondPost = STR("pop rcx\n");
+                len = snprintf(buff, BUFF_SIZE, "mul rcx\n");
+            } else if (op.type == TokenType_DIV) {
+                first = exprToAsm(mem, rhs);
+                firstPost = STR("push rax\n");
+                second = exprToAsm(mem, lhs);
+                secondPost = STR("pop rcx\n");
+                extra = STR("mov rdx, 0\n");
+                len = snprintf(buff, BUFF_SIZE, "div rcx\n");
+            }
+
+            // composing the final buffer
+            u64 totalLen = first.length + firstPost.length + second.length + secondPost.length + extra.length + len;
+            u8* stringBuffer = arena_alloc(mem, totalLen * sizeof(u8));
+            u64 at = 0;
+            memcpy(&stringBuffer[at], first.str, first.length);           at += first.length;
+            memcpy(&stringBuffer[at], firstPost.str, firstPost.length);   at += firstPost.length;
+            memcpy(&stringBuffer[at], second.str, second.length);         at += second.length;
+            memcpy(&stringBuffer[at], secondPost.str, secondPost.length); at += secondPost.length;
+            memcpy(&stringBuffer[at], extra.str, extra.length);           at += extra.length;
+            memcpy(&stringBuffer[at], buff, len);                         at += len;
+
+            return (String) {
+                .str = stringBuffer,
+                .length = totalLen,
+            };
+        } break;
+        case ExprType_Variable: {
+            // mov rax, [rbp - ...]
+            Token var = expr->variable.token;
+
+            String result = {0};
+            formatf(result, mem, "mov rax, [rbp - ...] ; %.*s\n", var.value.length, var.value.str);
+            return result;
+        } break;
+        case ExprType_Function: {
+            // call function
+            Function fn = expr->function;
+            Token id = fn.identifier;
+
+            String result = {0};
+            formatf(result, mem, "call %.*s ; (args not finished)\n", id.value.length, id.value.str);
+            return result;
+        } break;
+    }
+}
+
 int main(void) {
     u8* tests[] = {
         #if 0
@@ -447,7 +549,11 @@ int main(void) {
         };
 
         Expr* result = parseExpression(&ctx);
-        bst_print_tree(result);
+        // bst_print_tree(result);
+
+        String assembly = exprToAsm(&mem, result);
+        printf("asm:\n");
+        printf("%.*s", assembly.length, assembly.str);
 
         arena_free(&mem);
         arena_free(&ctx.mem);
