@@ -470,18 +470,10 @@ void genPop(GenContext* ctx, GenScope* scope, Register reg) {
 void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall, GenScope* localScope) {
     assert(funcCall->type == ASTNodeType_FUNCTION_CALL, "");
     String id = funcCall->node.FUNCTION_CALL.identifier;
-    Array(ASTNodePtr) args = funcCall->node.FUNCTION_CALL.args;
+    Array(ExpressionPtr) args = funcCall->node.FUNCTION_CALL.args;
 
     for(u64 i = 0; i < args.size; ++i) {
-        ASTNode* arg = args.data[i];
-        assert(
-            ASTNodeType_INT_LIT ||
-            ASTNodeType_FLOAT_LIT ||
-            ASTNodeType_SYMBOL ||
-            ASTNodeType_FUNCTION_CALL ||
-            ASTNodeType_BINARY_EXPRESSION,
-            ""
-        );
+        Expression* arg = args.data[i];
 
         gen_x86_64_expression(ctx, arg, localScope);
         if(i == 0) {
@@ -515,22 +507,22 @@ void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall, GenScope* localSco
     }
 }
 
-void gen_x86_64_expression(GenContext* ctx, ASTNode* expr, GenScope* localScope) {
-    if(expr->type == ASTNodeType_INT_LIT) {
-        String value = expr->node.INT_LIT.value;
+void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localScope) {
+    if(expr->type == ExpressionType_INT_LIT) {
+        String value = expr->expr.INT_LIT.value;
         // TODO: check if the number is signed or unsigned and parse it differently based on that
         u32 intValue = StringToU32(value);
         Instruction inst = INST(mov, OP_REG(RAX), OP_IMM32(intValue));
         genInstruction(ctx, inst);
-    } else if(expr->type == ASTNodeType_FLOAT_LIT) {
+    } else if(expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
-    } else if(expr->type == ASTNodeType_STRING_LIT) {
+    } else if(expr->type == ExpressionType_STRING_LIT) {
         // TODO: this branch is implemented in a very scuffed way,
         //       only here because i needed a quick working version
         //       potential optimization is to collect all the string literals
         //       and if two match only store one in the data section
         //       is it a problem to use the string lit as a key????
-        String lit = expr->node.STRING_LIT.value;
+        String lit = expr->expr.STRING_LIT.value;
 
         UserDataEntry value = {
             .data = &lit.str[1],
@@ -541,10 +533,10 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr, GenScope* localScope)
             UNREACHABLE("failed to insert into hashmap");
         }
         gen_DataInReg(ctx, RAX, lit);
-    } else if(expr->type == ASTNodeType_BOOL_LIT) {
+    } else if(expr->type == ExpressionType_BOOL_LIT) {
         UNIMPLEMENTED("expression generation with bools");
-    } else if(expr->type == ASTNodeType_SYMBOL) {
-        String id = expr->node.SYMBOL.identifier;
+    } else if(expr->type == ExpressionType_SYMBOL) {
+        String id = expr->expr.SYMBOL.identifier;
 
         s64 value;
         GenScope* at = localScope;
@@ -568,10 +560,10 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr, GenScope* localScope)
         }
     } else if(expr->type == ASTNodeType_FUNCTION_CALL) {
         gen_x86_64_func_call(ctx, expr, localScope);
-    } else if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
-        ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
-        String operator = expr->node.BINARY_EXPRESSION.operator;
-        ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
+    } else if(expr->type == ExpressionType_BINARY_EXPRESSION) {
+        Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
+        String operator = expr->expr.BINARY_EXPRESSION.operator;
+        Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but then again what do i know
         if(StringEqualsCstr(operator, "+")) {
@@ -611,13 +603,13 @@ void gen_x86_64_expression(GenContext* ctx, ASTNode* expr, GenScope* localScope)
 
 // return the offset, from the begining of the code buffer, to the jump instruction target address that needs to be patched
 // offset = offset + 4 + scopeLen
-u64 gen_x86_64_condition(GenContext* ctx, ASTNode* expr, GenScope* localScope) {
+u64 gen_x86_64_condition(GenContext* ctx, Expression* expr, GenScope* localScope) {
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
-    assert(expr->type == ASTNodeType_BINARY_EXPRESSION, "");
-    ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
-    ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
-    String op = expr->node.BINARY_EXPRESSION.operator;
+    assert(expr->type == ExpressionType_BINARY_EXPRESSION, "");
+    Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
+    Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
+    String op = expr->expr.BINARY_EXPRESSION.operator;
 
     gen_x86_64_expression(ctx, rhs, localScope);
     genPush(ctx, localScope, RAX);
@@ -698,7 +690,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
             String id = statement->node.FUNCTION_DEF.identifier;
             Scope* scope = statement->node.FUNCTION_DEF.scope;
             Array(FunctionArg) args = statement->node.FUNCTION_DEF.args;
-            ASTNode* retType = statement->node.FUNCTION_DEF.type;
+            TypeInfo retType = statement->node.FUNCTION_DEF.type;
             UNUSED(retType);
 
             FuncInfo value = {0};
@@ -725,7 +717,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
             // function arguments
             for(u64 i = 0; i < args.size; ++i) {
                 String argId = args.data[i].id;
-                ASTNode* argType = args.data[i].type;
+                TypeInfo argType = args.data[i].type;
                 UNUSED(argType);
 
                 if(i == 0) {
@@ -755,7 +747,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         } break;
         case ASTNodeType_VAR_DECL: {
             String id = statement->node.VAR_DECL.identifier;
-            ASTNode* type = statement->node.VAR_DECL.type;
+            TypeInfo type = statement->node.VAR_DECL.type;
             UNUSED(type);
 
             if(!HashmapSet(String, s64)(&localScope->localVars, id, localScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
@@ -764,9 +756,9 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
             localScope->stackPointer++;
         } break;
         case ASTNodeType_VAR_DECL_ASSIGN: {
-            ASTNode* exprNode = statement->node.VAR_DECL_ASSIGN.expr;
+            Expression* exprNode = statement->node.VAR_DECL_ASSIGN.expr;
             String id = statement->node.VAR_DECL_ASSIGN.identifier;
-            ASTNode* type = statement->node.VAR_DECL_ASSIGN.type;
+            TypeInfo type = statement->node.VAR_DECL_ASSIGN.type;
             UNUSED(type);
 
             gen_x86_64_expression(ctx, exprNode, localScope); // gen code for the expression, store in rax??
@@ -778,7 +770,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         } break;
         case ASTNodeType_VAR_REASSIGN: {
             String id = statement->node.VAR_REASSIGN.identifier;
-            ASTNode* exprNode = statement->node.VAR_REASSIGN.expr;
+            Expression* exprNode = statement->node.VAR_REASSIGN.expr;
 
             gen_x86_64_expression(ctx, exprNode, localScope);
 
@@ -799,7 +791,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         case ASTNodeType_VAR_CONST: {
             // TODO: this whole thing is giga fucked, will redo with typechecking
             String id = statement->node.VAR_CONST.identifier;
-            ASTNode* expr = statement->node.VAR_CONST.expr;
+            Expression* expr = statement->node.VAR_CONST.expr;
             // TODO: will need a type
             // TODO: based on type figure out if its a string or something else
             //       string goes in one hashmap and signed numbers go in another
@@ -814,7 +806,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         } break;
         case ASTNodeType_RET: {
             // NOTE: dead code elimination, currently internal stack underflows if there is more than one return in a add
-            ASTNode* expr = statement->node.RET.expr;
+            Expression* expr = statement->node.RET.expr;
 
             gen_x86_64_expression(ctx, expr, localScope);
             genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
@@ -877,10 +869,10 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
                 }
         } break;
         case ASTNodeType_LOOP: {
-            ASTNode* expr = statement->node.LOOP.expr;
+            Expression* expr = statement->node.LOOP.expr;
             Scope* scope = statement->node.LOOP.scope;
             
-            if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
+            if(expr->type == ExpressionType_BINARY_EXPRESSION) {
                 // check condition every iteration
                 u64 conditionAddress = ctx->code.size;
                 u64 patchTarget = gen_x86_64_condition(ctx, expr, localScope);
@@ -920,17 +912,6 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         } break;
 
         case ASTNodeType_COMPILER_INST: break;
-        
-        case ASTNodeType_BINARY_EXPRESSION:
-        case ASTNodeType_UNARY_EXPRESSION:
-        case ASTNodeType_INT_LIT:
-        case ASTNodeType_FLOAT_LIT:
-        case ASTNodeType_STRING_LIT:
-        case ASTNodeType_BOOL_LIT:
-        case ASTNodeType_SYMBOL:
-        case ASTNodeType_TYPE:
-            printf("[ERROR] Unhandled AST Node type: %s\n", ASTNodeTypeStr[statement->type]);
-            break;
     }
 }
 

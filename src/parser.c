@@ -334,17 +334,17 @@ bool parseScopeContainsSymbol(Scope* scope, String symbol) {
     return FALSE;
 }
 
-ASTNode* makeBinary(Arena* mem, ASTNode* left, Token op, ASTNode* right) {
-    ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_BINARY_EXPRESSION;
-    node->node.BINARY_EXPRESSION.lhs = left;
-    node->node.BINARY_EXPRESSION.rhs = right;
-    node->node.BINARY_EXPRESSION.operator = op.value;
-    return node;
+Expression* makeBinary(Arena* mem, Expression* left, Token op, Expression* right) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_BINARY_EXPRESSION;
+    result->expr.BINARY_EXPRESSION.lhs = left;
+    result->expr.BINARY_EXPRESSION.operator = op.value;
+    result->expr.BINARY_EXPRESSION.rhs = right;
+    return result;
 }
 
-ASTNode* makeNumber(ParseContext* ctx, Arena* mem, Token tok) {
-    ASTNode* result = NodeInit(mem);
+Expression* makeNumber(ParseContext* ctx, Arena* mem, Token tok) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
 
     if(tok.type == TokenType_INT_LITERAL) {
         Token next = parsePeek(ctx, 0);
@@ -360,12 +360,12 @@ ASTNode* makeNumber(ParseContext* ctx, Arena* mem, Token tok) {
                 fractPart = StringFromCstrLit("0");
             }
 
-            result->type = ASTNodeType_FLOAT_LIT;
-            result->node.FLOAT_LIT.wholePart = tok.value;
-            result->node.FLOAT_LIT.fractPart = fractPart;
+            result->type = ExpressionType_FLOAT_LIT;
+            result->expr.FLOAT_LIT.wholePart = tok.value;
+            result->expr.FLOAT_LIT.fractPart = fractPart;
         } else {
-            result->type = ASTNodeType_INT_LIT;
-            result->node.INT_LIT.value = tok.value;
+            result->type = ExpressionType_INT_LIT;
+            result->expr.INT_LIT.value = tok.value;
         }
     } else if(tok.type == TokenType_DOT) {
         Token next = parsePeek(ctx, 0); // factional part
@@ -378,20 +378,18 @@ ASTNode* makeNumber(ParseContext* ctx, Arena* mem, Token tok) {
             fractPart = StringFromCstrLit("0");
         }
 
-        result->type = ASTNodeType_FLOAT_LIT;
-        result->node.FLOAT_LIT.wholePart = StringFromCstrLit("0");
-        result->node.FLOAT_LIT.fractPart = fractPart;
+        result->type = ExpressionType_FLOAT_LIT;
+        result->expr.FLOAT_LIT.wholePart = StringFromCstrLit("0");
+        result->expr.FLOAT_LIT.fractPart = fractPart;
     }
 
     return result;
 }
 
-ASTNode* makeVariable(Arena* mem, Token identifier) {
-    ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_SYMBOL;
-    node->node.SYMBOL.identifier = identifier.value;
-    // TODO: set during typechecking phase
-    // node->node.SYMBOL.type = ;
+Expression* makeVariable(Arena* mem, Token identifier) {
+    Expression* node = arena_alloc(mem, sizeof(Expression));
+    node->type = ExpressionType_SYMBOL;
+    node->expr.SYMBOL.identifier = identifier.value;
     return node;
 }
 
@@ -408,10 +406,10 @@ ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
         return result;
     }
 
-    Array(ASTNodePtr) args = {0};
+    Array(ExpressionPtr) args = {0};
     // NOTE: this could be while(TRUE) { ... }
     while(token.type != TokenType_RPAREN) {
-        ASTNode* expr = parseExpression(ctx, mem);
+        Expression* expr = parseExpression(ctx, mem);
         ArrayAppend(args, expr);
 
         token = parseConsume(ctx);
@@ -426,17 +424,17 @@ ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
     return result;
 }
 
-ASTNode* makeString(Arena* mem, Token value) {
-    ASTNode* result = NodeInit(mem);
-    result->type = ASTNodeType_STRING_LIT;
-    result->node.STRING_LIT.value = value.value;
+Expression* makeString(Arena* mem, Token value) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_STRING_LIT;
+    result->expr.STRING_LIT.value = value.value;
     return result;
 }
 
-ASTNode* makeBool(Arena* mem, Token value) {
-    ASTNode* result = NodeInit(mem);
-    result->type = ASTNodeType_BOOL_LIT;
-    result->node.BOOL_LIT.value = value.value;
+Expression* makeBool(Arena* mem, Token value) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_BOOL_LIT;
+    result->expr.BOOL_LIT.value = value.value;
     return result;
 }
 
@@ -457,15 +455,15 @@ bool isUnaryOperator(Token next) {
 }
 
 // NOTE: untested
-ASTNode* makeUnary(ParseContext* ctx, Arena* mem, Token next) {
-    ASTNode* result = NodeInit(mem);
-    result->type = ASTNodeType_UNARY_EXPRESSION;
-    result->node.UNARY_EXPRESSION.operator = next.value;
-    result->node.UNARY_EXPRESSION.expr = parseLeaf(ctx, mem);
+Expression* makeUnary(ParseContext* ctx, Arena* mem, Token next) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_UNARY_EXPRESSION;
+    result->expr.UNARY_EXPRESSION.operator = next.value;
+    result->expr.UNARY_EXPRESSION.expr = parseLeaf(ctx, mem);
     return result;
 }
 
-ASTNode* parseLeaf(ParseContext* ctx, Arena* mem) {
+Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
     
     if(isFunction(ctx, next))               return makeFunction(ctx, mem, next);
@@ -517,7 +515,7 @@ s64 getPresedence(Token token) {
     return 0;
 }
 
-ASTNode* parseIncreasingPresedence(ParseContext* ctx, Arena* mem, ASTNode* left, s64 minPrec) {
+Expression* parseIncreasingPresedence(ParseContext* ctx, Arena* mem, ASTNode* left, s64 minPrec) {
     Token next = parsePeek(ctx, 0);
     if(!isOperator(next)) return left;
 
@@ -526,23 +524,23 @@ ASTNode* parseIncreasingPresedence(ParseContext* ctx, Arena* mem, ASTNode* left,
         return left;
     } else {
         parseConsume(ctx);
-        ASTNode* right = parseDecreasingPresedence(ctx, mem, nextPrec);
+        Expression* right = parseDecreasingPresedence(ctx, mem, nextPrec);
         return makeBinary(mem, left, next, right);
     }
 }
 
-ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec) {
-    ASTNode* left = parseLeaf(ctx, mem);
+Expression* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec) {
+    Expression* left = parseLeaf(ctx, mem);
     
     while(TRUE) {
-        ASTNode* node = parseIncreasingPresedence(ctx, mem, left, minPrec);
+        Expression* node = parseIncreasingPresedence(ctx, mem, left, minPrec);
         if(node == left) break;
         left = node;
     }
     return left;
 }
 
-ASTNode* parseExpression(ParseContext* ctx, Arena* mem) {
+Expression* parseExpression(ParseContext* ctx, Arena* mem) {
     return parseDecreasingPresedence(ctx, mem, 0);
 }
 
@@ -563,17 +561,18 @@ Scope* parseScopeInit(Arena* mem, Scope* parent){
     return result;
 }
 
-ASTNode* typeVoid(Arena* mem){
-    ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_TYPE;
-    node->node.TYPE.type = TYPE_VOID;
-    node->node.TYPE.isArray = FALSE;
-    node->node.TYPE.isDynamic = FALSE;
-    node->node.TYPE.arraySize = 0;
-    return node;
+TypeInfo typeVoid(Arena* mem) {
+    TypeInfo result = {0};
+    result.symbolType = TYPE_VOID;
+    result.isPointer = FALSE;
+    result.isArray = FALSE;
+    result.isDynamic = FALSE;
+    result.arraySize = 0;
+    result.functionInfo = (FunctionInfo){0};
+    return result;
 }
 
-ASTNode* parseType(ParseContext* ctx, Arena* mem) {
+TypeInfo parseType(ParseContext* ctx, Arena* mem) {
     Token tok = parseConsume(ctx);
     if(tok.type != TokenType_TYPE) {
         ERROR(tok.loc, "Variable declaration needs a valid type");
@@ -608,36 +607,34 @@ ASTNode* parseType(ParseContext* ctx, Arena* mem) {
     } else if(StringEqualsCstr(tok.value, "void")) {
         type = TYPE_VOID;
     } else {
-        ERROR(tok.loc, "Unknown type");
-        // TODO: make this error print better
+        ERROR_VA(tok.loc, "Unknown type: "STR_FMT, STR_PRINT(tok.value));
     }
-    ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_TYPE;
-    node->node.TYPE.type = type;
-    node->node.TYPE.isArray = FALSE;
-    node->node.TYPE.isDynamic = FALSE;
-    node->node.TYPE.isPointer = FALSE;
-    node->node.TYPE.arraySize = 0;
+    TypeInfo result = {0};
+    result.symbolType = type;
+    result.isArray = FALSE;
+    result.isDynamic = FALSE;
+    result.isPointer = FALSE;
+    result.arraySize = 0;
 
     Token next = parsePeek(ctx, 0);
     if(next.type == TokenType_MUL) {
         parseConsume(ctx); // *
-        node->node.TYPE.isPointer = TRUE;
+        result.isPointer = TRUE;
     }
 
     tok = parsePeek(ctx, 0);
     if(tok.type != TokenType_LBRACKET) {
-        return node;
+        return result;
     }
     parseConsume(ctx); // '['
-    node->node.TYPE.isArray = TRUE;
+    result.isArray = TRUE;
 
     tok = parseConsume(ctx);
     if(tok.type == TokenType_TRIPLEDOT) {
-        node->node.TYPE.isDynamic = TRUE;
+        result.isDynamic = TRUE;
     }else if(tok.type == TokenType_INT_LITERAL) {
         u64 size = StringToU64(tok.value);
-        node->node.TYPE.arraySize = size;
+        result.arraySize = size;
     }else{
         ERROR(tok.loc, "Array needs a fixed size or '...' for dynamic size");
     }
@@ -647,7 +644,7 @@ ASTNode* parseType(ParseContext* ctx, Arena* mem) {
         ERROR(tok.loc, "Expected closing pair to square bracket ']'");
     }
 
-    return node;
+    return result;
 }
 
 // the ctx needs to point at '('
@@ -719,51 +716,24 @@ ASTNode* parseFunctionDecl(ParseContext* ctx, Arena* mem, Scope* currentScope, T
     return node;
 }
 
-#if 0
-typedef struct ExrpressionTypeResult {
-    Type type;
-    bool isNegative;
-} ExrpressionTypeResult;
-
-ExrpressionTypeResult parseGetTypeOfExpression(ParseContext* ctx, ASTNode* expr) {
-    if(expr->type == ASTNodeType_INT_LIT) {
-        // ...
-    } else if(expr->type == ASTNodeType_FLOAT_LIT) {
-        // ...
-    } else if(expr->type == ASTNodeType_STRING_LIT) {
-        // ...
-    } else if(expr->type == ASTNodeType_BOOL_LIT) {
-        // ...
-    } else if(expr->type == ASTNodeType_SYMBOL) {
-        // ...
-    } else if(expr->type == ASTNodeType_FUNCTION_CALL) {
-        // ...
-    } else if(expr->type == ASTNodeType_BINARY_EXPRESSION) {
-        // ...
-    } else {
-        UNREACHABLE("called parseGetTypeOfExpression() on not an expression");
-    }
-}
-#endif
-
-ExpressionEvaluationResult evaluate_expression(ASTNode* expr) {
+ExpressionEvaluationResult evaluate_expression(Expression* expr) {
     ExpressionEvaluationResult result = {0};
 
-    if (expr->type == ASTNodeType_INT_LIT) {
-        String value = expr->node.INT_LIT.value;
+    if (expr->type == ExpressionType_INT_LIT) {
+        String value = expr->expr.INT_LIT.value;
         result.result = StringToU64(value);
-    } else if (expr->type == ASTNodeType_FLOAT_LIT) {
+    } else if (expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("float in const");
-    } else if (expr->type == ASTNodeType_BOOL_LIT) {
+    } else if (expr->type == ExpressionType_BOOL_LIT) {
         UNIMPLEMENTED("bool in const");
-    } else if (expr->type == ASTNodeType_STRING_LIT) {
+    } else if (expr->type == ExpressionType_STRING_LIT) {
         UNIMPLEMENTED("string in const");
     } else if (expr->type == ASTNodeType_FUNCTION_CALL) {
         UNIMPLEMENTED("function call in const");
-    } else if (expr->type == ASTNodeType_BINARY_EXPRESSION) {
-        String op = expr->node.BINARY_EXPRESSION.operator;
-        ASTNode* lhs = expr->node.BINARY_EXPRESSION.lhs;
-        ASTNode* rhs = expr->node.BINARY_EXPRESSION.rhs;
+    } else if (expr->type == ExpressionType_BINARY_EXPRESSION) {
+        String op = expr->expr.BINARY_EXPRESSION.operator;
+        ASTNode* lhs = expr->expr.BINARY_EXPRESSION.lhs;
+        ASTNode* rhs = expr->expr.BINARY_EXPRESSION.rhs;
         if(StringEqualsCstr(op, "+")) {
             ExpressionEvaluationResult lhsResult = evaluate_expression(lhs);
             ExpressionEvaluationResult rhsResult = evaluate_expression(rhs);
@@ -785,9 +755,9 @@ ExpressionEvaluationResult evaluate_expression(ASTNode* expr) {
             // TODO: check if there is no overflow
             result.result = lhsResult.result / rhsResult.result;
         }
-    } else if (expr->type == ASTNodeType_UNARY_EXPRESSION) {
-        String op = expr->node.UNARY_EXPRESSION.operator;
-        ASTNode* subExpr = expr->node.UNARY_EXPRESSION.expr;
+    } else if (expr->type == ExpressionType_UNARY_EXPRESSION) {
+        String op = expr->expr.UNARY_EXPRESSION.operator;
+        ASTNode* subExpr = expr->expr.UNARY_EXPRESSION.expr;
         if(StringEqualsCstr(op, "-")) {
             result = evaluate_expression(subExpr);
             result.isNegative = !result.isNegative;
@@ -1005,7 +975,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
                 String identifier = t.value;
-                ASTNode* type = parseType(ctx, mem);
+                TypeInfo type = parseType(ctx, mem);
 
                 next = parsePeek(ctx, 0);
                 if(next.type == TokenType_ASSIGNMENT) {

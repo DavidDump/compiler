@@ -160,7 +160,7 @@ defArray(u64);
 void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope);
 void genGenericScope(GenContext* ctx, Scope* scope, GenScope* parentScope);
 void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope);
-void gen_x86_64_expression(GenContext* ctx, ASTNode* expr, GenScope* localScope);
+void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localScope);
 GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo);
 
 #endif // COMP_BYTECODE_H

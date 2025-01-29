@@ -7,6 +7,53 @@
 #include "lexer.h"
 #include "dataStructuresDefs.h"
 
+typedef enum ExpressionType {
+    ExpressionType_BINARY_EXPRESSION,
+    ExpressionType_UNARY_EXPRESSION,
+    ExpressionType_INT_LIT,
+    ExpressionType_FLOAT_LIT,
+    ExpressionType_STRING_LIT,
+    ExpressionType_BOOL_LIT,
+    ExpressionType_SYMBOL,
+    // TODO: once finished with current refactor
+    // ExpressionType_FUNCTION_LIT,
+} ExpressionType;
+
+typedef struct Expression {
+    ExpressionType type;
+    union Expr {
+        struct BINARY_EXPRESSION {
+            String operator;
+            struct Expression* rhs;
+            struct Expression* lhs;
+        } BINARY_EXPRESSION;
+        struct UNARY_EXPRESSION {
+            String operator;
+            struct Expression* expr;
+        } UNARY_EXPRESSION;
+        struct INT_LIT {
+            String value;
+        } INT_LIT;
+        struct FLOAT_LIT {
+            String wholePart;
+            String fractPart;
+        } FLOAT_LIT;
+        struct STRING_LIT {
+            String value;
+        } STRING_LIT;
+        struct BOOL_LIT {
+            String value;
+        } BOOL_LIT;
+        struct SYMBOL {
+            String identifier;
+            TypeInfo* type;
+        } SYMBOL;
+    } expr;
+} Expression;
+
+typedef Expression* ExpressionPtr;
+defArray(ExpressionPtr);
+
 typedef enum ASTNodeType {
     ASTNodeType_NONE,
     
@@ -19,14 +66,6 @@ typedef enum ASTNodeType {
     ASTNodeType_RET,
     ASTNodeType_IF,
     ASTNodeType_LOOP,
-    ASTNodeType_BINARY_EXPRESSION,
-    ASTNodeType_UNARY_EXPRESSION,
-    ASTNodeType_INT_LIT,
-    ASTNodeType_FLOAT_LIT,
-    ASTNodeType_STRING_LIT,
-    ASTNodeType_BOOL_LIT,
-    ASTNodeType_SYMBOL,
-    ASTNodeType_TYPE,
     ASTNodeType_COMPILER_INST,
     
     ASTNodeType_COUNT,
@@ -45,14 +84,6 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_RET]               = "RET",
     [ASTNodeType_IF]                = "IF",
     [ASTNodeType_LOOP]              = "LOOP",
-    [ASTNodeType_BINARY_EXPRESSION] = "BINARY_EXPRESSION",
-    [ASTNodeType_UNARY_EXPRESSION]  = "UNARY_EXPRESSION",
-    [ASTNodeType_INT_LIT]           = "INT_LIT",
-    [ASTNodeType_FLOAT_LIT]         = "FLOAT_LIT,",
-    [ASTNodeType_STRING_LIT]        = "STRING_LIT",
-    [ASTNodeType_BOOL_LIT]          = "BOOL_LIT",
-    [ASTNodeType_SYMBOL]            = "SYMBOL",
-    [ASTNodeType_TYPE]              = "TYPE",
     [ASTNodeType_COMPILER_INST]     = "COMPILER_INST",
 
     [ASTNodeType_COUNT]             = "COUNT",
@@ -68,8 +99,8 @@ defArray(String);
 // used when defining arguments during function declaration
 typedef struct FunctionArg {
     String id;
-    ASTNode* type; // TODO: needs to be a type, types will be their own struct eventually
-    ASTNode* initialValue; // the expression this argument should be initialized with
+    TypeInfo type;
+    Expression initialValue; // the expression this argument should be initialized with
 } FunctionArg;
 
 defArray(FunctionArg);
@@ -108,7 +139,7 @@ typedef struct CompilerInstruction {
 } CompilerInstruction;
 
 typedef struct ConditionalBlock {
-    ASTNode* expr;
+    Expression* expr;
     Scope* scope;
 } ConditionalBlock;
 
@@ -119,83 +150,44 @@ typedef struct ASTNode {
     union Node {
         struct FUNCTION_DEF {
             String identifier;
-            ASTNode* type;
+            TypeInfo type;
             Array(FunctionArg) args;
             Scope* scope;
             bool isExtern;
         } FUNCTION_DEF;
         struct FUNCTION_CALL {
             String identifier;
-            Array(ASTNodePtr) args; // binary expressions should be their own struct
+            Array(ExpressionPtr) args;
         } FUNCTION_CALL;
         struct VAR_DECL {
             String identifier;
-            ASTNode* type;
+            TypeInfo type;
         } VAR_DECL;
         struct VAR_DECL_ASSIGN {
             String identifier;
-            ASTNode* type;
-            ASTNode* expr;
+            TypeInfo type;
+            Expression* expr;
         } VAR_DECL_ASSIGN;
         struct VAR_REASSIGN {
             String identifier;
-            ASTNode* expr;
+            Expression* expr;
         } VAR_REASSIGN;
         struct VAR_CONST {
             String identifier;
-            ASTNode* expr;
+            Expression* expr;
         } VAR_CONST;
         struct RET {
-            ASTNode* expr;
+            Expression* expr;
         } RET;
-        struct BINARY_EXPRESSION {
-            String operator;
-            ASTNode* rhs;
-            ASTNode* lhs;
-        } BINARY_EXPRESSION;
-        struct UNARY_EXPRESSION {
-            String operator;
-            ASTNode* expr;
-        } UNARY_EXPRESSION;
-        struct INT_LIT {
-            String value;
-        } INT_LIT;
-        struct FLOAT_LIT {
-            String wholePart;
-            String fractPart;
-        } FLOAT_LIT;
-        struct STRING_LIT {
-            String value;
-        } STRING_LIT;
-        struct BOOL_LIT {
-            String value;
-        } BOOL_LIT;
         struct IF {
             Array(ConditionalBlock) blocks;
             bool hasElse;
             Scope* elze;
         } IF;
         struct LOOP {
-            ASTNode* expr;
+            Expression* expr;
             Scope* scope;
         } LOOP;
-        struct SYMBOL {
-            String identifier;
-            ASTNode* type;
-        } SYMBOL;
-        struct TYPE {
-            Type type;
-
-            // NOTE: these maybe required later but for not all the information required about the type is in `Type type`
-            //       info about the signedness or the size in case of structs or enums can be queried for,
-            //       using functions like `typeSize()` or `typeBehaviour()`
-            // u64 size;       // size on the stack in bytes
-            // bool isSigned;  // signed or unsigned
-            bool isArray;   // single value or array of values
-            bool isDynamic; // dynamic or static array
-            bool isPointer; // pointer to a type of value specified by this node
-            u64 arraySize;  // size of static array
-        } TYPE;
         struct COMPILER_INST {
             CompilerInstruction* inst;
         } COMPILER_INST;
@@ -226,11 +218,11 @@ typedef struct ParseResult {
     Hashmap(String, FuncInfo) funcInfo;
 } ParseResult;
 
-ASTNode* parseExpression(ParseContext* ctx, Arena* mem);
-ASTNode* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
-ASTNode* parseLeaf(ParseContext* ctx, Arena* mem);
+Expression* parseExpression(ParseContext* ctx, Arena* mem);
+Expression* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
+Expression* parseLeaf(ParseContext* ctx, Arena* mem);
 ParseResult Parse(Array(Token) tokens, Arena* mem);
-ExpressionEvaluationResult evaluate_expression(ASTNode* expr);
+ExpressionEvaluationResult evaluate_expression(Expression* expr);
 ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent);
 
 #if COMP_DEBUG
