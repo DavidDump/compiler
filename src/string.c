@@ -135,6 +135,27 @@ u32 StringToU32(String value) {
     return result;
 }
 
+s64 StringToS64(String value) {
+    s64 result = 0;
+
+    u64 i = 0;
+    bool isNegative = FALSE;
+    if(value.str[0] == '-') isNegative = TRUE, i++;
+
+    for(; i < value.length; ++i) {
+        u8 c = value.str[i];
+        assert('0' <= c && c <= '9', "can only convert numbers");
+        // if(result > UINT32_MAX / 10); // overflow
+        result *= 10;
+        // if(result > UINT32_MAX - (c - '0')); // overflow
+        result += c - '0';
+    }
+
+    if(isNegative) result = -result;
+
+    return result;
+}
+
 bool StringEndsWith(String str, String end) {
     if(str.length < end.length) return FALSE;
     if(StringEquals((String){.str = str.str + (str.length - end.length), .length = end.length}, end)) return TRUE;
