@@ -11,13 +11,6 @@ ASTNode* NodeInit(Arena* mem){
     return node;
 }
 
-CompilerInstruction* CompInstInit(Arena* mem) {
-    CompilerInstruction* result = arena_alloc(mem, sizeof(CompilerInstruction));
-    assert(result, "Failed to allocate CompilerInstruction");
-    result->type = CompilerInstructionType_NONE; // NOTE: might not be necessary
-    return result;
-}
-
 #ifdef COMP_DEBUG
 #define genPrintHelper(...) do{for(u64 h = 0; h < indent; ++h) printf("    "); printf(__VA_ARGS__);}while(0)
 void ASTPrintCompInst(CompilerInstruction* inst, u64 indent) {
@@ -338,7 +331,7 @@ Expression* makeBinary(Arena* mem, Expression* left, Token op, Expression* right
     Expression* result = arena_alloc(mem, sizeof(Expression));
     result->type = ExpressionType_BINARY_EXPRESSION;
     result->expr.BINARY_EXPRESSION.lhs = left;
-    result->expr.BINARY_EXPRESSION.operator = op.value;
+    result->expr.BINARY_EXPRESSION.operator = op;
     result->expr.BINARY_EXPRESSION.rhs = right;
     return result;
 }
@@ -393,12 +386,12 @@ Expression* makeVariable(Arena* mem, Token identifier) {
     return node;
 }
 
-ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
+Expression* makeFunctionCall(ParseContext* ctx, Arena* mem, Token next) {
     parseConsume(ctx); // opening parenthesis (
 
-    ASTNode* result = NodeInit(mem);
-    result->type = ASTNodeType_FUNCTION_CALL;
-    result->node.FUNCTION_CALL.identifier = next.value;
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_FUNCTION_CALL;
+    result->expr.FUNCTION_CALL.identifier = next.value;
 
     Token token = parsePeek(ctx, 0);
     if(token.type == TokenType_RPAREN) {
@@ -419,7 +412,7 @@ ASTNode* makeFunction(ParseContext* ctx, Arena* mem, Token next) {
             exit(EXIT_FAILURE);
         }
     }
-    result->node.FUNCTION_CALL.args = args;
+    result->expr.FUNCTION_CALL.args = args;
 
     return result;
 }
@@ -438,7 +431,7 @@ Expression* makeBool(Arena* mem, Token value) {
     return result;
 }
 
-bool isFunction(ParseContext* ctx, Token next) {
+bool isFunctionCall(ParseContext* ctx, Token next) {
     if(next.type != TokenType_IDENTIFIER) return FALSE;
     Token token = parsePeek(ctx, 0);
     if(token.type != TokenType_LPAREN) return FALSE;
@@ -458,17 +451,102 @@ bool isUnaryOperator(Token next) {
 Expression* makeUnary(ParseContext* ctx, Arena* mem, Token next) {
     Expression* result = arena_alloc(mem, sizeof(Expression));
     result->type = ExpressionType_UNARY_EXPRESSION;
-    result->expr.UNARY_EXPRESSION.operator = next.value;
+    result->expr.UNARY_EXPRESSION.operator = next;
     result->expr.UNARY_EXPRESSION.expr = parseLeaf(ctx, mem);
     return result;
+}
+
+// ctx points to token after '('
+Array(FunctionArg) functionArgs(ParseContext* ctx, Scope* scope) {
+    Array(FunctionArg) result = {0};
+
+    Token next = parseConsume(ctx);
+    while(next.type != TokenType_RPAREN) {
+        if(next.type != TokenType_IDENTIFIER) {
+            ERROR(next.loc, "Function argument needs an identifier");
+        }
+        ArrayAppend(scope->symbols, next.value);
+
+        Token id = next;
+        next = parseConsume(ctx);
+        if(next.type != TokenType_COLON) {
+            ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
+        }
+
+        FunctionArg arg = {0};
+        arg.id = id.value;
+        arg.type = parseType(ctx, &scope->mem);
+        // arg.initialValue = ; // TODO: currently we dont support value initializer parsing
+        ArrayAppend(result, arg);
+
+        next = parseConsume(ctx);
+        if(next.type == TokenType_COMMA) {
+            continue;
+        } else if(next.type == TokenType_RPAREN) {
+            break;
+        } else {
+            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
+        }
+    }
+
+    return result;
+}
+
+Expression* makeFunctionLit(ParseContext* ctx, Arena* mem, bool isExtern) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_FUNCTION_LIT;
+
+    Scope* functionScope = parseScopeInit(mem, NULL); // TODO: fix parent scope
+    result->expr.FUNCTION_LIT.scope = functionScope;
+    result->expr.FUNCTION_LIT.isExtern = isExtern;
+    result->expr.FUNCTION_LIT.args = functionArgs(ctx, functionScope);
+
+    // ret type
+    Token next = parsePeek(ctx, 0);
+    if(next.type == TokenType_RARROW) {
+        parseConsume(ctx); // ->
+        result->expr.FUNCTION_LIT.returnType = parseType(ctx, mem);
+    } else {
+        result->expr.FUNCTION_LIT.returnType = typeVoid(mem);
+    }
+
+    return result;
+}
+
+// these are the compiler instructions that can prefix literals
+Expression* makeCompInstructionLeaf(ParseContext* ctx, Arena* mem) {
+    Token next = parseConsume(ctx);
+    if(StringEqualsCstr(next.value, "extern")) {
+        next = parseConsume(ctx);
+        if(next.type != TokenType_LPAREN) {
+            ERROR(next.loc, "#extern needs to be followed by a function signature.");
+        }
+
+        Expression* result =  makeFunctionLit(ctx, mem, TRUE);
+
+        LibName lib = {0};
+        if(!HashmapGet(String, LibName)(&ctx->importLibraries, ctx->currentImportLibraryName, &lib)) {
+            UNREACHABLE("library not found, make sure to use #library \"libname\" in the code");
+        }
+        FuncName funcName = {0};
+        if(!HashmapSet(String, FuncName)(lib.functions, ctx->currentSymbolName, funcName)) {
+            UNREACHABLE("failed to insert imported func name");
+        }
+
+        return result;
+    } else {
+        ERROR_VA(next.loc, "Unknown compiler instruction: "STR_FMT, STR_PRINT(next.value));
+    }
 }
 
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
     
-    if(isFunction(ctx, next))               return makeFunction(ctx, mem, next);
+    if(isFunctionLit(ctx, next))            return makeFunctionLit(ctx, mem, FALSE);
+    if(isFunctionCall(ctx, next))           return makeFunctionCall(ctx, mem, next);
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
+    if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);
@@ -476,15 +554,12 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
         ASTNode* result = parseExpression(ctx, mem);
         Token token = parseConsume(ctx);
         if(token.type != TokenType_RPAREN) {
-            printf("[ERROR] "STR_FMT":%i:%i Expected closing paranthesis, got: %s\n", STR_PRINT(token.loc.filename), token.loc.line, token.loc.collum, TokenTypeStr[token.type]);
-            exit(EXIT_FAILURE);
+            ERROR_VA(token.loc, "Expected closing paranthesis, got: %s", TokenTypeStr[token.type]);
         }
         return result;
     }
 
-    Location loc = next.loc;
-    printf("[ERROR] Unhandled input: "STR_FMT":%i:%i "STR_FMT"\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, STR_PRINT(next.value));
-    exit(EXIT_FAILURE);
+    ERROR_VA(next.loc, "Unhandled input: "STR_FMT, STR_PRINT(next.value));
 }
 
 // TODO: move somewhere more sane
@@ -555,27 +630,19 @@ bool parseCheckSemicolon(ParseContext* ctx){
 Scope* parseScopeInit(Arena* mem, Scope* parent){
     Scope* result = arena_alloc(mem, sizeof(Scope));
     result->parent = parent;
+    HashmapInit(result->constants, 0x100); // TODO: a more sane default size
 
     if(parent) ArrayAppend(parent->children, result);
 
     return result;
 }
 
-TypeInfo typeVoid(Arena* mem) {
-    TypeInfo result = {0};
-    result.symbolType = TYPE_VOID;
-    result.isPointer = FALSE;
-    result.isArray = FALSE;
-    result.isDynamic = FALSE;
-    result.arraySize = 0;
-    result.functionInfo = (FunctionInfo){0};
-    return result;
-}
+TypeInfo* parseType(ParseContext* ctx, Arena* mem) {
+    TypeInfo* result = arena_alloc(mem, sizeof(TypeInfo));
 
-TypeInfo parseType(ParseContext* ctx, Arena* mem) {
     Token tok = parseConsume(ctx);
     if(tok.type != TokenType_TYPE) {
-        ERROR(tok.loc, "Variable declaration needs a valid type");
+        ERROR_VA(tok.loc, "Invalid type: "STR_FMT, STR_PRINT(tok.value));
     }
 
     // TODO: this could be a hashmap with key `String` value `Type` and just look up the type there
@@ -609,32 +676,29 @@ TypeInfo parseType(ParseContext* ctx, Arena* mem) {
     } else {
         ERROR_VA(tok.loc, "Unknown type: "STR_FMT, STR_PRINT(tok.value));
     }
-    TypeInfo result = {0};
-    result.symbolType = type;
-    result.isArray = FALSE;
-    result.isDynamic = FALSE;
-    result.isPointer = FALSE;
-    result.arraySize = 0;
 
+    bool isPointer = FALSE;
     Token next = parsePeek(ctx, 0);
     if(next.type == TokenType_MUL) {
         parseConsume(ctx); // *
-        result.isPointer = TRUE;
+        isPointer = TRUE;
     }
 
     tok = parsePeek(ctx, 0);
     if(tok.type != TokenType_LBRACKET) {
+        result->symbolType = type;
+        result->isPointer = isPointer;
         return result;
     }
     parseConsume(ctx); // '['
-    result.isArray = TRUE;
 
+    ArrayInfo arrayInfo = {0};
     tok = parseConsume(ctx);
     if(tok.type == TokenType_TRIPLEDOT) {
-        result.isDynamic = TRUE;
+        arrayInfo.isDynamic = TRUE;
     }else if(tok.type == TokenType_INT_LITERAL) {
         u64 size = StringToU64(tok.value);
-        result.arraySize = size;
+        arrayInfo.arraySize = size;
     }else{
         ERROR(tok.loc, "Array needs a fixed size or '...' for dynamic size");
     }
@@ -644,78 +708,13 @@ TypeInfo parseType(ParseContext* ctx, Arena* mem) {
         ERROR(tok.loc, "Expected closing pair to square bracket ']'");
     }
 
+    result->symbolType = TYPE_ARRAY;
+    result->arrayInfo = arrayInfo;
+    result->isPointer = isPointer;
     return result;
 }
 
-// the ctx needs to point at '('
-Array(FunctionArg) parseFunctionDeclArgs(ParseContext* ctx, Scope* scope) {
-    Array(FunctionArg) result = {0};
-    
-    Token next = parseConsume(ctx);
-    if(next.type != TokenType_LPAREN) {
-        ERROR(next.loc, "Function arguments need to be inside parenthesis");
-        exit(EXIT_FAILURE);
-    }
-
-    for(u64 i = ctx->index; i < ctx->tokens.size; i++) {
-        next = parseConsume(ctx);
-        if(next.type == TokenType_RPAREN) break;
-        if(next.type != TokenType_IDENTIFIER) {
-            ERROR(next.loc, "Function argument needs an identifier");
-        }
-
-        ArrayAppend(scope->symbols, next.value);
-        Token id = next;
-
-        next = parseConsume(ctx);
-        if(next.type != TokenType_COLON){
-            ERROR(next.loc, "Identifier name and type have to be separated a colon \":\"");
-        }
-
-        FunctionArg arg = {0};
-        arg.id = id.value;
-        arg.type = parseType(ctx, &scope->mem); // TODO: this function requiring an arena will eventually get removed
-        // arg.initialValue = ; // TODO: currently we dont support value initializer parsing
-        ArrayAppend(result, arg);
-
-        next = parseConsume(ctx);
-        if(next.type == TokenType_COMMA) {
-            continue;
-        } else if(next.type == TokenType_RPAREN) {
-            break;
-        } else {
-            ERROR(next.loc, "Function declaration needs to end with a closing parenthesis \")\"");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    return result;
-}
-
-// ctx needs to point to the opening parenthesis of the function decl
-ASTNode* parseFunctionDecl(ParseContext* ctx, Arena* mem, Scope* currentScope, Token identifier) {
-    ASTNode* node = NodeInit(mem);
-    node->type = ASTNodeType_FUNCTION_DEF;
-    node->node.FUNCTION_DEF.identifier = identifier.value;
-    node->node.FUNCTION_DEF.isExtern = FALSE;
-
-    // args
-    Scope* functionScope = parseScopeInit(mem, currentScope); // TODO: dont init the scope here
-    node->node.FUNCTION_DEF.args = parseFunctionDeclArgs(ctx, functionScope);
-    node->node.FUNCTION_DEF.scope = functionScope;
-
-    // ret type
-    Token next = parsePeek(ctx, 0);
-    if(next.type == TokenType_RARROW) {
-        parseConsume(ctx); // ->
-        node->node.FUNCTION_DEF.type = parseType(ctx, mem);
-    } else {
-        node->node.FUNCTION_DEF.type = typeVoid(mem);
-    }
-
-    return node;
-}
-
+// TODO: not staying
 ExpressionEvaluationResult evaluate_expression(Expression* expr) {
     ExpressionEvaluationResult result = {0};
 
@@ -728,10 +727,10 @@ ExpressionEvaluationResult evaluate_expression(Expression* expr) {
         UNIMPLEMENTED("bool in const");
     } else if (expr->type == ExpressionType_STRING_LIT) {
         UNIMPLEMENTED("string in const");
-    } else if (expr->type == ASTNodeType_FUNCTION_CALL) {
+    } else if (expr->type == ExpressionType_FUNCTION_CALL) {
         UNIMPLEMENTED("function call in const");
     } else if (expr->type == ExpressionType_BINARY_EXPRESSION) {
-        String op = expr->expr.BINARY_EXPRESSION.operator;
+        String op = expr->expr.BINARY_EXPRESSION.operator.value;
         ASTNode* lhs = expr->expr.BINARY_EXPRESSION.lhs;
         ASTNode* rhs = expr->expr.BINARY_EXPRESSION.rhs;
         if(StringEqualsCstr(op, "+")) {
@@ -756,7 +755,7 @@ ExpressionEvaluationResult evaluate_expression(Expression* expr) {
             result.result = lhsResult.result / rhsResult.result;
         }
     } else if (expr->type == ExpressionType_UNARY_EXPRESSION) {
-        String op = expr->expr.UNARY_EXPRESSION.operator;
+        String op = expr->expr.UNARY_EXPRESSION.operator.value;
         ASTNode* subExpr = expr->expr.UNARY_EXPRESSION.expr;
         if(StringEqualsCstr(op, "-")) {
             result = evaluate_expression(subExpr);
@@ -782,7 +781,15 @@ Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     Token next = parsePeek(ctx, 0);
     if(next.type != TokenType_LSCOPE) {
         ASTNode* statement = parseStatement(ctx, mem, parent);
-        ArrayAppend(result->statements, statement);
+        if(statement->type == ASTNodeType_VAR_CONST) {
+            String id = statement->node.VAR_CONST.identifier;
+            Expression* expr = statement->node.VAR_CONST.expr;
+            if(!HashmapSet(String, ExpressionPtr)(&result->constants, id, expr)) {
+                UNREACHABLE("Failed to insert into hashmap");
+            }
+        } else {
+            ArrayAppend(result->statements, statement);
+        }
         return result;
     }
 
@@ -790,7 +797,15 @@ Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     parseConsume(ctx); // {
     while(next.type != TokenType_RSCOPE) {
         ASTNode* statement = parseStatement(ctx, mem, parent);
-        ArrayAppend(result->statements, statement);
+        if(statement->type == ASTNodeType_VAR_CONST) {
+            String id = statement->node.VAR_CONST.identifier;
+            Expression* expr = statement->node.VAR_CONST.expr;
+            if(!HashmapSet(String, ExpressionPtr)(&result->constants, id, expr)) {
+                UNREACHABLE("Failed to insert into hashmap");
+            }
+        } else {
+            ArrayAppend(result->statements, statement);
+        }
         next = parsePeek(ctx, 0);
     }
     parseConsume(ctx); // }
@@ -798,83 +813,14 @@ Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
     return result;
 }
 
-// TODO: temporary
-//       the #library instruction is only here until dll parsing
-//       the #extern instruction should be after the :: in funton def, not at the begining of the line
-ASTNode* parseCompInstruction(ParseContext* ctx, Arena* mem, Scope* parent) {
-    ASTNode* result = NodeInit(mem);
-    result->type = ASTNodeType_COMPILER_INST;
-    
-    Token next = parseConsume(ctx);
-    if(next.type != TokenType_IDENTIFIER) {
-        ERROR(next.loc, "# needs to be followed by the name of a valid compiler instruction");
-    }
+bool isFunctionLit(ParseContext* ctx, Token next) {
+    if(next.type != TokenType_LPAREN) return FALSE;
 
-    if(StringEqualsCstr(next.value, "library")) {
-        next = parseConsume(ctx);
-        if(next.type != TokenType_STRING_LIT) {
-            ERROR(next.loc, "#library needs to be followed by a string");
-        }
-        String key = {.str = &next.value.str[1], .length = next.value.length - 2}; // remove the `"` around the string
-
-        CompilerInstruction* inst = CompInstInit(mem);
-        inst->type = CompilerInstructionType_LIB;
-        inst->inst.LIB.libName = key;
-
-        result->node.COMPILER_INST.inst = inst;
-
-        LibName value = {0};
-        value.functions = arena_alloc(mem, sizeof(Hashmap(String, FuncName)));
-        // TODO: use arena allocator
-        HashmapInit(*value.functions, 0x100);
-        if(!HashmapSet(String, LibName)(&ctx->importLibraries, key, value)) {
-            UNREACHABLE("hashmap failed to insert");
-        }
-        ctx->currentImportLibraryName = key;
-
-        // TODO: this needs to be checked here,
-        //       the exter command uses parse statement to parse the function declaration,
-        //       which consumes the semicolon, so for consisternt behaviour of the `parseCompInstruction()` function,
-        //       all paths need to consume the semicolon
-        parseCheckSemicolon(ctx);
-    } else if(StringEqualsCstr(next.value, "extern")) {
-        next = parsePeek(ctx, 0);
-        if(next.type != TokenType_IDENTIFIER) {
-            ERROR(next.loc, "#extern needs to be followed by a function declaration");
-        }
-        ASTNode* func = parseStatement(ctx, mem, parent);
-        assert(func->type == ASTNodeType_FUNCTION_DEF, "#extern needs to be followed by a function declaration");
-        func->node.FUNCTION_DEF.isExtern = TRUE;
-        parseCheckSemicolon(ctx);
-        ArrayAppend(parent->statements, func);
-        String functionName = func->node.FUNCTION_DEF.identifier;
-
-        CompilerInstruction* inst = CompInstInit(mem);
-        inst->type = CompilerInstructionType_EXTERN;
-        inst->inst.EXTERN.funcName = functionName;
-
-        result->node.COMPILER_INST.inst = inst;
-
-        LibName value = {0};
-        if(!HashmapGet(String, LibName)(&ctx->importLibraries, ctx->currentImportLibraryName, &value)) {
-            UNREACHABLE("cant find library to import frunction from, either hashmap ran out of space or no #library specified");
-        }
-        FuncName value2 = {0};
-        if(!HashmapSet(String, FuncName)(value.functions, functionName, value2)) {
-            UNREACHABLE("hashmap failed to insert");
-        }
-    }
-
-    return result;
-}
-
-bool isFunctionDef(ParseContext* ctx) {
     Token one = parsePeek(ctx, 0);
     Token two = parsePeek(ctx, 1);
-    Token three = parsePeek(ctx, 2);
     return (
-        (one.type == TokenType_LPAREN && two.type == TokenType_RPAREN) || // foo :: ();
-        (one.type == TokenType_LPAREN && two.type == TokenType_IDENTIFIER && three.type == TokenType_COLON) // foo :: (bar: ...)
+        (one.type == TokenType_RPAREN) || // foo :: ();
+        (one.type == TokenType_IDENTIFIER && two.type == TokenType_COLON) // foo :: (bar: ...)
     );
 }
 
@@ -930,8 +876,8 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
         case TokenType_BOOL_LITERAL:
         case TokenType_SUB:
         case TokenType_LPAREN: {
-            // NOTE: technicaly a expression with no effect should be allowed, but it will be ignored during codegen
-            result = parseExpression(ctx, mem);
+            result->type = ASTNodeType_EXPRESSION;
+            result->node.EXPRESSION.expr = parseExpression(ctx, mem);
 
             parseCheckSemicolon(ctx);
         } break;
@@ -941,20 +887,43 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
             UNUSED(scope);
         } break;
         case TokenType_HASHTAG: {
-            result = parseCompInstruction(ctx, mem, parent);
-            
-            // NOTE: cheking semicolon is not needed, gets checked in `parseCompInstruction()`
-            // parseCheckSemicolon(ctx);
+            Token next = parseConsume(ctx);
+            if(next.type != TokenType_IDENTIFIER) {
+                ERROR(next.loc, "# needs to be followed by the name of a valid compiler instruction");
+            }
+
+            if(StringEqualsCstr(next.value, "library")) {
+                next = parseConsume(ctx);
+                if(next.type != TokenType_STRING_LIT) {
+                    ERROR(next.loc, "#library needs to be followed by a string");
+                }
+                String key = {.str = &next.value.str[1], .length = next.value.length - 2}; // remove the `"` around the string
+
+                LibName value = {0};
+                value.functions = arena_alloc(mem, sizeof(Hashmap(String, FuncName)));
+                // TODO: use arena allocator
+                HashmapInit(*value.functions, 0x100);
+                if(!HashmapSet(String, LibName)(&ctx->importLibraries, key, value)) {
+                    UNREACHABLE("hashmap failed to insert");
+                }
+                ctx->currentImportLibraryName = key;
+            } else {
+                ERROR_VA(next.loc, "Unknown compiler instrucion: "STR_FMT, STR_PRINT(next.value));
+            }
+
+            parseCheckSemicolon(ctx);
         } break;
         case TokenType_IDENTIFIER: {
+            ctx->currentSymbolName = t.value;
             Token next = parsePeek(ctx, 0);
             if(next.type == TokenType_LPAREN) {
                 // function call
-                // TODO: right now `foo() + 3;` doesnt parse, but it should, it would be possible to make it work but it requires to rewind the context
-                result = makeFunction(ctx, mem, t);
-                
+                // NOTE: the identifier is already consumed here so we have to rewind the context
+                ctx->index--;
+                result->type = ASTNodeType_EXPRESSION;
+                result->node.EXPRESSION.expr = parseExpression(ctx, mem);
+
                 parseCheckSemicolon(ctx);
-                // TODO: `parseScopeAddSymbol()` should also contain the symbols for functions
             } else if(next.type == TokenType_ASSIGNMENT) {
                 parseConsume(ctx); // =
                 result->type = ASTNodeType_VAR_REASSIGN;
@@ -975,7 +944,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
                 String identifier = t.value;
-                TypeInfo type = parseType(ctx, mem);
+                TypeInfo* type = parseType(ctx, mem);
 
                 next = parsePeek(ctx, 0);
                 if(next.type == TokenType_ASSIGNMENT) {
@@ -996,37 +965,13 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 parseConsume(ctx); // ::
                 // TODO: `parseScopeAddSymbol()` should also contain the symbols for consts
 
-                if(isFunctionDef(ctx)) {
-                    result = parseFunctionDecl(ctx, mem, parent, t);
-                    assert(result->node.FUNCTION_DEF.isExtern == FALSE, "`parseFunctionDecl()` should set isExtern to FALSE by default");
-                    
-                    FuncInfo info = {0};
+                result->type = ASTNodeType_VAR_CONST;
+                result->node.VAR_CONST.identifier = t.value;
+                result->node.VAR_CONST.expr = parseExpression(ctx, mem);
 
-                    next = parsePeek(ctx, 0);
-                    if(next.type == TokenType_SEMICOLON) {
-                        // NOTE: dont consume the semicolon
-                        //       the only case when there is a semicolon here is when the function is external,
-                        //       which means the semicolon will be checked after this returns
-                        info.isExtern = TRUE;
-                    } else if(next.type == TokenType_LSCOPE) {
-                        info.isExtern = FALSE;
-                        result->node.FUNCTION_DEF.scope = parseScope(ctx, mem, parent);
-                    } else {
-                        // error
-                        ERROR_VA(next.loc, "function definition needs to have a scope or end with semicolon, got: %s", TokenTypeStr[next.type]);
-                    }
-
-                    // NOTE: this might not be necesarry, gets added when returned???
-                    if(!HashmapSet(String, FuncInfo)(&ctx->funcInfo, t.value, info)) {
-                        UNREACHABLE("failed to set hashmap");
-                    }
-                } else {
-                    result->type = ASTNodeType_VAR_CONST;
-                    result->node.VAR_CONST.identifier = t.value;
-                    result->node.VAR_CONST.expr = parseExpression(ctx, mem);
-
-                    parseCheckSemicolon(ctx);
-                }
+                // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
+                bool checkSemiColon = (result->node.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT);
+                if(checkSemiColon) parseCheckSemicolon(ctx);
             } else {
                 ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }
@@ -1072,6 +1017,7 @@ Scope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
     Scope* globalScope = parseScopeInit(mem, NULL);
     while(ctx->index < ctx->tokens.size) {
         ASTNode* statement = parseStatement(ctx, mem, globalScope);
+        // TODO: VAR_CONST should be added to constants instead of statements
         ArrayAppend(globalScope->statements, statement);
     }
     return globalScope;

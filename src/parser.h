@@ -7,29 +7,45 @@
 #include "lexer.h"
 #include "dataStructuresDefs.h"
 
+typedef struct Expression Expression;
+typedef Expression* ExpressionPtr;
+defArray(ExpressionPtr);
+
+// used when defining arguments during function declaration
+typedef struct FunctionArg {
+    String id;
+    TypeInfo* type;
+    Expression initialValue; // the expression this argument should be initialized with
+} FunctionArg;
+
+defArray(FunctionArg);
+
 typedef enum ExpressionType {
-    ExpressionType_BINARY_EXPRESSION,
-    ExpressionType_UNARY_EXPRESSION,
-    ExpressionType_INT_LIT,
-    ExpressionType_FLOAT_LIT,
-    ExpressionType_STRING_LIT,
-    ExpressionType_BOOL_LIT,
-    ExpressionType_SYMBOL,
-    // TODO: once finished with current refactor
-    // ExpressionType_FUNCTION_LIT,
+    // complex nodes
+    ExpressionType_BINARY_EXPRESSION, // lsh + rhs
+    ExpressionType_UNARY_EXPRESSION,  // -expr
+
+    // leaf nodes
+    ExpressionType_INT_LIT,           // 1
+    ExpressionType_FLOAT_LIT,         // 1.0
+    ExpressionType_STRING_LIT,        // "string"
+    ExpressionType_BOOL_LIT,          // true/false
+    ExpressionType_SYMBOL,            // foo
+    ExpressionType_FUNCTION_CALL,     // bar()
+    ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
 } ExpressionType;
 
 typedef struct Expression {
     ExpressionType type;
     union Expr {
         struct BINARY_EXPRESSION {
-            String operator;
-            struct Expression* rhs;
-            struct Expression* lhs;
+            Token operator;
+            Expression* rhs;
+            Expression* lhs;
         } BINARY_EXPRESSION;
         struct UNARY_EXPRESSION {
-            String operator;
-            struct Expression* expr;
+            Token operator;
+            Expression* expr;
         } UNARY_EXPRESSION;
         struct INT_LIT {
             String value;
@@ -46,19 +62,23 @@ typedef struct Expression {
         } BOOL_LIT;
         struct SYMBOL {
             String identifier;
-            TypeInfo* type;
         } SYMBOL;
+        struct FUNCTION_CALL {
+            String identifier;
+            Array(ExpressionPtr) args;
+        } FUNCTION_CALL;
+        struct FUNCTION_LIT {
+            TypeInfo* returnType;
+            Array(FunctionArg) args;
+            Scope* scope;
+            bool isExtern;
+        } FUNCTION_LIT;
     } expr;
 } Expression;
-
-typedef Expression* ExpressionPtr;
-defArray(ExpressionPtr);
 
 typedef enum ASTNodeType {
     ASTNodeType_NONE,
     
-    ASTNodeType_FUNCTION_DEF,
-    ASTNodeType_FUNCTION_CALL,
     ASTNodeType_VAR_DECL,
     ASTNodeType_VAR_DECL_ASSIGN,
     ASTNodeType_VAR_REASSIGN,
@@ -66,7 +86,7 @@ typedef enum ASTNodeType {
     ASTNodeType_RET,
     ASTNodeType_IF,
     ASTNodeType_LOOP,
-    ASTNodeType_COMPILER_INST,
+    ASTNodeType_EXPRESSION,
     
     ASTNodeType_COUNT,
 } ASTNodeType;
@@ -75,8 +95,6 @@ typedef enum ASTNodeType {
 static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_NONE]              = "NONE",
     
-    [ASTNodeType_FUNCTION_DEF]      = "FUNCTION_DEF",
-    [ASTNodeType_FUNCTION_CALL]     = "FUNCTION_CALL",
     [ASTNodeType_VAR_DECL]          = "VAR_DECL",
     [ASTNodeType_VAR_DECL_ASSIGN]   = "VAR_DECL_ASSIGN",
     [ASTNodeType_VAR_REASSIGN]      = "VAR_REASSIGN",
@@ -84,7 +102,6 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_RET]               = "RET",
     [ASTNodeType_IF]                = "IF",
     [ASTNodeType_LOOP]              = "LOOP",
-    [ASTNodeType_COMPILER_INST]     = "COMPILER_INST",
 
     [ASTNodeType_COUNT]             = "COUNT",
 };
@@ -96,19 +113,11 @@ typedef ASTNode* ASTNodePtr;
 defArray(ASTNodePtr);
 defArray(String);
 
-// used when defining arguments during function declaration
-typedef struct FunctionArg {
-    String id;
-    TypeInfo type;
-    Expression initialValue; // the expression this argument should be initialized with
-} FunctionArg;
-
-defArray(FunctionArg);
-
 typedef struct Scope Scope;
 typedef Scope* ScopePtr;
 
 defArray(ScopePtr);
+defHashmapFuncs(String, ExpressionPtr)
 
 typedef struct Scope {
     Arena mem;
@@ -117,26 +126,10 @@ typedef struct Scope {
     Array(ScopePtr) children; // maybe?
     Array(String) symbols; // symbols defined in this scope
     Array(ASTNodePtr) statements;
+
+    // used for typechecking;
+    Hashmap(String, ExpressionPtr) constants;
 } Scope;
-
-typedef enum CompilerInstructionType {
-    CompilerInstructionType_NONE,
-    CompilerInstructionType_LIB,    // #library "kernel32.dll";
-    CompilerInstructionType_EXTERN, // #extern GetStdHandle :: (handle: s64);
-    CompilerInstructionType_COUNT,
-} CompilerInstructionType;
-
-typedef struct CompilerInstruction {
-    CompilerInstructionType type;
-    union {
-        struct LIB {
-            String libName;
-        } LIB;
-        struct EXTERN {
-            String funcName;
-        } EXTERN;
-    } inst;
-} CompilerInstruction;
 
 typedef struct ConditionalBlock {
     Expression* expr;
@@ -145,27 +138,17 @@ typedef struct ConditionalBlock {
 
 defArray(ConditionalBlock);
 
+// not really an ASTNode anymore, should be renamed to Statement
 typedef struct ASTNode {
     ASTNodeType type;
     union Node {
-        struct FUNCTION_DEF {
-            String identifier;
-            TypeInfo type;
-            Array(FunctionArg) args;
-            Scope* scope;
-            bool isExtern;
-        } FUNCTION_DEF;
-        struct FUNCTION_CALL {
-            String identifier;
-            Array(ExpressionPtr) args;
-        } FUNCTION_CALL;
         struct VAR_DECL {
             String identifier;
-            TypeInfo type;
+            TypeInfo* type;
         } VAR_DECL;
         struct VAR_DECL_ASSIGN {
             String identifier;
-            TypeInfo type;
+            TypeInfo* type;
             Expression* expr;
         } VAR_DECL_ASSIGN;
         struct VAR_REASSIGN {
@@ -188,9 +171,9 @@ typedef struct ASTNode {
             Expression* expr;
             Scope* scope;
         } LOOP;
-        struct COMPILER_INST {
-            CompilerInstruction* inst;
-        } COMPILER_INST;
+        struct EXPRESSION {
+            Expression* expr;
+        } EXPRESSION;
     } node;
 } ASTNode;
 
@@ -199,6 +182,7 @@ typedef struct ParseContext {
 	u64 index;
     Hashmap(String, LibName) importLibraries;
     String currentImportLibraryName;
+    String currentSymbolName; // TODO: scuffed solution, so i dont have to pass the symbol name to `parseExpression()`
     Hashmap(String, FuncInfo) funcInfo;
 } ParseContext;
 
@@ -230,3 +214,8 @@ void ASTPrint(Scope* root);
 #endif // COMP_DEBUG
 
 #endif // COMP_PARSER_NEW_H
+// TODO: instead of storing symbol information (like function, variable, constant, declaration) in hashmaps
+//       store it in arrays and every time there is a `String identifier` in the AST
+//       just store the index to that symbol in the "global" table
+//       hashmaps are always slower that arrays,
+//       this way once parsing is done all symbols are referred to using indecies, which makes typecking and codegen faster
