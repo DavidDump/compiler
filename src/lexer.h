@@ -46,7 +46,7 @@ typedef enum TokenType{
     TokenType_SUB,           // -
     TokenType_MUL,           // *
     TokenType_DIV,           // /
-    TokenType_COMPARISON,    // ==
+    TokenType_COMPARISON,    // == // TODO: rename to TokenType_EQUALS
     TokenType_ASSIGNMENT,    // =
     TokenType_DOUBLECOLON,   // ::
     TokenType_INITIALIZER,   // :=
