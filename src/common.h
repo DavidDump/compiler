@@ -39,6 +39,9 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+typedef float  f32;
+typedef double f64;
+
 #define S8_MIN  ((s8)0x80)
 #define S8_MAX  ((s8)0x7F)
 #define S16_MIN ((s16)0x8000)
