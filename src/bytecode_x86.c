@@ -467,10 +467,10 @@ void genPop(GenContext* ctx, GenScope* scope, Register reg) {
     genInstruction(ctx, INST(pop, OP_REG(reg)));
 }
 
-void gen_x86_64_func_call(GenContext* ctx, ASTNode* funcCall, GenScope* localScope) {
-    assert(funcCall->type == ASTNodeType_FUNCTION_CALL, "");
-    String id = funcCall->node.FUNCTION_CALL.identifier;
-    Array(ExpressionPtr) args = funcCall->node.FUNCTION_CALL.args;
+void gen_x86_64_func_call(GenContext* ctx, Expression* funcCall, GenScope* localScope) {
+    assert(funcCall->type == ExpressionType_FUNCTION_CALL, "");
+    String id = funcCall->expr.FUNCTION_CALL.identifier;
+    Array(ExpressionPtr) args = funcCall->expr.FUNCTION_CALL.args;
 
     for(u64 i = 0; i < args.size; ++i) {
         Expression* arg = args.data[i];
@@ -558,11 +558,11 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localSco
         } else {
             genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, -(value * 8))));
         }
-    } else if(expr->type == ASTNodeType_FUNCTION_CALL) {
+    } else if(expr->type == ExpressionType_FUNCTION_CALL) {
         gen_x86_64_func_call(ctx, expr, localScope);
     } else if(expr->type == ExpressionType_BINARY_EXPRESSION) {
         Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
-        String operator = expr->expr.BINARY_EXPRESSION.operator;
+        String operator = expr->expr.BINARY_EXPRESSION.operator.value;
         Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but then again what do i know
@@ -609,7 +609,7 @@ u64 gen_x86_64_condition(GenContext* ctx, Expression* expr, GenScope* localScope
     assert(expr->type == ExpressionType_BINARY_EXPRESSION, "");
     Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
     Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
-    String op = expr->expr.BINARY_EXPRESSION.operator;
+    String op = expr->expr.BINARY_EXPRESSION.operator.value;
 
     gen_x86_64_expression(ctx, rhs, localScope);
     genPush(ctx, localScope, RAX);
@@ -717,7 +717,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
             // function arguments
             for(u64 i = 0; i < args.size; ++i) {
                 String argId = args.data[i].id;
-                TypeInfo argType = args.data[i].type;
+                TypeInfo* argType = args.data[i].type;
                 UNUSED(argType);
 
                 if(i == 0) {
@@ -747,7 +747,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         } break;
         case ASTNodeType_VAR_DECL: {
             String id = statement->node.VAR_DECL.identifier;
-            TypeInfo type = statement->node.VAR_DECL.type;
+            TypeInfo* type = statement->node.VAR_DECL.type;
             UNUSED(type);
 
             if(!HashmapSet(String, s64)(&localScope->localVars, id, localScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
@@ -758,7 +758,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
         case ASTNodeType_VAR_DECL_ASSIGN: {
             Expression* exprNode = statement->node.VAR_DECL_ASSIGN.expr;
             String id = statement->node.VAR_DECL_ASSIGN.identifier;
-            TypeInfo type = statement->node.VAR_DECL_ASSIGN.type;
+            TypeInfo* type = statement->node.VAR_DECL_ASSIGN.type;
             UNUSED(type);
 
             gen_x86_64_expression(ctx, exprNode, localScope); // gen code for the expression, store in rax??
@@ -862,11 +862,13 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
                 genGenericScope(ctx, elze, localScope);
             }
 
-                // do all the patches
-                for(u64 h = 0; h < patchTargets.size; ++h) {
-                    u64 patchTarget = patchTargets.data[h];
-                    gen_patchAddress(ctx, patchTarget, ctx->code.size);
-                }
+            // do all the patches
+            for(u64 h = 0; h < patchTargets.size; ++h) {
+                u64 patchTarget = patchTargets.data[h];
+                gen_patchAddress(ctx, patchTarget, ctx->code.size);
+            }
+
+            free(patchTargets.data);
         } break;
         case ASTNodeType_LOOP: {
             Expression* expr = statement->node.LOOP.expr;
@@ -910,8 +912,6 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
                 //       do the cmp and jmp after the scope and only have one jump
             }
         } break;
-
-        case ASTNodeType_COMPILER_INST: break;
     }
 }
 
@@ -937,6 +937,61 @@ GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) fun
     
     genGlobalScope(&ctx, globalScope);
     return ctx;
+}
+
+GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
+    GenContext ctx = {0};
+
+    // ctx.funcInfo = funcInfo;
+
+    // TODO: use arena allocator
+    // TODO: make the default size something sane
+    HashmapInit(ctx.functions, 0x10);
+    HashmapInit(ctx.data, 0x10);
+    HashmapInit(ctx.constants, 0x10);
+
+    for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
+        u64 index = scope->functionIndicies.data[i];
+        String fnName = scope->constants.pairs[index].key;
+        ConstValue fnScope = scope->constants.pairs[index].value;
+
+        // decrement rsp based on the variables
+        GenScope* genScope = genScopeInit(&ctx, NULL);
+        for(u64 h = 0; h < fnScope.as_function->statements.size; ++h) {
+            TypecheckedStatement statement = fnScope.as_function->statements.data[i];
+            genStatement2(&ctx, statement, genScope);
+        }
+    }
+}
+
+void genStatement2(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope) {
+    switch(statement.type) {
+        case ASTNodeType_VAR_DECL:
+        case ASTNodeType_VAR_CONST:
+        case ASTNodeType_NONE: 
+        case ASTNodeType_COUNT: {
+            UNREACHABLE("gen statement");
+        } break;
+
+        case ASTNodeType_VAR_DECL_ASSIGN: {
+
+        } break;
+        case ASTNodeType_VAR_REASSIGN: {
+
+        } break;
+        case ASTNodeType_RET: {
+
+        } break;
+        case ASTNodeType_IF: {
+
+        } break;
+        case ASTNodeType_LOOP: {
+
+        } break;
+        case ASTNodeType_EXPRESSION: {
+
+        } break;
+    }
 }
 
 // TODO: make sure to preserve non volitile register when entering a function

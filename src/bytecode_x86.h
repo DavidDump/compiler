@@ -6,6 +6,7 @@
 #include "instructions_x86.h"
 #include "dataStructuresDefs.h"
 #include "parser.h"
+#include "typechecker.h"
 
 // Register values used in the Mod/RM byte
 typedef enum Register {
@@ -154,8 +155,6 @@ typedef struct Instruction {
     (Operand){.type = OPERAND_Immediate32, .immediate = (_immediate_), .isImm = TRUE}
 
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
-
-defArray(u64);
 
 void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope);
 void genGenericScope(GenContext* ctx, Scope* scope, GenScope* parentScope);

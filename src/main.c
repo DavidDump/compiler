@@ -7,6 +7,7 @@
 
 #include "peWriter.h"
 #include "bytecode_x86.h"
+#include "typechecker.h"
 #include "parser.h"
 #include "lexer.h"
 #include "string.h"
@@ -123,6 +124,8 @@ int main(int argc, char** argv){
 #ifdef COMP_DEBUG
     if(printAST) ASTPrint(parseResult.globalScope);
 #endif // COMP_DEBUG
+
+    TypecheckedScope* typechecked = typecheck(&readFileMem, &parseResult);
 
     GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope, parseResult.funcInfo);
     if(StringEndsWith(outFilepath, STR(".bin"))) {

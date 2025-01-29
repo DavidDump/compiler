@@ -3,10 +3,12 @@
 
 #include "common.h"
 #include "dataStructures.h"
+#include "string.h"
 
 typedef enum Type {
     TYPE_NONE,
 
+    // NOTE: the order cannot change
     TYPE_U8,
     TYPE_U16,
     TYPE_U32,
@@ -17,10 +19,12 @@ typedef enum Type {
     TYPE_S64,
     TYPE_F32,
     TYPE_F64,
+
     TYPE_STRING,
     TYPE_BOOL,
     TYPE_VOID,
     TYPE_FUNCTION,
+    TYPE_ARRAY,
     // TYPE_ANY,
     // TYPE_TYPE,
     // TYPE_STRUCT,
@@ -48,27 +52,41 @@ static char* TypeStr[TYPE_COUNT + 1] = {
     [TYPE_BOOL]     = "BOOL",
     [TYPE_VOID]     = "VOID",
     [TYPE_FUNCTION] = "FUNCTION",
+    [TYPE_ARRAY]    = "ARRAY",
 
     [TYPE_COUNT]    = "COUNT",
 };
 #pragma GCC diagnostic pop
 
 typedef struct TypeInfo TypeInfo;
-defArray(TypeInfo);
+typedef TypeInfo* TypeInfoPtr;
+defArray(TypeInfoPtr);
 
 typedef struct FunctionInfo {
-    Array(TypeInfo) argTypes;
-    TypeInfo returnType;
+    Array(TypeInfoPtr) argTypes;
+    TypeInfo* returnType;
     bool isExternal;
 } FunctionInfo;
+
+typedef struct ArrayInfo {
+    bool isDynamic;
+    u64 arraySize;
+    TypeInfo* elementType;
+} ArrayInfo;
 
 typedef struct TypeInfo {
     Type symbolType;
     bool isPointer; // flag if the type is a pointer to symbolType type
-    bool isArray;   // flag if the type is an array of symbolTypes
-    bool isDynamic; // if array, flag if array is dynamic
-    u64 arraySize;  // if array, size of array is this
+    ArrayInfo arrayInfo;
     FunctionInfo functionInfo; // if fuction, contains information about the function
 } TypeInfo;
 
+TypeInfo* typeVoid(Arena* mem);
+String typeToString(TypeInfo typeInfo);
+
 #endif // COMP_TYPES_H
+
+// TODO: make isPointer into a u64 pointerDepth, with indicates the level of indirecion to a type
+//       ex.: int foo;   (pointerDepth = 0)
+//            int* foo;  (pointerDepth = 1)
+//            int** foo; (pointerDepth = 2)
