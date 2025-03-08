@@ -9,7 +9,7 @@
 #define true TRUE
 #define false FALSE
 
-s32 align(s32 number, s32 alignment) {
+s32 align_s32(s32 number, s32 alignment) {
     return (s32)(ceil((double)number / alignment) * alignment);
 }
 
@@ -67,7 +67,7 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
             fn->value.nameRva = get_rva();
             buffer_append_s16(buffer, 0); // Ordinal Hint, value not required
             size_t name_size = fn->key.length + 1;
-            s32 aligned_name_size = align((s32)name_size, 2);
+            s32 aligned_name_size = align_s32((s32)name_size, 2);
             u8* buf = buffer_allocate_size(buffer, aligned_name_size);
             memcpy(buf, fn->key.str, name_size);
             buf[name_size - 1] = 0; // TODO: i dont think the +1 for len is nessecary, but test before change
@@ -101,7 +101,7 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
     HashmapFor(String, LibName, lib, libs) {
         lib->value.nameRva= get_rva();
         size_t name_size = lib->key.length + 1;
-        s32 aligned_name_size = align((s32)name_size, 2);
+        s32 aligned_name_size = align_s32((s32)name_size, 2);
         u8* buf = buffer_allocate_size(buffer, aligned_name_size);
         memcpy(buf, lib->key.str, name_size);
         buf[name_size - 1] = 0; // TODO: i dont think the +1 for len is nessecary, but test before change
@@ -171,23 +171,23 @@ Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Arra
         sizeof(IMAGE_FILE_HEADER) +
         sizeof(IMAGE_OPTIONAL_HEADER64) +
         sizeof(sections);
-    file_size_of_headers = align(file_size_of_headers, PE32_FILE_ALIGNMENT);
+    file_size_of_headers = align_s32(file_size_of_headers, PE32_FILE_ALIGNMENT);
     
     // prepare .rdata
-    s32 virtual_size_of_headers = align(file_size_of_headers, PE32_SECTION_ALIGNMENT);
+    s32 virtual_size_of_headers = align_s32(file_size_of_headers, PE32_SECTION_ALIGNMENT);
     rdata_section_header->PointerToRawData = file_size_of_headers;
     rdata_section_header->VirtualAddress = virtual_size_of_headers;
     ParsedDataSection rdata_section = parseDataSection(libs, userData, rdata_section_header);
 
     // prepare .text
-    u32 codeSizeAligned = align(bytecode.size, PE32_FILE_ALIGNMENT);
+    u32 codeSizeAligned = align_s32(bytecode.size, PE32_FILE_ALIGNMENT);
     text_section_header->PointerToRawData = rdata_section_header->PointerToRawData + rdata_section_header->SizeOfRawData;
-    text_section_header->VirtualAddress = rdata_section_header->VirtualAddress + align(rdata_section_header->SizeOfRawData, PE32_SECTION_ALIGNMENT);
+    text_section_header->VirtualAddress = rdata_section_header->VirtualAddress + align_s32(rdata_section_header->SizeOfRawData, PE32_SECTION_ALIGNMENT);
     text_section_header->Misc.VirtualSize = bytecode.size;
     text_section_header->SizeOfRawData = codeSizeAligned;
 
     // total size of image
-    s32 virtualSizeOfImage = text_section_header->VirtualAddress + align(text_section_header->SizeOfRawData, PE32_SECTION_ALIGNMENT);
+    s32 virtualSizeOfImage = text_section_header->VirtualAddress + align_s32(text_section_header->SizeOfRawData, PE32_SECTION_ALIGNMENT);
     // u64 max_exe_buffer = file_size_of_headers + rdata_section_header->SizeOfRawData + text_section_header->SizeOfRawData;
     Array(u8) exe_buffer = {0};
 

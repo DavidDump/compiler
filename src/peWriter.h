@@ -4,6 +4,7 @@
 #include "common.h"
 #include "bytecode_exe_common.h"
 #include "dataStructuresDefs.h"
+#include "commonTypes.h"
 
 // NOTE: all the information about the PE32 format is from the MSDN documentation page
 // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
