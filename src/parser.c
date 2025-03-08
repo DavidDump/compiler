@@ -13,72 +13,62 @@ ASTNode* NodeInit(Arena* mem){
 
 #ifdef COMP_DEBUG
 #define genPrintHelper(...) do{for(u64 h = 0; h < indent; ++h) printf("    "); printf(__VA_ARGS__);}while(0)
-void ASTPrintCompInst(CompilerInstruction* inst, u64 indent) {
-    switch(inst->type) {
-        case CompilerInstructionType_NONE:  break;
-        case CompilerInstructionType_COUNT: break;
-        
-        case CompilerInstructionType_LIB: {
-            String libName = inst->inst.LIB.libName;
-            genPrintHelper("COMP_INST_LIB: "STR_FMT"\n", STR_PRINT(libName));
-        } break;
-        case CompilerInstructionType_EXTERN: {
-            String funcName = inst->inst.EXTERN.funcName;
-            genPrintHelper("COMP_INST_EXTERN: "STR_FMT"\n", STR_PRINT(funcName));
-        } break;
-    }
+
+void ASTNodePrint(ASTNode* node, u64 indent);
+
+void TypePrint(TypeInfo* type, u64 indent) {
+    UNUSED(indent);
+    // UNIMPLEMENTED("TypePrint");
+    
+    printf("%s", TypeStr[type->symbolType]);
 }
 
-void ASTNodePrint(ASTNode* node, u64 indent) {
-    // TODO: need to fix indentation, everytime a case has a newline it needs to be indented
-    switch(node->type) {
-        case ASTNodeType_COUNT: break;
-        case ASTNodeType_NONE: break;
-        
-        case ASTNodeType_INT_LIT: {
-            String val = node->node.INT_LIT.value;
+void ExpressionPrint(Expression* expr, u64 indent) {
+    switch(expr->type) {
+        case ExpressionType_INT_LIT: {
+            String val = expr->expr.INT_LIT.value;
             printf(" "STR_FMT, STR_PRINT(val));
         } break;
-        case ASTNodeType_FLOAT_LIT: {
-            String wholePart = node->node.FLOAT_LIT.wholePart;
-            String fractPart = node->node.FLOAT_LIT.fractPart;
+        case ExpressionType_FLOAT_LIT: {
+            String wholePart = expr->expr.FLOAT_LIT.wholePart;
+            String fractPart = expr->expr.FLOAT_LIT.fractPart;
             printf(" "STR_FMT"."STR_FMT, STR_PRINT(wholePart), STR_PRINT(fractPart));
         } break;
-        case ASTNodeType_STRING_LIT: {
-            String val = node->node.STRING_LIT.value;
+        case ExpressionType_STRING_LIT: {
+            String val = expr->expr.STRING_LIT.value;
             if(val.length > 50) printf(" "STR_FMT"...", 50, val.str);
             else                printf(" "STR_FMT, STR_PRINT(val));
         } break;
-        case ASTNodeType_BOOL_LIT: {
-            String val = node->node.STRING_LIT.value;
+        case ExpressionType_BOOL_LIT: {
+            String val = expr->expr.STRING_LIT.value;
             printf(" "STR_FMT, STR_PRINT(val));
         } break;
-        case ASTNodeType_SYMBOL: { // NOTE: identifier
-            String id = node->node.SYMBOL.identifier;
+        case ExpressionType_SYMBOL: { // NOTE: identifier
+            String id = expr->expr.SYMBOL.identifier;
 
             printf(" "STR_FMT, STR_PRINT(id));
         } break;        
-        case ASTNodeType_BINARY_EXPRESSION: {
-            String op = node->node.BINARY_EXPRESSION.operator;
-            ASTNodePrint(node->node.BINARY_EXPRESSION.lhs, indent + 1);
+        case ExpressionType_BINARY_EXPRESSION: {
+            String op = expr->expr.BINARY_EXPRESSION.operator.value;
+            ExpressionPrint(expr->expr.BINARY_EXPRESSION.lhs, indent + 1);
             printf(" "STR_FMT, STR_PRINT(op));
-            ASTNodePrint(node->node.BINARY_EXPRESSION.rhs, indent + 1);
+            ExpressionPrint(expr->expr.BINARY_EXPRESSION.rhs, indent + 1);
         } break;
-        case ASTNodeType_UNARY_EXPRESSION: {
-            String op = node->node.UNARY_EXPRESSION.operator;
+        case ExpressionType_UNARY_EXPRESSION: {
+            String op = expr->expr.UNARY_EXPRESSION.operator.value;
             printf(" "STR_FMT, STR_PRINT(op));
-            ASTNodePrint(node->node.UNARY_EXPRESSION.expr, indent + 1);
+            ExpressionPrint(expr->expr.UNARY_EXPRESSION.expr, indent + 1);
         } break;
-        case ASTNodeType_FUNCTION_DEF: {
-            String id = node->node.FUNCTION_DEF.identifier;
-            ASTNode* retType = node->node.FUNCTION_DEF.type;
-            Array(FunctionArg) args = node->node.FUNCTION_DEF.args;
-            Scope* scope = node->node.FUNCTION_DEF.scope;
+        case ExpressionType_FUNCTION_LIT: {
+            // String id = expr->expr.FUNCTION_LIT.identifier;
+            TypeInfo* retType = expr->expr.FUNCTION_LIT.returnType;
+            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.args;
+            Scope* scope = expr->expr.FUNCTION_LIT.scope;
 
-            genPrintHelper("FUNCTION_DEF: {\n");
-            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("FUNCTION_LIT: {\n");
+            // genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    type: ");
-            ASTNodePrint(retType, indent);
+            TypePrint(retType, indent);
             printf(",\n");
 
             // args
@@ -86,10 +76,10 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
                 genPrintHelper("    args: [\n");
                 for(u64 i = 0; i < args.size; ++i) {
                     String argId = args.data[i].id;
-                    ASTNode* argType = args.data[i].type;
+                    TypeInfo* argType = args.data[i].type;
 
                     genPrintHelper("        {id: "STR_FMT", type: ", STR_PRINT(argId));
-                    ASTNodePrint(argType, indent);
+                    TypePrint(argType, indent);
                     printf("},\n");
                 }
                 genPrintHelper("    ],\n");
@@ -109,60 +99,90 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             }
             genPrintHelper("}\n");
         } break;
+        case ExpressionType_FUNCTION_CALL: {
+            String id = expr->expr.FUNCTION_CALL.identifier;
+            Array(ExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
+
+            genPrintHelper("FUNCTION_CALL: {\n");
+            genPrintHelper("    id: "STR_FMT"\n", STR_PRINT(id));
+
+            // args
+            if(args.size > 0) {
+                genPrintHelper("    args: [\n");
+                for(u64 i = 0; i < args.size; ++i) {
+                    for(u64 h = 0; h < indent + 2; ++h) printf("    ");
+                    ExpressionPrint(args.data[i], indent + 1);
+                    printf(",\n");
+                }
+                genPrintHelper("    ],\n");
+            } else {
+                genPrintHelper("    args: [],\n");
+            }
+            genPrintHelper("}\n");
+        } break;
+    }
+}
+
+void ASTNodePrint(ASTNode* node, u64 indent) {
+    // TODO: need to fix indentation, everytime a case has a newline it needs to be indented
+    switch(node->type) {
+        case ASTNodeType_COUNT: break;
+        case ASTNodeType_NONE: break;
+
         case ASTNodeType_VAR_DECL: {
             String id = node->node.VAR_DECL.identifier;
-            ASTNode* type = node->node.VAR_DECL.type;
+            TypeInfo* type = node->node.VAR_DECL.type;
 
             genPrintHelper("VAR_DECL: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    type: ");
-            ASTNodePrint(type, indent);
+            TypePrint(type, indent);
             printf(",\n");
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_DECL_ASSIGN: {
             String id = node->node.VAR_DECL_ASSIGN.identifier;
-            ASTNode* type = node->node.VAR_DECL_ASSIGN.type;
-            ASTNode* expr = node->node.VAR_DECL_ASSIGN.expr;
+            TypeInfo* type = node->node.VAR_DECL_ASSIGN.type;
+            Expression* expr = node->node.VAR_DECL_ASSIGN.expr;
 
             genPrintHelper("VAR_DECL_ASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    type: ");
-            ASTNodePrint(type, indent);
+            TypePrint(type, indent);
             printf(",\n");
             genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
+            ExpressionPrint(expr, indent + 1);
             printf(",\n");
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_REASSIGN: {
             String id = node->node.VAR_REASSIGN.identifier;
-            ASTNode* expr = node->node.VAR_REASSIGN.expr;
+            Expression* expr = node->node.VAR_REASSIGN.expr;
 
             genPrintHelper("VAR_REASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
+            ExpressionPrint(expr, indent + 1);
             printf(",\n");
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_VAR_CONST: {
             String id = node->node.VAR_CONST.identifier;
-            ASTNode* expr = node->node.VAR_CONST.expr;
+            Expression* expr = node->node.VAR_CONST.expr;
 
             genPrintHelper("VAR_CONST: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
+            ExpressionPrint(expr, indent + 1);
             printf(",\n");
             genPrintHelper("}\n");
         } break;
         case ASTNodeType_RET: {
-            ASTNode* expr = node->node.RET.expr;
+            Expression* expr = node->node.RET.expr;
 
             genPrintHelper("RET: {\n");
             genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
+            ExpressionPrint(expr, indent + 1);
             printf(",\n");
             genPrintHelper("}\n");
         } break;
@@ -174,12 +194,12 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             // if block, always the 0 index
             {
                 ConditionalBlock block = blocks.data[0];
-                ASTNode* expr = block.expr;
+                Expression* expr = block.expr;
                 Scope* scope = block.scope;
 
                 genPrintHelper("IF: {\n");
                 genPrintHelper("    expr:");
-                ASTNodePrint(expr, indent + 1);
+                ExpressionPrint(expr, indent + 1);
                 printf(",\n");
 
                 // statements
@@ -198,12 +218,12 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             // else if blocks
             for(u64 i = 1; i < blocks.size; ++i) {
                 ConditionalBlock block = blocks.data[i];
-                ASTNode* expr = block.expr;
+                Expression* expr = block.expr;
                 Scope* scope = block.scope;
 
                 genPrintHelper("ELSE IF: {\n");
                 genPrintHelper("    expr:");
-                ASTNodePrint(expr, indent + 1);
+                ExpressionPrint(expr, indent + 1);
                 printf(",\n");
 
                 // statements
@@ -235,12 +255,12 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             }
         } break;
         case ASTNodeType_LOOP: {
-            ASTNode* expr = node->node.LOOP.expr;
+            Expression* expr = node->node.LOOP.expr;
             Scope* scope = node->node.LOOP.scope;
 
             genPrintHelper("LOOP: {\n");
             genPrintHelper("    expr:");
-            ASTNodePrint(expr, indent + 1);
+            ExpressionPrint(expr, indent + 1);
             printf(",\n");
 
             // statements
@@ -255,42 +275,11 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
             }
             genPrintHelper("}\n");
         } break;
-        case ASTNodeType_FUNCTION_CALL: {
-            String id = node->node.FUNCTION_CALL.identifier;
-            Array(ASTNodePtr) args = node->node.FUNCTION_CALL.args;
-
-            genPrintHelper("FUNCTION_CALL: {\n");
-            genPrintHelper("    id: "STR_FMT"\n", STR_PRINT(id));
-
-            // args
-            if(args.size > 0) {
-                genPrintHelper("    args: [\n");
-                for(u64 i = 0; i < args.size; ++i) {
-                    for(u64 h = 0; h < indent + 2; ++h) printf("    ");
-                    ASTNodePrint(args.data[i], indent + 1);
-                    printf(",\n");
-                }
-                genPrintHelper("    ],\n");
-            } else {
-                genPrintHelper("    args: [],\n");
-            }
-            genPrintHelper("}\n");
+        case ASTNodeType_EXPRESSION: {
+            Expression* expr = node->node.EXPRESSION.expr;
+            ExpressionPrint(expr, indent);
         } break;
-        case ASTNodeType_TYPE:{
-            Type type = node->node.TYPE.type;
-            bool isArray = node->node.TYPE.isArray;
-            bool isDynamic = node->node.TYPE.isDynamic;
-            bool isPointer = node->node.TYPE.isPointer;
-            u64 arraySize = node->node.TYPE.arraySize;
-            
-            printf("%s", TypeStr[type]);
-            if(isPointer) printf("*");
-            if(isArray) isDynamic ? printf("[...]") : printf("[%llu]", arraySize);
-        } break;
-        case ASTNodeType_COMPILER_INST: {
-            CompilerInstruction* inst = node->node.COMPILER_INST.inst;
-            ASTPrintCompInst(inst, indent);
-        } break;
+        case ASTNodeType_DIRECTIVE: break;
     }
 }
 #undef genPrintHelper
@@ -481,6 +470,7 @@ Array(FunctionArg) functionArgs(ParseContext* ctx, Scope* scope) {
 
         next = parseConsume(ctx);
         if(next.type == TokenType_COMMA) {
+            next = parseConsume(ctx); // so that the next points at the identifier for the next iteration
             continue;
         } else if(next.type == TokenType_RPAREN) {
             break;
@@ -507,7 +497,15 @@ Expression* makeFunctionLit(ParseContext* ctx, Arena* mem, bool isExtern) {
         parseConsume(ctx); // ->
         result->expr.FUNCTION_LIT.returnType = parseType(ctx, mem);
     } else {
-        result->expr.FUNCTION_LIT.returnType = typeVoid(mem);
+        result->expr.FUNCTION_LIT.returnType = TypeInitSimple(mem, TYPE_VOID);
+    }
+
+    // scope
+    if(!isExtern) {
+        parseScope2(ctx, mem, functionScope);
+    } else {
+        // NOTE: this is kind of a hack but if it works it twerks
+        parseCheckSemicolon(ctx);
     }
 
     return result;
@@ -522,7 +520,7 @@ Expression* makeCompInstructionLeaf(ParseContext* ctx, Arena* mem) {
             ERROR(next.loc, "#extern needs to be followed by a function signature.");
         }
 
-        Expression* result =  makeFunctionLit(ctx, mem, TRUE);
+        Expression* result = makeFunctionLit(ctx, mem, TRUE);
 
         LibName lib = {0};
         if(!HashmapGet(String, LibName)(&ctx->importLibraries, ctx->currentImportLibraryName, &lib)) {
@@ -537,11 +535,14 @@ Expression* makeCompInstructionLeaf(ParseContext* ctx, Arena* mem) {
     } else {
         ERROR_VA(next.loc, "Unknown compiler instruction: "STR_FMT, STR_PRINT(next.value));
     }
+
+    // NOTE: silencing compiler warning
+    return 0;
 }
 
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
-    
+
     if(isFunctionLit(ctx, next))            return makeFunctionLit(ctx, mem, FALSE);
     if(isFunctionCall(ctx, next))           return makeFunctionCall(ctx, mem, next);
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
@@ -551,7 +552,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);
     if(next.type == TokenType_LPAREN) {
-        ASTNode* result = parseExpression(ctx, mem);
+        Expression* result = parseExpression(ctx, mem);
         Token token = parseConsume(ctx);
         if(token.type != TokenType_RPAREN) {
             ERROR_VA(token.loc, "Expected closing paranthesis, got: %s", TokenTypeStr[token.type]);
@@ -560,6 +561,8 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     }
 
     ERROR_VA(next.loc, "Unhandled input: "STR_FMT, STR_PRINT(next.value));
+    // NOTE: silencing compiler warning
+    return 0;
 }
 
 // TODO: move somewhere more sane
@@ -590,7 +593,7 @@ s64 getPresedence(Token token) {
     return 0;
 }
 
-Expression* parseIncreasingPresedence(ParseContext* ctx, Arena* mem, ASTNode* left, s64 minPrec) {
+Expression* parseIncreasingPresedence(ParseContext* ctx, Arena* mem, Expression* left, s64 minPrec) {
     Token next = parsePeek(ctx, 0);
     if(!isOperator(next)) return left;
 
@@ -619,7 +622,7 @@ Expression* parseExpression(ParseContext* ctx, Arena* mem) {
     return parseDecreasingPresedence(ctx, mem, 0);
 }
 
-bool parseCheckSemicolon(ParseContext* ctx){
+bool parseCheckSemicolon(ParseContext* ctx) {
     Token next = parseConsume(ctx);
     if(next.type != TokenType_SEMICOLON){
         ERROR_VA(next.loc, "Statement needs to end with ; got: %s", TokenTypeStr[next.type]);
@@ -627,7 +630,7 @@ bool parseCheckSemicolon(ParseContext* ctx){
     return TRUE;
 }
 
-Scope* parseScopeInit(Arena* mem, Scope* parent){
+Scope* parseScopeInit(Arena* mem, Scope* parent) {
     Scope* result = arena_alloc(mem, sizeof(Scope));
     result->parent = parent;
     HashmapInit(result->constants, 0x100); // TODO: a more sane default size
@@ -731,8 +734,8 @@ ExpressionEvaluationResult evaluate_expression(Expression* expr) {
         UNIMPLEMENTED("function call in const");
     } else if (expr->type == ExpressionType_BINARY_EXPRESSION) {
         String op = expr->expr.BINARY_EXPRESSION.operator.value;
-        ASTNode* lhs = expr->expr.BINARY_EXPRESSION.lhs;
-        ASTNode* rhs = expr->expr.BINARY_EXPRESSION.rhs;
+        Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
+        Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
         if(StringEqualsCstr(op, "+")) {
             ExpressionEvaluationResult lhsResult = evaluate_expression(lhs);
             ExpressionEvaluationResult rhsResult = evaluate_expression(rhs);
@@ -756,7 +759,7 @@ ExpressionEvaluationResult evaluate_expression(Expression* expr) {
         }
     } else if (expr->type == ExpressionType_UNARY_EXPRESSION) {
         String op = expr->expr.UNARY_EXPRESSION.operator.value;
-        ASTNode* subExpr = expr->expr.UNARY_EXPRESSION.expr;
+        Expression* subExpr = expr->expr.UNARY_EXPRESSION.expr;
         if(StringEqualsCstr(op, "-")) {
             result = evaluate_expression(subExpr);
             result.isNegative = !result.isNegative;
@@ -774,42 +777,50 @@ ExpressionEvaluationResult evaluate_expression(Expression* expr) {
 
 // if the context points to a `{` parse multiple statements,
 // else only add one statement to the scope
-Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
-    Scope* result = parseScopeInit(mem, parent);
-
+// target is the scope that the statements of the scope will be parsed into
+void parseScope2(ParseContext* ctx, Arena* mem, Scope* target) {
     // scope isnt enclosed by {} instead its just a single statement
     Token next = parsePeek(ctx, 0);
     if(next.type != TokenType_LSCOPE) {
-        ASTNode* statement = parseStatement(ctx, mem, parent);
+        ASTNode* statement = parseStatement(ctx, mem, target);
         if(statement->type == ASTNodeType_VAR_CONST) {
             String id = statement->node.VAR_CONST.identifier;
             Expression* expr = statement->node.VAR_CONST.expr;
-            if(!HashmapSet(String, ExpressionPtr)(&result->constants, id, expr)) {
+            if(!HashmapSet(String, ExpressionPtr)(&target->constants, id, expr)) {
                 UNREACHABLE("Failed to insert into hashmap");
             }
         } else {
-            ArrayAppend(result->statements, statement);
+            ArrayAppend(target->statements, statement);
         }
-        return result;
+        return;
     }
 
     // scope consists of multiple statements enclosed by {}
     parseConsume(ctx); // {
     while(next.type != TokenType_RSCOPE) {
-        ASTNode* statement = parseStatement(ctx, mem, parent);
+        ASTNode* statement = parseStatement(ctx, mem, target);
         if(statement->type == ASTNodeType_VAR_CONST) {
             String id = statement->node.VAR_CONST.identifier;
             Expression* expr = statement->node.VAR_CONST.expr;
-            if(!HashmapSet(String, ExpressionPtr)(&result->constants, id, expr)) {
+            if(!HashmapSet(String, ExpressionPtr)(&target->constants, id, expr)) {
                 UNREACHABLE("Failed to insert into hashmap");
             }
         } else {
-            ArrayAppend(result->statements, statement);
+            ArrayAppend(target->statements, statement);
         }
         next = parsePeek(ctx, 0);
     }
     parseConsume(ctx); // }
 
+    return;
+}
+
+// if the context points to a `{` parse multiple statements,
+// else only add one statement to the scope
+// a new scope will be created with the parent as a parent, and the statements of the scope will be parsed into it
+Scope* parseScope(ParseContext* ctx, Arena* mem, Scope* parent) {
+    Scope* result = parseScopeInit(mem, parent);
+    parseScope2(ctx, mem, result);
     return result;
 }
 
@@ -882,6 +893,8 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
             parseCheckSemicolon(ctx);
         } break;
         case TokenType_LSCOPE: {
+            UNIMPLEMENTED("TokenType_LSCOPE as a statement begin");
+            // TODO: the scope is consumed here which is wrong
             Scope* scope = parseScope(ctx, mem, parent);
             // TODO: scope is not a single statement, but should still be valid, should this be its own ASTNode_Type?
             UNUSED(scope);
@@ -911,6 +924,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 ERROR_VA(next.loc, "Unknown compiler instrucion: "STR_FMT, STR_PRINT(next.value));
             }
 
+            result->type = ASTNodeType_DIRECTIVE;
             parseCheckSemicolon(ctx);
         } break;
         case TokenType_IDENTIFIER: {
@@ -937,7 +951,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 result->node.VAR_DECL_ASSIGN.identifier = t.value;
                 result->node.VAR_DECL_ASSIGN.expr = parseExpression(ctx, mem);
                 // NOTE: parse inferred during typechecking, void assigned here so we  can print the node
-                result->node.VAR_DECL_ASSIGN.type = typeVoid(mem);
+                result->node.VAR_DECL_ASSIGN.type = TypeInitSimple(mem, TYPE_VOID);
 
                 // parseScopeAddSymbol(parent, t.value); // TODO: this symbol should go in the current scope not the parent
                 parseCheckSemicolon(ctx);

@@ -7,6 +7,10 @@
 #include "lexer.h"
 #include "dataStructuresDefs.h"
 
+typedef struct Scope Scope;
+typedef Scope* ScopePtr;
+defArray(ScopePtr);
+
 typedef struct Expression Expression;
 typedef Expression* ExpressionPtr;
 defArray(ExpressionPtr);
@@ -15,7 +19,7 @@ defArray(ExpressionPtr);
 typedef struct FunctionArg {
     String id;
     TypeInfo* type;
-    Expression initialValue; // the expression this argument should be initialized with
+    Expression* initialValue; // the expression this argument should be initialized with
 } FunctionArg;
 
 defArray(FunctionArg);
@@ -87,6 +91,7 @@ typedef enum ASTNodeType {
     ASTNodeType_IF,
     ASTNodeType_LOOP,
     ASTNodeType_EXPRESSION,
+    ASTNodeType_DIRECTIVE,
     
     ASTNodeType_COUNT,
 } ASTNodeType;
@@ -102,6 +107,8 @@ static char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
     [ASTNodeType_RET]               = "RET",
     [ASTNodeType_IF]                = "IF",
     [ASTNodeType_LOOP]              = "LOOP",
+    [ASTNodeType_EXPRESSION]        = "EXPRESSION",
+    [ASTNodeType_DIRECTIVE]         = "DIRECTIVE",
 
     [ASTNodeType_COUNT]             = "COUNT",
 };
@@ -111,12 +118,7 @@ typedef struct ASTNode ASTNode;
 typedef ASTNode* ASTNodePtr;
 
 defArray(ASTNodePtr);
-defArray(String);
 
-typedef struct Scope Scope;
-typedef Scope* ScopePtr;
-
-defArray(ScopePtr);
 defHashmapFuncs(String, ExpressionPtr)
 
 typedef struct Scope {
@@ -208,6 +210,12 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem);
 ParseResult Parse(Array(Token) tokens, Arena* mem);
 ExpressionEvaluationResult evaluate_expression(Expression* expr);
 ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent);
+Scope* parseScopeInit(Arena* mem, Scope* parent);
+TypeInfo* parseType(ParseContext* ctx, Arena* mem);
+bool isFunctionLit(ParseContext* ctx, Token next);
+
+bool parseCheckSemicolon(ParseContext* ctx);
+void parseScope2(ParseContext* ctx, Arena* mem, Scope* target);
 
 #if COMP_DEBUG
 void ASTPrint(Scope* root);
