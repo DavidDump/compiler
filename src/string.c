@@ -120,6 +120,33 @@ u64 StringToU64(String value) {
     return result;
 }
 
+String StringFromU64(Arena* mem, u64 value) {
+    String result = {0};
+
+    u64 tmp = value;
+    u64 digitCount = 0;
+    Array(u8) digits;
+    while(tmp != 0) {
+        u64 digit = tmp % 10;
+        u8 digitAscii = digit + '0';
+        ArrayAppend(digits, digitAscii);
+
+        tmp /= 10;
+        digitCount++;
+    }
+
+    result.str = arena_alloc(mem, digitCount);
+    result.length = digitCount;
+
+    for(s64 i = (s64)digits.size; i >= 0; --i) {
+        u8 digit = digits.data[i];
+        result.str[digits.size - i] = digit;
+    }
+
+    free(digits.data);
+    return result;
+}
+
 u32 StringToU32(String value) {
     u32 result = 0;
 

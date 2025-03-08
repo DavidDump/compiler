@@ -3,6 +3,8 @@
 
 #include "common.h"
 #include "arena.h"
+#include "dataStructures.h"
+#include "commonTypes.h"
 
 // used for printing String type, usage:
 //     String foo = STR("test string");
@@ -17,6 +19,7 @@ typedef struct String {
     u8* str;
     u64 length;
 } String;
+defArray(String);
 
 typedef struct StringNode StringNode;
 
@@ -44,6 +47,7 @@ bool StringEqualsCstr(String str1, char* cstr);
 bool StringContains(String str1, char* cstr);
 int StringToInt(String str);
 u64 StringToU64(String value);
+String StringFromU64(Arena* mem, u64 value);
 u32 StringToU32(String value);
 s64 StringToS64(String value);
 bool StringEndsWith(String str, String end);
