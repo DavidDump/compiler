@@ -7,6 +7,7 @@
 #include "dataStructuresDefs.h"
 #include "parser.h"
 #include "typechecker.h"
+#include "commonTypes.h"
 
 // Register values used in the Mod/RM byte
 typedef enum Register {
@@ -59,7 +60,7 @@ typedef struct GenContext {
 
     Hashmap(String, s64) functions; // value is the offset to the begining of the function from the begining of the code buffer
     // NOTE: temporarly disabled due to typechecking
-    // Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
+    Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
     // Hashmap(String, s64) constants; // value is the value of a constant that should be hardcoded
 } GenContext;
 
@@ -158,11 +159,12 @@ typedef struct Instruction {
 
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
-void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope);
-void genGenericScope(GenContext* ctx, Scope* scope, GenScope* parentScope);
-void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope);
-void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localScope);
-GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo);
+void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope);
+void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentScope);
+void genFunction(GenContext* ctx, String id, ConstValue fnScope);
+// void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope);
+void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope);
+GenContext gen_x86_64_bytecode(TypecheckedScope* scope);
 
 #endif // COMP_BYTECODE_H
 

@@ -457,6 +457,11 @@ void gen_SizeInReg(GenContext* ctx, Register reg, String name) {
 // TODO: the below section of the file should be in codegen.c
 // 
 
+// NOTE: not tested
+u64 align(u64 num, u64 alignment) {
+    return (num + alignment) & ~alignment;
+}
+
 void genPush(GenContext* ctx, GenScope* scope, Register reg) {
     scope->stackPointer++;
     genInstruction(ctx, INST(push, OP_REG(reg)));
@@ -486,7 +491,7 @@ SymbolLocationResult findSymbolLocation(GenScope* scope, String name) {
     return result;
 }
 
-void gen_x86_64_expression(GenContext* ctx, Expression* expr, TypeInfo* typeInfo, GenScope* localScope) {
+void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope) {
     if(expr->type == ExpressionType_INT_LIT) {
         String value = expr->expr.INT_LIT.value;
         // TODO: check if the number is signed or unsigned and parse it differently based on that
@@ -528,13 +533,12 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, TypeInfo* typeInfo
         }
     } else if(expr->type == ExpressionType_FUNCTION_CALL) {
         String id = expr->expr.FUNCTION_CALL.identifier;
-        Array(ExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
+        Array(TypecheckedExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
 
         for(u64 i = 0; i < args.size; ++i) {
-            Expression* arg = args.data[i];
-            TypeInfo argType = {0};
+            TypecheckedExpression* arg = args.data[i];
 
-            gen_x86_64_expression(ctx, arg, &argType, localScope);
+            gen_x86_64_expression(ctx, arg, localScope);
             if(i == 0) {
                 genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
             } else if(i == 1) {
@@ -548,8 +552,8 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, TypeInfo* typeInfo
             }
         }
 
-        assert(typeInfo->symbolType == TYPE_FUNCTION, "");
-        if(typeInfo->functionInfo.isExternal) {
+        assert(expr->typeInfo->symbolType == TYPE_FUNCTION, "");
+        if(expr->typeInfo->functionInfo.isExternal) {
             // NOTE: "In the Microsoft x64 calling convention, it is the caller's responsibility to allocate 32 bytes of "shadow space"
             //       on the stack right before calling the function, and to pop the stack after the call."
             //       -wikipedia, https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
@@ -562,37 +566,36 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, TypeInfo* typeInfo
             gen_call(ctx, id);
         }
     } else if(expr->type == ExpressionType_BINARY_EXPRESSION) {
-        Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
+        TypecheckedExpression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
         String operator = expr->expr.BINARY_EXPRESSION.operator.value;
-        Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
+        TypecheckedExpression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but then again what do i know
-        // TODO: tmp, the typeInfo is not correct in any of these, need `TypecheckedExpression` first
         if(StringEqualsCstr(operator, "+")) {
-            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, lhs, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, rhs, localScope);
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(add, OP_REG(RAX), OP_REG(RCX)));
         } else if(StringEqualsCstr(operator, "-")) {
-            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, rhs, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, lhs, localScope);
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(sub, OP_REG(RAX), OP_REG(RCX)));
         } else if(StringEqualsCstr(operator, "*")) {
             // NOTE: mul rcx means rax = rax * rcx
-            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, lhs, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, rhs, localScope);
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(mul, OP_REG(RCX)));
         } else if(StringEqualsCstr(operator, "/")) {
             // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
             // div rcx means rax = rax / rcx remainder is rdx
-            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, rhs, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
+            gen_x86_64_expression(ctx, lhs, localScope);
             genInstruction(ctx, INST(mov, OP_REG(RDX), OP_IMM8(0))); // TODO: this can be changed to: xor rdx, rdx
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(div, OP_REG(RCX)));
@@ -605,18 +608,17 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, TypeInfo* typeInfo
 
 // return the offset, from the begining of the code buffer, to the jump instruction target address that needs to be patched
 // offset = offset + 4 + scopeLen
-u64 gen_x86_64_condition(GenContext* ctx, Expression* expr, TypeInfo* typeInfo, GenScope* localScope) {
+u64 gen_x86_64_condition(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope) {
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
     assert(expr->type == ExpressionType_BINARY_EXPRESSION, "");
-    Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
-    Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
+    TypecheckedExpression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
+    TypecheckedExpression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
     String op = expr->expr.BINARY_EXPRESSION.operator.value;
 
-    // TODO: tmp, typeInfo not correct here, need `TypecheckedExpression` first
-    gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
+    gen_x86_64_expression(ctx, rhs, localScope);
     genPush(ctx, localScope, RAX);
-    gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
+    gen_x86_64_expression(ctx, lhs, localScope);
     genPop(ctx, localScope, RCX);
     genInstruction(ctx, INST(cmp, OP_REG(RAX), OP_REG(RCX)));
 
@@ -684,8 +686,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
         case ASTNodeType_VAR_REASSIGN:
         case ASTNodeType_VAR_DECL_ASSIGN: {
             String id = statement.node.VAR_ACCESS.identifier;
-            Expression* expr = statement.node.VAR_ACCESS.expr;
-            TypeInfo* typeInfo = statement.node.VAR_ACCESS.type;
+            TypecheckedExpression* expr = statement.node.VAR_ACCESS.expr;
 
             // TODO: this only looks at the local variables, add globals as well
             s64 varLocation = 0;
@@ -693,14 +694,13 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
                 UNREACHABLE("local variable not defined");
             }
 
-            gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+            gen_x86_64_expression(ctx, expr, genScope);
             genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -varLocation), OP_REG(RAX)));
         } break;
         case ASTNodeType_RET: {
-            Expression* expr = statement.node.RET.expr;
-            TypeInfo* typeInfo = statement.node.RET.type;
+            TypecheckedExpression* expr = statement.node.RET.expr;
 
-            gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+            gen_x86_64_expression(ctx, expr, genScope);
 
             // NOTE: we may want to generate the function postamble outside of this the `genStatement` function
             genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
@@ -725,7 +725,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             // if condition
             {
                 TypechekedConditionalBlock firstBlock = blocks.data[0];
-                u64 patchTarget = gen_x86_64_condition(ctx, firstBlock.expr, firstBlock.type, genScope);
+                u64 patchTarget = gen_x86_64_condition(ctx, firstBlock.expr, genScope);
                 genGenericScope(ctx, firstBlock.scope, genScope);
 
                 if(hasElse) {
@@ -739,7 +739,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             // optional else if conditions
             for(u64 h = 1; h < blocks.size; ++h) {
                 TypechekedConditionalBlock block = blocks.data[h];
-                u64 patchTarget = gen_x86_64_condition(ctx, block.expr, block.type, genScope);
+                u64 patchTarget = gen_x86_64_condition(ctx, block.expr, genScope);
                 genGenericScope(ctx, block.scope, genScope);
 
                 bool isLastBlock = !(h + 1 < blocks.size);
@@ -765,14 +765,14 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             free(patchTargets.data);
         } break;
         case ASTNodeType_LOOP: {
-            Expression* expr = statement.node.LOOP.expr;
+            TypecheckedExpression* expr = statement.node.LOOP.expr;
             TypecheckedScope* scope = statement.node.LOOP.scope;
-            TypeInfo* typeInfo = statement.node.LOOP.type;
+            TypeInfo* typeInfo = expr->typeInfo;
             
             if(typeInfo->symbolType == TYPE_BOOL) {
                 // check condition every iteration
                 u64 conditionAddress = ctx->code.size;
-                u64 patchTarget = gen_x86_64_condition(ctx, expr, typeInfo, genScope);
+                u64 patchTarget = gen_x86_64_condition(ctx, expr, genScope);
                 genGenericScope(ctx, scope, genScope);
 
                 u64 addressAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
@@ -782,7 +782,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
                 // iterate n amount of times
 
                 // declare the loop count variable
-                gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+                gen_x86_64_expression(ctx, expr, genScope);
                 s64 loopCountStackLocation = genScope->stackPointer;
                 genPush(ctx, genScope, RAX);
 
@@ -808,10 +808,11 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             }
         } break;
         case ASTNodeType_EXPRESSION: {
-            Expression* expr = statement.node.EXPRESSION.expr;
-            TypeInfo* typeInfo = statement.node.EXPRESSION.type;
-            gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+            TypecheckedExpression* expr = statement.node.EXPRESSION.expr;
+            gen_x86_64_expression(ctx, expr, genScope);
         } break;
+
+        case ASTNodeType_DIRECTIVE: break;
     }
 }
 
@@ -834,10 +835,12 @@ GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
         // codegen function
         genFunction(&ctx, fnName, fnScope);
     }
+
+    return ctx;
 }
 
 void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
-    assertf(fnScope.typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(typeToString(fnScope.typeInfo->symbolType)));
+    assertf(fnScope.typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx->mem, fnScope.typeInfo)));
     TypeInfo* typeInfo = fnScope.typeInfo;
     if(typeInfo->functionInfo.isExternal) return;
 
@@ -873,9 +876,12 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
     }
 
     // function arguments
-    for(u64 i = 0; i < typeInfo->functionInfo.argTypes.size; ++i) {
-        String argId = ;
-        TypeInfo* argType = typeInfo->functionInfo.argTypes.data[i];
+    for(u64 i = 0; i < typeInfo->functionInfo.args.size; ++i) {
+        StringAndType fnArg = typeInfo->functionInfo.args.data[i];
+        String argId = fnArg.id;
+        TypeInfo* argType = fnArg.type;
+        // Expression* argValue = fnArg.initialValue;
+        // UNUSED(argValue);
 
         genScope->stackSpaceForLocalVars += TypeToByteSize(argType);
 
@@ -905,15 +911,14 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
     }
 
     genScope->stackSpaceForLocalVars = align(genScope->stackSpaceForLocalVars, 16);
-    genInstruction(&ctx, INST(sub, OP_REG(RSP), OP_IMM32(genScope->stackSpaceForLocalVars))); // TODO: this needs to be generated after `mov rbp, rsp`
+    genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM32(genScope->stackSpaceForLocalVars))); // TODO: this needs to be generated after `mov rbp, rsp`
     genScope->stackPointer += genScope->stackSpaceForLocalVars / 8;
 
     // scope
     for(u64 h = 0; h < fnScope.as_function->statements.size; ++h) {
         TypecheckedStatement statement = fnScope.as_function->statements.data[h];
-        genStatement(&ctx, statement, genScope);
+        genStatement(ctx, statement, genScope);
     }
 }
-
 
 // TODO: make sure to preserve non volitile register when entering a function

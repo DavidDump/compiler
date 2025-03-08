@@ -19,7 +19,6 @@ typedef struct AddrToPatch {
     u64 offset;
 } AddrToPatch;
 
-defArray(u8);
 defArray(AddrToPatch);
 
 #endif // COMP_BYTECODE_EXE_COMMON_H
