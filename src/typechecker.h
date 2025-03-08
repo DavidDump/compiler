@@ -5,6 +5,7 @@
 #include "parser.h"
 #include "types.h"
 #include "dataStructures.h"
+#include "commonTypes.h"
 
 typedef struct TypecheckedScope TypecheckedScope;
 
@@ -19,6 +20,7 @@ typedef struct ConstValue {
         TypecheckedScope* as_function;
     };
 } ConstValue;
+defArray(ConstValue);
 
 typedef struct TypeResult {
     bool err;
@@ -36,52 +38,84 @@ typedef struct EvaluateConstantResult {
     ConstValue val;
 } EvaluateConstantResult;
 
-defHashmapFuncs(String, ConstValue);
-defHashmapFuncs(String, TypeInfoPtr);
-defArray(u64);
+defHashmapFuncs(String, ConstValue)
+defHashmapFuncs(String, TypeInfoPtr)
 
-typedef enum BaseTypesIndex {
-    BaseTypesIndex_S64,
-    BaseTypesIndex_F64,
-    BaseTypesIndex_STRING,
-    BaseTypesIndex_BOOL,
-    BaseTypesIndex_COUNT,
-} BaseTypesIndex;
+typedef struct TypecheckedExpression TypecheckedExpression;
+typedef TypecheckedExpression* TypecheckedExpressionPtr;
+defArray(TypecheckedExpressionPtr);
+typedef struct TypecheckedExpression {
+    ExpressionType type;
+    union {
+        struct {
+            Token operator;
+            TypecheckedExpression* rhs;
+            TypecheckedExpression* lhs;
+        } BINARY_EXPRESSION;
+        struct {
+            Token operator;
+            TypecheckedExpression* expr;
+        } UNARY_EXPRESSION;
+        struct {
+            String value;
+        } INT_LIT;
+        struct {
+            String wholePart;
+            String fractPart;
+        } FLOAT_LIT;
+        struct {
+            String value;
+        } STRING_LIT;
+        struct {
+            String value;
+        } BOOL_LIT;
+        struct {
+            String identifier;
+        } SYMBOL;
+        struct {
+            String identifier;
+            Array(TypecheckedExpressionPtr) args;
+        } FUNCTION_CALL;
+        struct {
+            TypeInfo* returnType;
+            Array(FunctionArg) args;
+            Scope* scope;
+            bool isExtern;
+        } FUNCTION_LIT;
+    } expr;
+    // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
+    TypeInfo* typeInfo;
+} TypecheckedExpression;
 
 typedef struct TypechekedConditionalBlock {
-    Expression* expr;
+    TypecheckedExpression* expr;
     TypecheckedScope* scope;
-    TypeInfo* type;
 } TypechekedConditionalBlock;
 
 defArray(TypechekedConditionalBlock);
 
 typedef struct TypecheckedStatement {
     ASTNodeType type;
-    union Node {
+    union {
         // NOTE: VAR_DECL_ASSIGN and VAR_REASSIGN got combined into VAR_ACCESS
-        struct VAR_ACCESS {
+        struct {
             String identifier;
-            Expression* expr;
-            TypeInfo* type;
+            TypecheckedExpression* expr;
         } VAR_ACCESS;
-        struct RET {
-            Expression* expr;
-            TypeInfo* type;
+        struct {
+            TypecheckedExpression* expr;
         } RET;
-        struct IF {
+        struct {
             Array(TypechekedConditionalBlock) blocks;
             bool hasElse;
             TypecheckedScope* elze;
         } IF;
-        struct LOOP {
-            Expression* expr;
+        struct {
+            TypecheckedExpression* expr;
             TypecheckedScope* scope;
-            TypeInfo* type;
         } LOOP;
-        struct EXPRESSION {
-            Expression* expr;
-            TypeInfo* type;
+        struct {
+            TypecheckedExpression* expr;
         } EXPRESSION;
     } node;
 } TypecheckedStatement;
@@ -93,13 +127,16 @@ defArray(TypecheckedStatement);
 //       - each scope should contain a list constants defined in that scope
 typedef struct TypecheckedScope {
     struct TypecheckedScope* parent;
-    Hashmap(String, ConstValue) constants;
+    Hashmap(String, ConstValue) constants;  // TODO: remove constants, the value of a constant should replace the leaf SYMBOL node in the Expression
     Hashmap(String, TypeInfoPtr) variables; // global or local variables, depending on if this is the toplevel scope
+    // global variables need to be constant, and evaluated
+    // local variables only need to have a known type during compile time
 
     Array(u64) functionIndicies; // the indicies in the constants hashmap which contain function literals
     Array(TypecheckedStatement) statements;
 } TypecheckedScope;
 
+TypecheckedScope* typecheckScope(Arena* mem, Scope* scope, TypecheckedScope* parent, TypeInfo* expectedReturnType, bool isTopLevel);
 TypecheckedScope* typecheck(Arena* mem, ParseResult* parseResult);
 
 #endif // TYPECHECKER_H

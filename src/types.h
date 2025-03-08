@@ -62,8 +62,15 @@ typedef struct TypeInfo TypeInfo;
 typedef TypeInfo* TypeInfoPtr;
 defArray(TypeInfoPtr);
 
+typedef struct StringAndType {
+    String id;
+    TypeInfo* type;
+} StringAndType;
+
+defArray(StringAndType);
+
 typedef struct FunctionInfo {
-    Array(TypeInfoPtr) argTypes;
+    Array(StringAndType) args;
     TypeInfo* returnType;
     bool isExternal;
 } FunctionInfo;
@@ -76,13 +83,24 @@ typedef struct ArrayInfo {
 
 typedef struct TypeInfo {
     Type symbolType;
-    bool isPointer; // flag if the type is a pointer to symbolType type
+    bool isPointer;  // flag if the type is a pointer to symbolType type
+    bool isConstant; // flag if all the leaves of the expression are constant values, example.: 1 + 1
     ArrayInfo arrayInfo;
     FunctionInfo functionInfo; // if fuction, contains information about the function
 } TypeInfo;
 
-TypeInfo* typeVoid(Arena* mem);
-String typeToString(TypeInfo typeInfo);
+TypeInfo* TypeInitSimple(Arena* mem, Type t);
+String TypeToString(Arena* mem, TypeInfo* typeInfo);
+u64 TypeToByteSize(TypeInfo* type);
+bool TypeIsSigned(TypeInfo* type);
+bool TypeIsUnsigned(TypeInfo* type);
+bool TypeIsFloat(TypeInfo* type);
+bool TypeIsInt(TypeInfo* type);
+bool TypeIsNumber(TypeInfo* type);
+bool TypeIsBool(TypeInfo* type);
+bool TypeMatch(TypeInfo* type1, TypeInfo* type2);
+Type TypeDefaultInt();
+Type TypeDefaultFloat();
 
 #endif // COMP_TYPES_H
 

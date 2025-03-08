@@ -467,47 +467,26 @@ void genPop(GenContext* ctx, GenScope* scope, Register reg) {
     genInstruction(ctx, INST(pop, OP_REG(reg)));
 }
 
-void gen_x86_64_func_call(GenContext* ctx, Expression* funcCall, GenScope* localScope) {
-    assert(funcCall->type == ExpressionType_FUNCTION_CALL, "");
-    String id = funcCall->expr.FUNCTION_CALL.identifier;
-    Array(ExpressionPtr) args = funcCall->expr.FUNCTION_CALL.args;
+typedef struct SymbolLocationResult {
+    bool err;
+    s64 value;
+} SymbolLocationResult;
 
-    for(u64 i = 0; i < args.size; ++i) {
-        Expression* arg = args.data[i];
-
-        gen_x86_64_expression(ctx, arg, localScope);
-        if(i == 0) {
-            genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
-        } else if(i == 1) {
-            genInstruction(ctx, INST(mov, OP_REG(RDX), OP_REG(RAX)));
-        } else if(i == 2) {
-            genInstruction(ctx, INST(mov, OP_REG(R8), OP_REG(RAX)));
-        } else if(i == 3) {
-            genInstruction(ctx, INST(mov, OP_REG(R9), OP_REG(RAX)));
-        } else {
-            genPush(ctx, localScope, RAX);
+SymbolLocationResult findSymbolLocation(GenScope* scope, String name) {
+    SymbolLocationResult result = {0};
+    GenScope* at = scope;
+    while(at) {
+        if(HashmapGet(String, s64)(&at->localVars, name, &result.value)) {
+            return result;
         }
+        at = at->parent;
     }
 
-    FuncInfo value = {0};
-    if(!HashmapGet(String, FuncInfo)(&ctx->funcInfo, id, &value)) {
-        UNREACHABLE("function not found in hashmap");
-    }
-    if(value.isExtern) {
-        // NOTE: "In the Microsoft x64 calling convention, it is the caller's responsibility to allocate 32 bytes of "shadow space"
-        //       on the stack right before calling the function, and to pop the stack after the call."
-        //       -wikipedia, https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
-        genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM8(32)));
-        localScope->stackPointer -= 4;
-        gen_callExtern(ctx, id);
-        genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM8(32)));
-        localScope->stackPointer += 4;
-    } else {
-        gen_call(ctx, id);
-    }
+    result.err = TRUE;
+    return result;
 }
 
-void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localScope) {
+void gen_x86_64_expression(GenContext* ctx, Expression* expr, TypeInfo* typeInfo, GenScope* localScope) {
     if(expr->type == ExpressionType_INT_LIT) {
         String value = expr->expr.INT_LIT.value;
         // TODO: check if the number is signed or unsigned and parse it differently based on that
@@ -517,6 +496,8 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localSco
     } else if(expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
     } else if(expr->type == ExpressionType_STRING_LIT) {
+        UNIMPLEMENTED("String literals in codegen");
+        #if 0
         // TODO: this branch is implemented in a very scuffed way,
         //       only here because i needed a quick working version
         //       potential optimization is to collect all the string literals
@@ -533,64 +514,85 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localSco
             UNREACHABLE("failed to insert into hashmap");
         }
         gen_DataInReg(ctx, RAX, lit);
+        #endif
     } else if(expr->type == ExpressionType_BOOL_LIT) {
         UNIMPLEMENTED("expression generation with bools");
     } else if(expr->type == ExpressionType_SYMBOL) {
         String id = expr->expr.SYMBOL.identifier;
 
-        s64 value;
-        GenScope* at = localScope;
-        bool success = FALSE;
-        while(at) {
-            if(HashmapGet(String, s64)(&at->localVars, id, &value)) {
-                success = TRUE;
-                break;
-            }
-            at = at->parent;
-        }
-        if(!success) {
-            if(!HashmapGet(String, s64)(&ctx->constants, id, &value)) {
-                UNREACHABLE("cannot generate expression with a undefined variable or constant");
-            } else {
-                genInstruction(ctx, INST(mov, OP_REG(RAX), OP_IMM32(value)));
-                // TODO: dont remember writing this anymore, is it correct?
-            }
+        SymbolLocationResult res = findSymbolLocation(localScope, id);
+        if(!res.err) {
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, -(res.value * 8))));
         } else {
-            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, -(value * 8))));
+            UNREACHABLE("Symbol not defined");
         }
     } else if(expr->type == ExpressionType_FUNCTION_CALL) {
-        gen_x86_64_func_call(ctx, expr, localScope);
+        String id = expr->expr.FUNCTION_CALL.identifier;
+        Array(ExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
+
+        for(u64 i = 0; i < args.size; ++i) {
+            Expression* arg = args.data[i];
+            TypeInfo argType = {0};
+
+            gen_x86_64_expression(ctx, arg, &argType, localScope);
+            if(i == 0) {
+                genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
+            } else if(i == 1) {
+                genInstruction(ctx, INST(mov, OP_REG(RDX), OP_REG(RAX)));
+            } else if(i == 2) {
+                genInstruction(ctx, INST(mov, OP_REG(R8), OP_REG(RAX)));
+            } else if(i == 3) {
+                genInstruction(ctx, INST(mov, OP_REG(R9), OP_REG(RAX)));
+            } else {
+                genPush(ctx, localScope, RAX);
+            }
+        }
+
+        assert(typeInfo->symbolType == TYPE_FUNCTION, "");
+        if(typeInfo->functionInfo.isExternal) {
+            // NOTE: "In the Microsoft x64 calling convention, it is the caller's responsibility to allocate 32 bytes of "shadow space"
+            //       on the stack right before calling the function, and to pop the stack after the call."
+            //       -wikipedia, https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
+            genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM8(32)));
+            localScope->stackPointer -= 4;
+            gen_callExtern(ctx, id);
+            genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM8(32)));
+            localScope->stackPointer += 4;
+        } else {
+            gen_call(ctx, id);
+        }
     } else if(expr->type == ExpressionType_BINARY_EXPRESSION) {
         Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
         String operator = expr->expr.BINARY_EXPRESSION.operator.value;
         Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but then again what do i know
+        // TODO: tmp, the typeInfo is not correct in any of these, need `TypecheckedExpression` first
         if(StringEqualsCstr(operator, "+")) {
-            gen_x86_64_expression(ctx, lhs, localScope);
+            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, rhs, localScope);
+            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(add, OP_REG(RAX), OP_REG(RCX)));
         } else if(StringEqualsCstr(operator, "-")) {
-            gen_x86_64_expression(ctx, rhs, localScope);
+            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, lhs, localScope);
+            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(sub, OP_REG(RAX), OP_REG(RCX)));
         } else if(StringEqualsCstr(operator, "*")) {
             // NOTE: mul rcx means rax = rax * rcx
-            gen_x86_64_expression(ctx, lhs, localScope);
+            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, rhs, localScope);
+            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(mul, OP_REG(RCX)));
         } else if(StringEqualsCstr(operator, "/")) {
             // NOTE: http://stackoverflow.com/questions/45506439/ddg#45508617
             // div rcx means rax = rax / rcx remainder is rdx
-            gen_x86_64_expression(ctx, rhs, localScope);
+            gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
             genPush(ctx, localScope, RAX);
-            gen_x86_64_expression(ctx, lhs, localScope);
+            gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
             genInstruction(ctx, INST(mov, OP_REG(RDX), OP_IMM8(0))); // TODO: this can be changed to: xor rdx, rdx
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(div, OP_REG(RCX)));
@@ -603,7 +605,7 @@ void gen_x86_64_expression(GenContext* ctx, Expression* expr, GenScope* localSco
 
 // return the offset, from the begining of the code buffer, to the jump instruction target address that needs to be patched
 // offset = offset + 4 + scopeLen
-u64 gen_x86_64_condition(GenContext* ctx, Expression* expr, GenScope* localScope) {
+u64 gen_x86_64_condition(GenContext* ctx, Expression* expr, TypeInfo* typeInfo, GenScope* localScope) {
     // NOTE: if a else if condition is generated and one of the operands is the same as in the previous condition,
     // it doesnt need to be moved into a register as its already there
     assert(expr->type == ExpressionType_BINARY_EXPRESSION, "");
@@ -611,9 +613,10 @@ u64 gen_x86_64_condition(GenContext* ctx, Expression* expr, GenScope* localScope
     Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
     String op = expr->expr.BINARY_EXPRESSION.operator.value;
 
-    gen_x86_64_expression(ctx, rhs, localScope);
+    // TODO: tmp, typeInfo not correct here, need `TypecheckedExpression` first
+    gen_x86_64_expression(ctx, rhs, typeInfo, localScope);
     genPush(ctx, localScope, RAX);
-    gen_x86_64_expression(ctx, lhs, localScope);
+    gen_x86_64_expression(ctx, lhs, typeInfo, localScope);
     genPop(ctx, localScope, RCX);
     genInstruction(ctx, INST(cmp, OP_REG(RAX), OP_REG(RCX)));
 
@@ -654,166 +657,57 @@ GenScope* genScopeInit(GenContext* ctx, GenScope* parent) {
     return scope;
 }
 
-// since this is a function scope i dont have to worry about any stack memory as it will be taken care of when the function returns
-void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope) {
-    Array(ASTNodePtr) statements = scope->statements;
-    for(u64 i = 0; i < statements.size; ++i) {
-        ASTNode* statement = statements.data[i];
-        genStatement(ctx, statement, functionScope);
-    }
-}
-
-void genGenericScope(GenContext* ctx, Scope* scope, GenScope* parentScope) {
+// generate a scope used by loops and ifs
+void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentScope) {
     GenScope* localScope = genScopeInit(ctx, parentScope);
     localScope->stackPointer = parentScope->stackPointer;
 
-    Array(ASTNodePtr) statements = scope->statements;
+    Array(TypecheckedStatement) statements = scope->statements;
     for(u64 i = 0; i < statements.size; ++i) {
-        ASTNode* statement = statements.data[i];
+        TypecheckedStatement statement = statements.data[i];
         genStatement(ctx, statement, localScope);
     }
 
     // clean up the scope
-    u64 localVarsSize = localScope->localVars.size;
-    genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM32(localVarsSize * 8)));
+    genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM32(localScope->stackSpaceForLocalVars)));
 }
 
-void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
-    switch(statement->type) {
+void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope) {
+    switch(statement.type) {
+        case ASTNodeType_VAR_DECL:
+        case ASTNodeType_VAR_CONST:
         case ASTNodeType_NONE:
         case ASTNodeType_COUNT: {
-            printf("[ERROR] ast node type ASTNodeType_NONE and ASTNodeType_COUNT are errors.\n");
-            exit(EXIT_FAILURE);
+            UNREACHABLE("gen statement 2");
         } break;
 
-        case ASTNodeType_FUNCTION_DEF: {
-            String id = statement->node.FUNCTION_DEF.identifier;
-            Scope* scope = statement->node.FUNCTION_DEF.scope;
-            Array(FunctionArg) args = statement->node.FUNCTION_DEF.args;
-            TypeInfo retType = statement->node.FUNCTION_DEF.type;
-            UNUSED(retType);
-
-            FuncInfo value = {0};
-            if(!HashmapGet(String, FuncInfo)(&ctx->funcInfo, id, &value)) {
-                assertf(FALSE, "[UNREACHABLE] Function not found in hashmap: "STR_FMT"\n", STR_PRINT(id));
-            }
-            if(value.isExtern) break;
-
-            if(!HashmapSet(String, s64)(&ctx->functions, id, ctx->code.size)) {
-                assertf(FALSE, "[UNREACHABLE] Failed to save the location where function: "STR_FMT" is generated\n", STR_PRINT(id));
-            }
-
-            // NOTE: would be usefull here to generating code into a separate buffer
-            // TODO: make the main entrypoint name customisable
-            bool mainFunction = StringEqualsCstr(id, "main");
-            if(mainFunction) ctx->entryPointOffset = ctx->code.size;
-
-            GenScope* functionScope = genScopeInit(ctx, localScope); // localScope should be NULL here as global scope is null??
-            functionScope->isMainScope = mainFunction;
-
-            genPush(ctx, functionScope, RBP);
-            genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
-
-            // function arguments
-            for(u64 i = 0; i < args.size; ++i) {
-                String argId = args.data[i].id;
-                TypeInfo* argType = args.data[i].type;
-                UNUSED(argType);
-
-                if(i == 0) {
-                    if(!HashmapSet(String, s64)(&functionScope->localVars, argId, functionScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
-                    genPush(ctx, functionScope, RCX);
-                } else if(i == 1) {
-                    if(!HashmapSet(String, s64)(&functionScope->localVars, argId, functionScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
-                    genPush(ctx, functionScope, RDX);
-                } else if(i == 2) {
-                    if(!HashmapSet(String, s64)(&functionScope->localVars, argId, functionScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
-                    genPush(ctx, functionScope, R8);
-                } else if(i == 3) {
-                    if(!HashmapSet(String, s64)(&functionScope->localVars, argId, functionScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
-                    genPush(ctx, functionScope, R9);
-                } else {
-                    if(!HashmapSet(String, s64)(&functionScope->localVars, argId, functionScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
-                    genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, (i - 3) * 8)));
-                    genPush(ctx, functionScope, RAX);
-                }
-            }
-
-            // function body
-            genFunctionScope(ctx, scope, functionScope);
-        } break;
-        case ASTNodeType_FUNCTION_CALL: {
-            gen_x86_64_func_call(ctx, statement, localScope);
-        } break;
-        case ASTNodeType_VAR_DECL: {
-            String id = statement->node.VAR_DECL.identifier;
-            TypeInfo* type = statement->node.VAR_DECL.type;
-            UNUSED(type);
-
-            if(!HashmapSet(String, s64)(&localScope->localVars, id, localScope->stackPointer)) UNREACHABLE("failed to insert into hashmap");
-            // NOTE: 8 is the byte size of a 64 stack slot, maybe sould not be hardcoded
-            genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM8(8)));
-            localScope->stackPointer++;
-        } break;
+        case ASTNodeType_VAR_REASSIGN:
         case ASTNodeType_VAR_DECL_ASSIGN: {
-            Expression* exprNode = statement->node.VAR_DECL_ASSIGN.expr;
-            String id = statement->node.VAR_DECL_ASSIGN.identifier;
-            TypeInfo* type = statement->node.VAR_DECL_ASSIGN.type;
-            UNUSED(type);
+            String id = statement.node.VAR_ACCESS.identifier;
+            Expression* expr = statement.node.VAR_ACCESS.expr;
+            TypeInfo* typeInfo = statement.node.VAR_ACCESS.type;
 
-            gen_x86_64_expression(ctx, exprNode, localScope); // gen code for the expression, store in rax??
-            // store the variable location on the stack in the context
-            if(!HashmapSet(String, s64)(&localScope->localVars, id, localScope->stackPointer)) {
-                UNREACHABLE("failed to insert into hashmap");
+            // TODO: this only looks at the local variables, add globals as well
+            s64 varLocation = 0;
+            if(!HashmapGet(String, s64)(&genScope->localVars, id, &varLocation)) {
+                UNREACHABLE("local variable not defined");
             }
-            genPush(ctx, localScope, RAX); // push the variable value to the stack
-        } break;
-        case ASTNodeType_VAR_REASSIGN: {
-            String id = statement->node.VAR_REASSIGN.identifier;
-            Expression* exprNode = statement->node.VAR_REASSIGN.expr;
 
-            gen_x86_64_expression(ctx, exprNode, localScope);
-
-            s64 value;
-            bool success = FALSE;
-            GenScope* at = localScope;
-            while(at) {
-                if(HashmapGet(String, s64)(&at->localVars, id, &value)) {
-                    success = TRUE;
-                    break;
-                }
-                at = at->parent;
-            }
-            if(!success) UNREACHABLE("failed to find local variable on the stack");
-
-            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -(value * 8)), OP_REG(RAX)));
-        } break;
-        case ASTNodeType_VAR_CONST: {
-            // TODO: this whole thing is giga fucked, will redo with typechecking
-            String id = statement->node.VAR_CONST.identifier;
-            Expression* expr = statement->node.VAR_CONST.expr;
-            // TODO: will need a type
-            // TODO: based on type figure out if its a string or something else
-            //       string goes in one hashmap and signed numbers go in another
-            
-            ExpressionEvaluationResult exprResult = evaluate_expression(expr);
-            s64 value = exprResult.result <= S64_MAX ? (s64)exprResult.result : S64_MAX;
-            value = exprResult.isNegative ? -value : value;
-            // TODO: assuming numerical constant
-            if(!HashmapSet(String, s64)(&ctx->constants, id, value)) {
-                UNREACHABLE("hashmap full");
-            }
+            gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -varLocation), OP_REG(RAX)));
         } break;
         case ASTNodeType_RET: {
-            // NOTE: dead code elimination, currently internal stack underflows if there is more than one return in a add
-            Expression* expr = statement->node.RET.expr;
+            Expression* expr = statement.node.RET.expr;
+            TypeInfo* typeInfo = statement.node.RET.type;
 
-            gen_x86_64_expression(ctx, expr, localScope);
+            gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+
+            // NOTE: we may want to generate the function postamble outside of this the `genStatement` function
             genInstruction(ctx, INST(mov, OP_REG(RSP), OP_REG(RBP)));
-            genPop(ctx, localScope, RBP); // technically not neseccary, as the scope isnt used after
-            // TODO: what is the behaivour when returning from a generic scope? eg.:if, loop
+            genPop(ctx, genScope, RBP); // technically not neseccary, as the scope isnt used after
+            // TODO: what is the behaviour when returning from a generic scope? eg.:if, loop
 
-            if(localScope->isMainScope) {
+            if(genScope->isMainScope) {
                 genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
                 gen_callExtern(ctx, STR("ExitProcess"));
             } else {
@@ -823,16 +717,16 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
             }
         } break;
         case ASTNodeType_IF: {
-            Array(ConditionalBlock) blocks = statement->node.IF.blocks;
-            Scope* elze = statement->node.IF.elze;
-            bool hasElse = statement->node.IF.hasElse;
+            Array(TypechekedConditionalBlock) blocks = statement.node.IF.blocks;
+            TypecheckedScope* elze = statement.node.IF.elze;
+            bool hasElse = statement.node.IF.hasElse;
             Array(u64) patchTargets = {0};
 
             // if condition
             {
-                ConditionalBlock firstBlock = blocks.data[0];
-                u64 patchTarget = gen_x86_64_condition(ctx, firstBlock.expr, localScope);
-                genGenericScope(ctx, firstBlock.scope, localScope);
+                TypechekedConditionalBlock firstBlock = blocks.data[0];
+                u64 patchTarget = gen_x86_64_condition(ctx, firstBlock.expr, firstBlock.type, genScope);
+                genGenericScope(ctx, firstBlock.scope, genScope);
 
                 if(hasElse) {
                     genInstruction(ctx, INST(jmp, OP_IMM32(0)));
@@ -844,9 +738,9 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
 
             // optional else if conditions
             for(u64 h = 1; h < blocks.size; ++h) {
-                ConditionalBlock block = blocks.data[h];
-                u64 patchTarget = gen_x86_64_condition(ctx, block.expr, localScope);
-                genGenericScope(ctx, block.scope, localScope);
+                TypechekedConditionalBlock block = blocks.data[h];
+                u64 patchTarget = gen_x86_64_condition(ctx, block.expr, block.type, genScope);
+                genGenericScope(ctx, block.scope, genScope);
 
                 bool isLastBlock = !(h + 1 < blocks.size);
                 if(!(isLastBlock && !hasElse)) {
@@ -859,7 +753,7 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
 
             // optional else block
             if(hasElse) {
-                genGenericScope(ctx, elze, localScope);
+                genGenericScope(ctx, elze, genScope);
             }
 
             // do all the patches
@@ -871,14 +765,15 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
             free(patchTargets.data);
         } break;
         case ASTNodeType_LOOP: {
-            Expression* expr = statement->node.LOOP.expr;
-            Scope* scope = statement->node.LOOP.scope;
+            Expression* expr = statement.node.LOOP.expr;
+            TypecheckedScope* scope = statement.node.LOOP.scope;
+            TypeInfo* typeInfo = statement.node.LOOP.type;
             
-            if(expr->type == ExpressionType_BINARY_EXPRESSION) {
+            if(typeInfo->symbolType == TYPE_BOOL) {
                 // check condition every iteration
                 u64 conditionAddress = ctx->code.size;
-                u64 patchTarget = gen_x86_64_condition(ctx, expr, localScope);
-                genGenericScope(ctx, scope, localScope);
+                u64 patchTarget = gen_x86_64_condition(ctx, expr, typeInfo, genScope);
+                genGenericScope(ctx, scope, genScope);
 
                 u64 addressAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
                 genInstruction(ctx, INST(jmp, OP_IMM32(conditionAddress - addressAfterJmp)));
@@ -887,16 +782,16 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
                 // iterate n amount of times
 
                 // declare the loop count variable
-                gen_x86_64_expression(ctx, expr, localScope);
-                s64 loopCountStackLocation = localScope->stackPointer;
-                genPush(ctx, localScope, RAX);
+                gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+                s64 loopCountStackLocation = genScope->stackPointer;
+                genPush(ctx, genScope, RAX);
 
                 // condition and scope
                 u64 addrAtCmp = ctx->code.size;
                 genInstruction(ctx, INST(cmp, OP_INDIRECT_OFFSET32(RBP, -(loopCountStackLocation * 8)), OP_IMM32(0))); // TODO: not correct
                 genInstruction(ctx, INST(je, OP_IMM32(0))); // jmp after scope
                 u64 firstJmpToPatch = ctx->code.size - 4;
-                genGenericScope(ctx, scope, localScope);
+                genGenericScope(ctx, scope, genScope);
                 genInstruction(ctx, INST(dec, OP_INDIRECT_OFFSET32(RBP, -(loopCountStackLocation * 8)))); // TODO: not correct
                 u64 addrAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
                 genInstruction(ctx, INST(jmp, OP_IMM32(addrAtCmp - addrAfterJmp))); // jmp to condition
@@ -905,38 +800,19 @@ void genStatement(GenContext* ctx, ASTNode* statement, GenScope* localScope) {
 
                 // unallocate the loopCountIterator variable
                 genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM8(8)));
-                localScope->stackPointer--;
+                genScope->stackPointer--;
 
                 // NOTE: this is pretty stupid, jumping twice in unnecessary
                 //       if we know the number of iterations its more optimal to just
                 //       do the cmp and jmp after the scope and only have one jump
             }
         } break;
+        case ASTNodeType_EXPRESSION: {
+            Expression* expr = statement.node.EXPRESSION.expr;
+            TypeInfo* typeInfo = statement.node.EXPRESSION.type;
+            gen_x86_64_expression(ctx, expr, typeInfo, genScope);
+        } break;
     }
-}
-
-void genGlobalScope(GenContext* ctx, Scope* globalScope) {
-    GenScope* scope = genScopeInit(ctx, NULL);
-    Array(ASTNodePtr) statements = globalScope->statements;
-    for(u64 i = 0; i < statements.size; ++i) {
-        ASTNode* statement = statements.data[i];
-        genStatement(ctx, statement, scope);
-    }
-}
-
-GenContext gen_x86_64_bytecode(Scope* globalScope, Hashmap(String, FuncInfo) funcInfo) {
-    GenContext ctx = {0};
-
-    ctx.funcInfo = funcInfo;
-
-    // TODO: use arena allocator
-    // TODO: make the default size something sane
-    HashmapInit(ctx.functions, 0x10);
-    HashmapInit(ctx.data, 0x10);
-    HashmapInit(ctx.constants, 0x10);
-    
-    genGlobalScope(&ctx, globalScope);
-    return ctx;
 }
 
 GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
@@ -947,51 +823,97 @@ GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
     // TODO: use arena allocator
     // TODO: make the default size something sane
     HashmapInit(ctx.functions, 0x10);
-    HashmapInit(ctx.data, 0x10);
-    HashmapInit(ctx.constants, 0x10);
+    // HashmapInit(ctx.data, 0x10);
+    // HashmapInit(ctx.constants, 0x10);
 
     for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
         u64 index = scope->functionIndicies.data[i];
         String fnName = scope->constants.pairs[index].key;
         ConstValue fnScope = scope->constants.pairs[index].value;
 
-        // decrement rsp based on the variables
-        GenScope* genScope = genScopeInit(&ctx, NULL);
-        for(u64 h = 0; h < fnScope.as_function->statements.size; ++h) {
-            TypecheckedStatement statement = fnScope.as_function->statements.data[i];
-            genStatement2(&ctx, statement, genScope);
+        // codegen function
+        genFunction(&ctx, fnName, fnScope);
+    }
+}
+
+void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
+    assertf(fnScope.typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(typeToString(fnScope.typeInfo->symbolType)));
+    TypeInfo* typeInfo = fnScope.typeInfo;
+    if(typeInfo->functionInfo.isExternal) return;
+
+    u64 functionLocation = ctx->code.size;
+    // TODO: why is this an s64 and not a u64
+    if(!HashmapSet(String, s64)(&ctx->functions, id, functionLocation)) UNREACHABLE("Failed to save function location");
+
+    // NOTE: would be usefull here to generating code into a separate buffer
+    // TODO: make the main entrypoint name customisable
+    GenScope* genScope = genScopeInit(ctx, NULL);
+    genScope->isMainScope = StringEqualsCstr(id, "main");
+    if(genScope->isMainScope) ctx->entryPointOffset = ctx->code.size; // NOTE: this isnt technically necessary as all the function offsets are recorded anyway
+
+    genPush(ctx, genScope, RBP); // TODO: this is sus, check after done refactor
+    genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
+
+    // variables
+    for(u64 h = 0; h < fnScope.as_function->variables.size; ++h) {
+        String key = fnScope.as_function->variables.pairs[h].key;
+        TypeInfo* value = fnScope.as_function->variables.pairs[h].value;
+
+        genScope->stackSpaceForLocalVars += TypeToByteSize(value);
+
+        // fill the variables hashmap
+        s64 tmp = 0;
+        if(HashmapGet(String, s64)(&genScope->localVars, key, &tmp)) {
+            UNREACHABLE("two variables with the same name");
+        }
+
+        if(!HashmapSet(String, s64)(&genScope->localVars, key, -genScope->stackSpaceForLocalVars)) {
+            UNREACHABLE("hashmap full");
         }
     }
-}
 
-void genStatement2(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope) {
-    switch(statement.type) {
-        case ASTNodeType_VAR_DECL:
-        case ASTNodeType_VAR_CONST:
-        case ASTNodeType_NONE: 
-        case ASTNodeType_COUNT: {
-            UNREACHABLE("gen statement");
-        } break;
+    // function arguments
+    for(u64 i = 0; i < typeInfo->functionInfo.argTypes.size; ++i) {
+        String argId = ;
+        TypeInfo* argType = typeInfo->functionInfo.argTypes.data[i];
 
-        case ASTNodeType_VAR_DECL_ASSIGN: {
+        genScope->stackSpaceForLocalVars += TypeToByteSize(argType);
 
-        } break;
-        case ASTNodeType_VAR_REASSIGN: {
+        // fill the variables hashmap
+        s64 tmp = 0;
+        if(HashmapGet(String, s64)(&genScope->localVars, argId, &tmp)) {
+            UNREACHABLE("two variables with the same name");
+        }
 
-        } break;
-        case ASTNodeType_RET: {
+        if(!HashmapSet(String, s64)(&genScope->localVars, argId, -genScope->stackSpaceForLocalVars)) {
+            UNREACHABLE("hashmap full");
+        }
 
-        } break;
-        case ASTNodeType_IF: {
+        // move the value to the correct location in the stack
+        if(i == 0) {
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -genScope->stackSpaceForLocalVars), OP_REG(RCX)));
+        } else if(i == 1) {
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -genScope->stackSpaceForLocalVars), OP_REG(RDX)));
+        } else if(i == 2) {
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -genScope->stackSpaceForLocalVars), OP_REG(R8)));
+        } else if(i == 3) {
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -genScope->stackSpaceForLocalVars), OP_REG(R9)));
+        } else {
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, (i - 3) * 8)));
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -genScope->stackSpaceForLocalVars), OP_REG(RAX)));
+        }
+    }
 
-        } break;
-        case ASTNodeType_LOOP: {
+    genScope->stackSpaceForLocalVars = align(genScope->stackSpaceForLocalVars, 16);
+    genInstruction(&ctx, INST(sub, OP_REG(RSP), OP_IMM32(genScope->stackSpaceForLocalVars))); // TODO: this needs to be generated after `mov rbp, rsp`
+    genScope->stackPointer += genScope->stackSpaceForLocalVars / 8;
 
-        } break;
-        case ASTNodeType_EXPRESSION: {
-
-        } break;
+    // scope
+    for(u64 h = 0; h < fnScope.as_function->statements.size; ++h) {
+        TypecheckedStatement statement = fnScope.as_function->statements.data[h];
+        genStatement(&ctx, statement, genScope);
     }
 }
+
 
 // TODO: make sure to preserve non volitile register when entering a function

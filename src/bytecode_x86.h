@@ -49,25 +49,27 @@ typedef struct GenContext {
     Arena mem;
     Array(u8) code;
 
-    Hashmap(String, FuncInfo) funcInfo; // input arg, info about defined functions
-
     Array(AddrToPatch) symbolsToPatch;   // external function call, variable or other symbol
     Array(AddrToPatch) functionsToPatch; // internal function call
+    // NOTE: temporarly disabled due to typechecking
     Array(AddrToPatch) dataToPatch;      // data defined in the .data section
 
     // u32 freeRegisterMask;
     u64 entryPointOffset; // the offset from the begining of the code buffer to the entry point
 
     Hashmap(String, s64) functions; // value is the offset to the begining of the function from the begining of the code buffer
-    Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
-    Hashmap(String, s64) constants; // value is the value of a constant that should be hardcoded
+    // NOTE: temporarly disabled due to typechecking
+    // Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
+    // Hashmap(String, s64) constants; // value is the value of a constant that should be hardcoded
 } GenContext;
 
+// NOTE: i think this is going to get deleted
 typedef struct GenScope {
     struct GenScope* parent;
     Hashmap(String, s64) localVars; // key: name of variable, value: position on the stack in the stackframe
     u64 stackPointer;
     bool isMainScope; // indicates if the return instruction should generate a regular return or a ExitProcess()
+    u64 stackSpaceForLocalVars; // stores the number of bytes reserved at the begining of the scope for the local variables that get declared in the scope
 } GenScope;
 
 typedef enum OperandType {
