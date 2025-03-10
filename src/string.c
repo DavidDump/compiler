@@ -123,20 +123,17 @@ u64 StringToU64(String value) {
 String StringFromU64(Arena* mem, u64 value) {
     String result = {0};
 
-    u64 tmp = value;
-    u64 digitCount = 0;
-    Array(u8) digits;
-    while(tmp != 0) {
-        u64 digit = tmp % 10;
+    Array(u8) digits = {0};
+    while(value != 0) {
+        u64 digit = value % 10;
         u8 digitAscii = digit + '0';
         ArrayAppend(digits, digitAscii);
 
-        tmp /= 10;
-        digitCount++;
+        value /= 10;
     }
 
-    result.str = arena_alloc(mem, digitCount);
-    result.length = digitCount;
+    result.str = arena_alloc(mem, digits.size);
+    result.length = digits.size;
 
     for(s64 i = (s64)digits.size; i >= 0; --i) {
         u8 digit = digits.data[i];
@@ -181,6 +178,47 @@ s64 StringToS64(String value) {
     if(isNegative) result = -result;
 
     return result;
+}
+
+String StringFromS64(Arena* mem, s64 value) {
+    String result = {0};
+
+    bool isNegative = FALSE;
+    if(value < 0) {
+        isNegative = TRUE;
+        value = -value;
+    }
+
+    Array(u8) digits = {0};
+    while(value != 0) {
+        u64 digit = value % 10;
+        u8 digitAscii = digit + '0';
+        ArrayAppend(digits, digitAscii);
+
+        value /= 10;
+    }
+
+    result.str = arena_alloc(mem, digits.size);
+    result.length = digits.size + (isNegative ? 1 : 0);
+
+    for(u64 i = 0; i < digits.size; ++i) {
+        u8 digit = digits.data[i];
+        result.str[result.length - i - 1] = digit;
+    }
+
+    if(isNegative) result.str[0] = '-';
+
+    free(digits.data);
+    return result;
+}
+
+String StringFromF64(Arena* mem, f64 value) {
+#define BUFFER_SIZE 255
+
+    u8* buffer = arena_alloc(mem, BUFFER_SIZE);
+    u64 length = snprintf((char*)buffer, BUFFER_SIZE, "%lli", (s64)value);
+
+    return (String){.str = buffer, .length = length};
 }
 
 bool StringEndsWith(String str, String end) {

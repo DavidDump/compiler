@@ -48,6 +48,8 @@ bool StringContains(String str1, char* cstr);
 int StringToInt(String str);
 u64 StringToU64(String value);
 String StringFromU64(Arena* mem, u64 value);
+String StringFromS64(Arena* mem, s64 value);
+String StringFromF64(Arena* mem, f64 value);
 u32 StringToU32(String value);
 s64 StringToS64(String value);
 bool StringEndsWith(String str, String end);
