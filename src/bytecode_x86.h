@@ -71,6 +71,8 @@ typedef struct GenScope {
     u64 stackPointer;
     bool isMainScope; // indicates if the return instruction should generate a regular return or a ExitProcess()
     u64 stackSpaceForLocalVars; // stores the number of bytes reserved at the begining of the scope for the local variables that get declared in the scope
+
+    Hashmap(String, TypeInfoPtr) functions; // the funtions defined in this scope
 } GenScope;
 
 typedef enum OperandType {
@@ -161,7 +163,7 @@ typedef struct Instruction {
 
 void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope);
 void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentScope);
-void genFunction(GenContext* ctx, String id, ConstValue fnScope);
+void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* parent);
 // void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope);
 void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope);
 GenContext gen_x86_64_bytecode(TypecheckedScope* scope);

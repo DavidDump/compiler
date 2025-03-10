@@ -2,6 +2,7 @@
 #include "operatorFunctions.h"
 
 #include <string.h>
+#include <math.h>
 
 // typedef ConstValue (*EvalBinaryFuncPtr)(ConstValue lhs, ConstValue rhs);
 
@@ -95,10 +96,29 @@ ConstValue evaluateUnaryExpression(Token operator, ConstValue value) {
 
 void saveVariable(TypecheckedScope* scope, String id, TypeInfo* type) {
     // check for redefinition
-    TypeInfo* tmp = {0};
-    if(HashmapGet(String, TypeInfoPtr)(&scope->variables, id, &tmp)) {
-        Location loc = {0}; // TODO: fix
-        ERROR_VA(loc, "Redefinition of variable: "STR_FMT, STR_PRINT(id));
+    TypecheckedScope* it = scope;
+    while(it) {
+        for(u64 i = 0; i < it->params.size; ++i) {
+            StringAndType arg = it->params.data[i];
+            if(StringEquals(arg.id, id)) {
+                Location loc = {0}; // TODO: fix
+                ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+            }
+        }
+
+        TypeInfo* tmp1 = {0};
+        if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &tmp1)) {
+            Location loc = {0}; // TODO: fix
+            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+        }
+
+        ConstValue tmp2 = {0};
+        if(HashmapGet(String, ConstValue)(&it->constants, id, &tmp2)) {
+            Location loc = {0}; // TODO: fix
+            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+        }
+
+        it = it->parent;
     }
 
     // save the symbol
@@ -109,11 +129,31 @@ void saveVariable(TypecheckedScope* scope, String id, TypeInfo* type) {
 
 void saveConstant(TypecheckedScope* scope, String id, ConstValue val) {
     // check for redefinition
-    ConstValue tmp = {0};
-    if(HashmapGet(String, ConstValue)(&scope->constants, id, &tmp)) {
-        Location loc = {0}; // TODO: fix
-        ERROR_VA(loc, "Redefinition of constant: "STR_FMT, STR_PRINT(id));
+    TypecheckedScope* it = scope;
+    while(it) {
+        for(u64 i = 0; i < it->params.size; ++i) {
+            StringAndType arg = it->params.data[i];
+            if(StringEquals(arg.id, id)) {
+                Location loc = {0}; // TODO: fix
+                ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+            }
+        }
+
+        TypeInfo* tmp1 = {0};
+        if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &tmp1)) {
+            Location loc = {0}; // TODO: fix
+            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+        }
+
+        ConstValue tmp2 = {0};
+        if(HashmapGet(String, ConstValue)(&it->constants, id, &tmp2)) {
+            Location loc = {0}; // TODO: fix
+            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+        }
+
+        it = it->parent;
     }
+
 
     // save the symbol
     if(!HashmapSet(String, ConstValue)(&scope->constants, id, val)) {
@@ -184,8 +224,8 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
                 String argId = arg.id;
                 TypeInfo* argType = arg.type;
 
-                saveVariable(resultScope, argId, argType);
                 StringAndType asd = {.id = argId, .type = argType};
+                ArrayAppend(resultScope->params, asd);
                 ArrayAppend(tmp, asd);
             }
 
@@ -238,10 +278,104 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
     return result1;
 }
 
+Expression ConstValueToExpression(Arena* mem, ConstValue value) {
+    Expression result = {0};
+    
+    switch(value.typeInfo->symbolType) {
+        case TYPE_U8:
+        case TYPE_U16:
+        case TYPE_U32:
+        case TYPE_U64: {
+            result.type = ExpressionType_INT_LIT;
+            result.expr.INT_LIT.value = StringFromU64(mem, value.as_u64);
+        } break;
+        case TYPE_S8:
+        case TYPE_S16:
+        case TYPE_S32:
+        case TYPE_S64: {
+            if(value.as_s64 < 0) {
+                // negative
+                s64 invertedNumber = -value.as_s64;
+                Expression* num = arena_alloc(mem, sizeof(Expression));
+                num->type = ExpressionType_INT_LIT;
+                num->expr.INT_LIT.value = StringFromS64(mem, invertedNumber);
+
+                result.type = ExpressionType_UNARY_EXPRESSION;
+                result.expr.UNARY_EXPRESSION.operator = (Token){.value = StringFromCstrLit("-"), .type = TokenType_SUB};
+                result.expr.UNARY_EXPRESSION.expr = num;
+            } else {
+                result.type = ExpressionType_INT_LIT;
+                result.expr.INT_LIT.value = StringFromS64(mem, value.as_s64);
+            }
+        } break;
+        case TYPE_F32:
+        case TYPE_F64: {
+            result.type = ExpressionType_FLOAT_LIT;
+            f64 whole = 0.0f;
+            f64 fract = modf(value.as_f64, &whole);
+            result.expr.FLOAT_LIT.wholePart = StringFromF64(mem, whole);
+            result.expr.FLOAT_LIT.fractPart = StringFromF64(mem, fract);
+        } break;
+        case TYPE_STRING: {
+            result.type = ExpressionType_STRING_LIT;
+            result.expr.STRING_LIT.value = value.as_String;
+        } break;
+        case TYPE_BOOL: {
+            result.type = ExpressionType_BOOL_LIT;
+            result.expr.BOOL_LIT.value = (value.as_bool ? StringFromCstrLit("true") : StringFromCstrLit("false"));
+        } break;
+        case TYPE_FUNCTION: {
+            UNIMPLEMENTED("ConstValueToExpression: TYPE_FUNCTION");
+            result.type = ExpressionType_FUNCTION_LIT;
+            
+            Array(FunctionArg) args = {0};
+            for(u64 i = 0; i < value.typeInfo->functionInfo.args.size; ++i) {
+                StringAndType dat = value.typeInfo->functionInfo.args.data[i];
+                FunctionArg arg = {.id = dat.id, .type = dat.type};
+                ArrayAppend(args, arg);
+            }
+            
+            result.expr.FUNCTION_LIT.args = args;
+            result.expr.FUNCTION_LIT.isExtern = value.typeInfo->functionInfo.isExternal;
+            result.expr.FUNCTION_LIT.returnType = value.typeInfo->functionInfo.returnType;
+            // result.expr.FUNCTION_LIT.scope = ;
+        } break;
+        case TYPE_ARRAY: {
+            UNIMPLEMENTED("ConstValueToExpression: TYPE_ARRAY");
+        } break;
+        case TYPE_NONE:
+        case TYPE_COUNT:
+        case TYPE_VOID:
+            UNREACHABLE("invalid type");
+            break;
+    }
+
+    return result;
+}
+
+ConstResult findConstant(TypecheckedScope* scope, String identifier) {
+    TypecheckedScope* it = scope;
+    while(it) {
+        ConstValue val = {0};
+        if(HashmapGet(String, ConstValue)(&it->constants, identifier, &val)) {
+            return (ConstResult){.value = val};
+        }
+
+        it = it->parent;
+    }
+
+    return (ConstResult){.err = TRUE};
+}
+
 // symbol means both constant and variable
 TypeResult findSymbolType(TypecheckedScope* scope, String identifier) {
     TypecheckedScope* it = scope;
     while(it) {
+        for(u64 i = 0; i < it->params.size; ++i) {
+            StringAndType arg = it->params.data[i];
+            if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
+        }
+
         ConstValue val = {0};
         if(HashmapGet(String, ConstValue)(&it->constants, identifier, &val)) {
             return (TypeResult){.typeInfo = val.typeInfo};
@@ -260,6 +394,11 @@ TypeResult findSymbolType(TypecheckedScope* scope, String identifier) {
 TypeResult findVariableType(TypecheckedScope* scope, String identifier) {
     TypecheckedScope* it = scope;
     while(it) {
+        for(u64 i = 0; i < it->params.size; ++i) {
+            StringAndType arg = it->params.data[i];
+            if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
+        }
+
         TypeInfo* info = {0};
         if(HashmapGet(String, TypeInfoPtr)(&it->variables, identifier, &info)) {
             return (TypeResult){.typeInfo = info};
@@ -300,13 +439,19 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             // look up in the constants or symbols and find the type
             String id = expr->expr.SYMBOL.identifier;
 
-            TypeResult res = findSymbolType(scope, id);
-            if(res.err) {
-                Location loc = {0}; // TODO: fix loc
-                ERROR_VA(loc, "Undefined symbol: "STR_FMT, STR_PRINT(id));
+            ConstResult res1 = findConstant(scope, id);
+            if(res1.err) {
+                TypeResult res2 = findVariableType(scope, id);
+                if(res2.err) {
+                    Location loc = {0}; // TODO: fix loc
+                    ERROR_VA(loc, "Undefined symbol: "STR_FMT, STR_PRINT(id));
+                }
+                result->typeInfo = res2.typeInfo;
+            } else {
+                Expression converted = ConstValueToExpression(mem, res1.value);
+                memcpy(result, &converted, sizeof(Expression));
+                result->typeInfo = res1.value.typeInfo;
             }
-
-            result->typeInfo = res.typeInfo;
         } break;
         case ExpressionType_FUNCTION_CALL: {
             // look up in the constants or symbols and find the definition

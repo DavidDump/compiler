@@ -22,6 +22,7 @@ const char* MnemonicStr[Mnemonic_COUNT] = {
     [jg_]   = "jg",
     [jle_]  = "jle",
     [jge_]  = "jge",
+    [neg_]  = "neg",
 };
 
 // NOTE: when needing to iterate all the encodings for one instruction,
@@ -344,5 +345,14 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         // 0F 8D cd      | JGE rel32   | D     | Valid       | Valid           | Jump near if greater or equal (SF=OF).
         {.type = InstructionType_64BIT, .opcode = 0x0F8D, .opTypes[0] = OpType_IMM32},
         // TODO: 64 bit instruction size is incorrect here, only temporary unti the codegen searches for non 64bit encodings
+    },
+    [neg_] = {
+        // Opcode        | Instruction | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // F6 /3         | NEG r/m8    | M     | Valid       | Valid           | Two's complement negate r/m8.
+        // REX + F6 /3   | NEG r/m8    | M     | Valid       | N.E.            | Two's complement negate r/m8.
+        // F7 /3         | NEG r/m16   | M     | Valid       | Valid           | Two's complement negate r/m16.
+        // F7 /3         | NEG r/m32   | M     | Valid       | Valid           | Two's complement negate r/m32.
+        // REX.W + F7 /3 | NEG r/m64   | M     | Valid       | N.E.            | Two's complement negate r/m64.
+        {.type = InstructionType_64BIT, .opcode = 0xF7, .rexType = RexByte_W, .modRMType = ModRMType_EXT, .opcodeExtension = 3, .opTypes[0] = OpType_RM},
     },
 };

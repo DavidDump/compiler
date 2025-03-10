@@ -41,6 +41,7 @@ bool isType(String value) {
 }
 
 Array(Token) Tokenize(Arena* mem, String source, String filename) {
+    UNUSED(mem);
     Array(Token) result = {0};
     u64 lineNum = 1;
     u64 collumNum = 1;

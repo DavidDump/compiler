@@ -127,7 +127,8 @@ int main(int argc, char** argv){
 
     TypecheckedScope* typechecked = typecheck(&readFileMem, &parseResult);
 
-    GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope, parseResult.funcInfo);
+    // GenContext bytecode = gen_x86_64_bytecode(parseResult.globalScope, parseResult.funcInfo);
+    GenContext bytecode = gen_x86_64_bytecode(typechecked);
     if(StringEndsWith(outFilepath, STR(".bin"))) {
         if(!EntireFileWrite(outFilepath, bytecode.code)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));

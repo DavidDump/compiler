@@ -6,7 +6,8 @@
 
 // TODO: move to a proper location
 typedef struct UserDataEntry {
-    ConstValue data;
+    u8* data;
+    u64 dataLen;
 
     // Known after the data is writen to the file
     u64 dataRVA;

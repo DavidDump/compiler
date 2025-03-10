@@ -459,7 +459,8 @@ void gen_SizeInReg(GenContext* ctx, Register reg, String name) {
 
 // NOTE: not tested
 u64 align(u64 num, u64 alignment) {
-    return (num + alignment) & ~alignment;
+    if(num % alignment == 0) return num;
+    return (num + alignment -1) & ~(alignment -1);
 }
 
 void genPush(GenContext* ctx, GenScope* scope, Register reg) {
@@ -491,7 +492,20 @@ SymbolLocationResult findSymbolLocation(GenScope* scope, String name) {
     return result;
 }
 
+TypeInfo* findFunctionType(GenScope* localScope, String id) {
+    TypeInfo* result = 0;
+    GenScope* it = localScope;
+    while(it) {
+        if(HashmapGet(String, TypeInfoPtr)(&it->functions, id, &result)) return result;
+        it = it->parent;
+    }
+
+    UNREACHABLE("function has no type");
+    return 0; // silence warninig
+}
+
 void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope) {
+    // TODO: change this to a switch
     if(expr->type == ExpressionType_INT_LIT) {
         String value = expr->expr.INT_LIT.value;
         // TODO: check if the number is signed or unsigned and parse it differently based on that
@@ -501,8 +515,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
     } else if(expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
     } else if(expr->type == ExpressionType_STRING_LIT) {
-        UNIMPLEMENTED("String literals in codegen");
-        #if 0
+        #if 1
         // TODO: this branch is implemented in a very scuffed way,
         //       only here because i needed a quick working version
         //       potential optimization is to collect all the string literals
@@ -526,11 +539,12 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         String id = expr->expr.SYMBOL.identifier;
 
         SymbolLocationResult res = findSymbolLocation(localScope, id);
-        if(!res.err) {
-            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, -(res.value * 8))));
-        } else {
+        if(res.err) {
+            printf("name of symbol: "STR_FMT"\n", STR_PRINT(id));
             UNREACHABLE("Symbol not defined");
         }
+
+        genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value)));
     } else if(expr->type == ExpressionType_FUNCTION_CALL) {
         String id = expr->expr.FUNCTION_CALL.identifier;
         Array(TypecheckedExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
@@ -552,8 +566,9 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             }
         }
 
-        assert(expr->typeInfo->symbolType == TYPE_FUNCTION, "");
-        if(expr->typeInfo->functionInfo.isExternal) {
+        TypeInfo* fnType = findFunctionType(localScope, id);
+        assert(fnType->symbolType == TYPE_FUNCTION, "");
+        if(fnType->functionInfo.isExternal) {
             // NOTE: "In the Microsoft x64 calling convention, it is the caller's responsibility to allocate 32 bytes of "shadow space"
             //       on the stack right before calling the function, and to pop the stack after the call."
             //       -wikipedia, https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
@@ -600,9 +615,17 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(div, OP_REG(RCX)));
         }
+    } else if(expr->type == ExpressionType_UNARY_EXPRESSION) {
+        Token operator = expr->expr.UNARY_EXPRESSION.operator;
+        TypecheckedExpression* expr2 = expr->expr.UNARY_EXPRESSION.expr;
+
+        if(operator.type == TokenType_SUB) {
+            gen_x86_64_expression(ctx, expr2, localScope);
+            genInstruction(ctx, INST(neg, OP_REG(RAX)));
+        }
     } else {
-        printf("[ERROR] Unknown ASTNodeType in expression generator: %s\n", ASTNodeTypeStr[expr->type]);
-        exit(EXIT_FAILURE);
+        printf("[ERROR] Unknown ASTNodeType in expression generator: %s\n", ExpressionTypeStr[expr->type]);
+        UNREACHABLE("");
     }
 }
 
@@ -656,6 +679,7 @@ GenScope* genScopeInit(GenContext* ctx, GenScope* parent) {
     GenScope* scope = arena_alloc(&ctx->mem, sizeof(GenScope));
     scope->parent = parent;
     HashmapInit(scope->localVars, 0x10); // TODO: some reasonable limit for local vars
+    HashmapInit(scope->functions, 0x10); // TODO: some reasonable limit for local vars
     return scope;
 }
 
@@ -688,14 +712,11 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             String id = statement.node.VAR_ACCESS.identifier;
             TypecheckedExpression* expr = statement.node.VAR_ACCESS.expr;
 
-            // TODO: this only looks at the local variables, add globals as well
-            s64 varLocation = 0;
-            if(!HashmapGet(String, s64)(&genScope->localVars, id, &varLocation)) {
-                UNREACHABLE("local variable not defined");
-            }
+            SymbolLocationResult res = findSymbolLocation(genScope, id);
+            if(res.err) UNREACHABLE("local variable not defined");
 
             gen_x86_64_expression(ctx, expr, genScope);
-            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, -varLocation), OP_REG(RAX)));
+            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
         } break;
         case ASTNodeType_RET: {
             TypecheckedExpression* expr = statement.node.RET.expr;
@@ -824,8 +845,20 @@ GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
     // TODO: use arena allocator
     // TODO: make the default size something sane
     HashmapInit(ctx.functions, 0x10);
-    // HashmapInit(ctx.data, 0x10);
+    HashmapInit(ctx.data, 0x10);
     // HashmapInit(ctx.constants, 0x10);
+
+    GenScope* globalScope = genScopeInit(&ctx, NULL);
+
+    for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
+        u64 index = scope->functionIndicies.data[i];
+        String fnName = scope->constants.pairs[index].key;
+        ConstValue fnScope = scope->constants.pairs[index].value;
+        TypeInfo* typeInfo = fnScope.typeInfo;
+        assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx.mem, typeInfo)));
+
+        if(!HashmapSet(String, TypeInfoPtr)(&globalScope->functions, fnName, typeInfo)) UNREACHABLE("hashmap full");
+    }
 
     for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
         u64 index = scope->functionIndicies.data[i];
@@ -833,15 +866,17 @@ GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
         ConstValue fnScope = scope->constants.pairs[index].value;
 
         // codegen function
-        genFunction(&ctx, fnName, fnScope);
+        genFunction(&ctx, fnName, fnScope, globalScope);
     }
 
     return ctx;
 }
 
-void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
-    assertf(fnScope.typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx->mem, fnScope.typeInfo)));
+void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* parent) {
+    TypecheckedScope* scope = fnScope.as_function;
     TypeInfo* typeInfo = fnScope.typeInfo;
+
+    assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx->mem, typeInfo)));
     if(typeInfo->functionInfo.isExternal) return;
 
     u64 functionLocation = ctx->code.size;
@@ -850,7 +885,7 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
 
     // NOTE: would be usefull here to generating code into a separate buffer
     // TODO: make the main entrypoint name customisable
-    GenScope* genScope = genScopeInit(ctx, NULL);
+    GenScope* genScope = genScopeInit(ctx, parent);
     genScope->isMainScope = StringEqualsCstr(id, "main");
     if(genScope->isMainScope) ctx->entryPointOffset = ctx->code.size; // NOTE: this isnt technically necessary as all the function offsets are recorded anyway
 
@@ -858,9 +893,9 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
     genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
 
     // variables
-    for(u64 h = 0; h < fnScope.as_function->variables.size; ++h) {
-        String key = fnScope.as_function->variables.pairs[h].key;
-        TypeInfo* value = fnScope.as_function->variables.pairs[h].value;
+    HashmapFor(String, TypeInfoPtr, it, &scope->variables) {
+        String key = it->key;
+        TypeInfo* value = it->value;
 
         genScope->stackSpaceForLocalVars += TypeToByteSize(value);
 
@@ -915,8 +950,8 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope) {
     genScope->stackPointer += genScope->stackSpaceForLocalVars / 8;
 
     // scope
-    for(u64 h = 0; h < fnScope.as_function->statements.size; ++h) {
-        TypecheckedStatement statement = fnScope.as_function->statements.data[h];
+    for(u64 h = 0; h < scope->statements.size; ++h) {
+        TypecheckedStatement statement = scope->statements.data[h];
         genStatement(ctx, statement, genScope);
     }
 }

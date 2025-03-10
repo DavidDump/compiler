@@ -135,9 +135,14 @@ u64 TypeToByteSize(TypeInfo* type) {
             UNREACHABLE("This is an invalid chase");
         } break;
 
+        // TODO: right now a string is just a pointer to the .data section
+        // once struct are added this will be the size of the string struct
+        case TYPE_STRING: {
+            return 8;
+        } break;
+
         // NOTE: these are stored in a special way not directly on the stack
         case TYPE_FUNCTION:
-        case TYPE_STRING:
         case TYPE_VOID: {
             return 0;
         } break;

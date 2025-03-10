@@ -27,6 +27,11 @@ typedef struct TypeResult {
     TypeInfo* typeInfo;
 } TypeResult;
 
+typedef struct ConstResult {
+    bool err;
+    ConstValue value;
+} ConstResult;
+
 typedef enum ConstantEvaluationError {
     ConstantEvaluationError_NONE,
     ConstantEvaluationError_UNDEFINED_SYMBOL, // symbol has not yet been evaluated, defer for later
@@ -127,11 +132,14 @@ defArray(TypecheckedStatement);
 //       - each scope should contain a list constants defined in that scope
 typedef struct TypecheckedScope {
     struct TypecheckedScope* parent;
+    // TODO: is this needed anywhere, maybe remove `params`
+    Array(StringAndType) params;            // in case the scope is a function scope these are the parameters of the function
     Hashmap(String, ConstValue) constants;  // TODO: remove constants, the value of a constant should replace the leaf SYMBOL node in the Expression
     Hashmap(String, TypeInfoPtr) variables; // global or local variables, depending on if this is the toplevel scope
     // global variables need to be constant, and evaluated
     // local variables only need to have a known type during compile time
 
+    // TODO: this is probably not a good idea, remove later
     Array(u64) functionIndicies; // the indicies in the constants hashmap which contain function literals
     Array(TypecheckedStatement) statements;
 } TypecheckedScope;

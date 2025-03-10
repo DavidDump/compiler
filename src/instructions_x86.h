@@ -72,6 +72,7 @@ typedef enum Mnemonic {
     jg_,
     jle_,
     jge_,
+    neg_,
     Mnemonic_COUNT,
 } Mnemonic;
 

@@ -39,6 +39,20 @@ typedef enum ExpressionType {
     ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
 } ExpressionType;
 
+#pragma GCC diagnostic ignored "-Wunused-variable"
+static char* ExpressionTypeStr[] = {
+    [ExpressionType_BINARY_EXPRESSION] = "BINARY_EXPRESSION",
+    [ExpressionType_UNARY_EXPRESSION]  = "UNARY_EXPRESSION",
+    [ExpressionType_INT_LIT]           = "INT_LIT",
+    [ExpressionType_FLOAT_LIT]         = "FLOAT_LIT",
+    [ExpressionType_STRING_LIT]        = "STRING_LIT",
+    [ExpressionType_BOOL_LIT]          = "BOOL_LIT",
+    [ExpressionType_SYMBOL]            = "SYMBOL",
+    [ExpressionType_FUNCTION_CALL]     = "FUNCTION_CALL",
+    [ExpressionType_FUNCTION_LIT]      = "FUNCTION_LIT",
+};
+#pragma GCC diagnostic pop
+
 typedef struct Expression {
     ExpressionType type;
     union Expr {
