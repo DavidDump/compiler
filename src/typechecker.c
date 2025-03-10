@@ -88,7 +88,7 @@ ConstValue evaluateUnaryExpression(Token operator, ConstValue value) {
             } break;
         }
     } else {
-        UNREACHABLE("invalid unary operator");
+        UNREACHABLE_VA("invalid unary operator: %s", TokenTypeStr[operator.type]);
     }
 
     return value;
@@ -123,7 +123,7 @@ void saveVariable(TypecheckedScope* scope, String id, TypeInfo* type) {
 
     // save the symbol
     if(!HashmapSet(String, TypeInfoPtr)(&scope->variables, id, type)) {
-        UNREACHABLE("Failed to insert into hashmap");
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->variables.capacity, scope->variables.size, STR_PRINT(id));
     }
 }
 
@@ -157,7 +157,7 @@ void saveConstant(TypecheckedScope* scope, String id, ConstValue val) {
 
     // save the symbol
     if(!HashmapSet(String, ConstValue)(&scope->constants, id, val)) {
-        UNREACHABLE("Failed to insert into hashmap");
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->constants.capacity, scope->constants.size, STR_PRINT(id));
     }
 }
 

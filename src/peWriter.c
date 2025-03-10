@@ -43,7 +43,7 @@ u32 getFunctionRVA(Hashmap(String, LibName)* libs, String name) {
             return result.iatRva;
         }
     }
-    UNREACHABLE("function could not be found in imported libraries");
+    UNREACHABLE_VA("function could not be found in imported libraries: "STR_FMT, STR_PRINT(name));
     return 0; // NOTE: just to silence a warning
 }
 
@@ -52,7 +52,7 @@ u32 genDataRVA(Hashmap(String, UserDataEntry)* userData, String name) {
     if(HashmapGet(String, UserDataEntry)(userData, name, &value)) {
         return value.dataRVA;
     }
-    UNREACHABLE("a data entry could not be found");
+    UNREACHABLE_VA("a data entry could not be found: "STR_FMT, STR_PRINT(name));
     return 0; // NOTE: just to silence a warning
 }
 

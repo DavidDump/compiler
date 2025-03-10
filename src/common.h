@@ -17,13 +17,15 @@ typedef int bool;
 #  define assertf(...)
 #  define ERROR(loc, msg) printf("[ERROR] "STR_FMT":%i:%i %s\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, msg), exit(EXIT_FAILURE)
 #  define ERROR_VA(loc, msg, ...) printf("[ERROR] "STR_FMT":%i:%i "msg"\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, __VA_ARGS__), exit(EXIT_FAILURE)
-#  define UNREACHABLE(x) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (x)), exit(EXIT_FAILURE)
+#  define UNREACHABLE(_msg_) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (_msg_)), exit(EXIT_FAILURE)
+#  define UNREACHABLE_VA(_msg_, ...) printf("[UNREACHABLE] %s:%i: "_msg_"\n", __FILE__, __LINE__, __VA_ARGS__), exit(EXIT_FAILURE)
 #else
 #  define assert(_condition_, _msg_) !(_condition_) ? (void)(printf("[ASSERT] %s:%i: %s\n", __FILE__, __LINE__, _msg_), *(int*)(0) = 0) : (void)0
 #  define assertf(_condition_, _fmt_, ...) !(_condition_) ? (void)(printf("[ASSERT] %s:%i: "_fmt_"\n", __FILE__, __LINE__, __VA_ARGS__), *(int*)(0) = 0) : (void)0
 #  define ERROR(loc, msg) printf("[ERROR] "STR_FMT":%i:%i %s\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, msg), assert(0, "")
 #  define ERROR_VA(loc, msg, ...) printf("[ERROR] "STR_FMT":%i:%i "msg"\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, __VA_ARGS__), assert(0, "")
-#  define UNREACHABLE(x) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (x)), assert(0, "")
+#  define UNREACHABLE(_msg_) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (_msg_)), assert(0, "")
+#  define UNREACHABLE_VA(_msg_, ...) printf("[UNREACHABLE] %s:%i: "_msg_"\n", __FILE__, __LINE__, __VA_ARGS__), assert(0, "")
 #endif
 
 // NOTE: assert used in arena.h is redefined here, so its only in one place

@@ -1,4 +1,5 @@
 #include "typechecker.h"
+#include "string.h"
 
 // u8 + u8
 // u8 u16 u32 u64 s8 s16 s32 s64
@@ -22,7 +23,8 @@ ConstValue _add(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to add types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -47,7 +49,8 @@ ConstValue _sub(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to sub types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -72,7 +75,8 @@ ConstValue _mul(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to mul types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -97,7 +101,8 @@ ConstValue _div(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to div types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -121,7 +126,8 @@ ConstValue _less(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to less types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -145,7 +151,8 @@ ConstValue _greater(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to greater types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -169,7 +176,8 @@ ConstValue _less_eq(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to less eq types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;
@@ -193,7 +201,8 @@ ConstValue _greater_eq(ConstValue lhs, ConstValue rhs) {
             }
         }
     } else {
-        UNREACHABLE("operation evaluation for const");
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to greater eq types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
     }
 
     return result;

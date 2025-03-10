@@ -524,11 +524,12 @@ Expression* makeCompInstructionLeaf(ParseContext* ctx, Arena* mem) {
 
         LibName lib = {0};
         if(!HashmapGet(String, LibName)(&ctx->importLibraries, ctx->currentImportLibraryName, &lib)) {
-            UNREACHABLE("library not found, make sure to use #library \"libname\" in the code");
+            // #library "kernel32.dll"
+            UNREACHABLE_VA("library not found: "STR_FMT, STR_PRINT(ctx->currentImportLibraryName));
         }
         FuncName funcName = {0};
         if(!HashmapSet(String, FuncName)(lib.functions, ctx->currentSymbolName, funcName)) {
-            UNREACHABLE("failed to insert imported func name");
+            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, lib.functions->capacity, lib.functions->size, STR_PRINT(ctx->currentSymbolName));
         }
 
         return result;
@@ -787,7 +788,7 @@ void parseScope2(ParseContext* ctx, Arena* mem, Scope* target) {
             String id = statement->node.VAR_CONST.identifier;
             Expression* expr = statement->node.VAR_CONST.expr;
             if(!HashmapSet(String, ExpressionPtr)(&target->constants, id, expr)) {
-                UNREACHABLE("Failed to insert into hashmap");
+                UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, target->constants.capacity, target->constants.size, STR_PRINT(id));
             }
         } else {
             ArrayAppend(target->statements, statement);
@@ -803,7 +804,7 @@ void parseScope2(ParseContext* ctx, Arena* mem, Scope* target) {
             String id = statement->node.VAR_CONST.identifier;
             Expression* expr = statement->node.VAR_CONST.expr;
             if(!HashmapSet(String, ExpressionPtr)(&target->constants, id, expr)) {
-                UNREACHABLE("Failed to insert into hashmap");
+                UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, target->constants.capacity, target->constants.size, STR_PRINT(id));
             }
         } else {
             ArrayAppend(target->statements, statement);
@@ -917,7 +918,7 @@ ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent) {
                 // TODO: use arena allocator
                 HashmapInit(*value.functions, 0x100);
                 if(!HashmapSet(String, LibName)(&ctx->importLibraries, key, value)) {
-                    UNREACHABLE("hashmap failed to insert");
+                    UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, ctx->importLibraries.capacity, ctx->importLibraries.size, STR_PRINT(key));
                 }
                 ctx->currentImportLibraryName = key;
             } else {

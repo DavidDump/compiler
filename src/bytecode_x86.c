@@ -500,7 +500,7 @@ TypeInfo* findFunctionType(GenScope* localScope, String id) {
         it = it->parent;
     }
 
-    UNREACHABLE("function has no type");
+    UNREACHABLE_VA("function has no type: "STR_FMT, STR_PRINT(id));
     return 0; // silence warninig
 }
 
@@ -529,7 +529,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             .dataRVA = INVALID_ADDRESS,
         };
         if(!HashmapSet(String, UserDataEntry)(&ctx->data, lit, value)) {
-            UNREACHABLE("failed to insert into hashmap");
+            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", ctx->data.capacity, ctx->data.size);
         }
         gen_DataInReg(ctx, RAX, lit);
         #endif
@@ -540,8 +540,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
 
         SymbolLocationResult res = findSymbolLocation(localScope, id);
         if(res.err) {
-            printf("name of symbol: "STR_FMT"\n", STR_PRINT(id));
-            UNREACHABLE("Symbol not defined");
+            UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(id));
         }
 
         genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value)));
@@ -624,8 +623,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             genInstruction(ctx, INST(neg, OP_REG(RAX)));
         }
     } else {
-        printf("[ERROR] Unknown ASTNodeType in expression generator: %s\n", ExpressionTypeStr[expr->type]);
-        UNREACHABLE("");
+        UNREACHABLE_VA("Unknown ASTNodeType in expression generator: %s\n", ExpressionTypeStr[expr->type]);
     }
 }
 
@@ -713,7 +711,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             TypecheckedExpression* expr = statement.node.VAR_ACCESS.expr;
 
             SymbolLocationResult res = findSymbolLocation(genScope, id);
-            if(res.err) UNREACHABLE("local variable not defined");
+            if(res.err) UNREACHABLE_VA("local variable not defined: "STR_FMT, STR_PRINT(id));
 
             gen_x86_64_expression(ctx, expr, genScope);
             genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
@@ -857,7 +855,7 @@ GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
         TypeInfo* typeInfo = fnScope.typeInfo;
         assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx.mem, typeInfo)));
 
-        if(!HashmapSet(String, TypeInfoPtr)(&globalScope->functions, fnName, typeInfo)) UNREACHABLE("hashmap full");
+        if(!HashmapSet(String, TypeInfoPtr)(&globalScope->functions, fnName, typeInfo)) UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", globalScope->functions.capacity, globalScope->functions.size);
     }
 
     for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
@@ -881,7 +879,7 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
 
     u64 functionLocation = ctx->code.size;
     // TODO: why is this an s64 and not a u64
-    if(!HashmapSet(String, s64)(&ctx->functions, id, functionLocation)) UNREACHABLE("Failed to save function location");
+    if(!HashmapSet(String, s64)(&ctx->functions, id, functionLocation)) UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", ctx->functions.capacity, ctx->functions.size);
 
     // NOTE: would be usefull here to generating code into a separate buffer
     // TODO: make the main entrypoint name customisable
@@ -902,11 +900,11 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
         // fill the variables hashmap
         s64 tmp = 0;
         if(HashmapGet(String, s64)(&genScope->localVars, key, &tmp)) {
-            UNREACHABLE("two variables with the same name");
+            UNREACHABLE_VA("two variables with the same name: "STR_FMT, STR_PRINT(key));
         }
 
         if(!HashmapSet(String, s64)(&genScope->localVars, key, -genScope->stackSpaceForLocalVars)) {
-            UNREACHABLE("hashmap full");
+            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", genScope->localVars.capacity, genScope->localVars.size);
         }
     }
 
@@ -923,11 +921,11 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
         // fill the variables hashmap
         s64 tmp = 0;
         if(HashmapGet(String, s64)(&genScope->localVars, argId, &tmp)) {
-            UNREACHABLE("two variables with the same name");
+            UNREACHABLE_VA("two variables with the same name: "STR_FMT, STR_PRINT(argId));
         }
 
         if(!HashmapSet(String, s64)(&genScope->localVars, argId, -genScope->stackSpaceForLocalVars)) {
-            UNREACHABLE("hashmap full");
+            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", genScope->localVars.capacity, genScope->localVars.size);
         }
 
         // move the value to the correct location in the stack
