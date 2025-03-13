@@ -188,8 +188,13 @@ Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Arra
 
     // total size of image
     s32 virtualSizeOfImage = text_section_header->VirtualAddress + align_s32(text_section_header->SizeOfRawData, PE32_SECTION_ALIGNMENT);
-    // u64 max_exe_buffer = file_size_of_headers + rdata_section_header->SizeOfRawData + text_section_header->SizeOfRawData;
+    u64 max_exe_buffer = file_size_of_headers + rdata_section_header->SizeOfRawData + text_section_header->SizeOfRawData;
+
+    // this allocates all the space up front so that later when more memory gets allocated,
+    // the buffer doent get reallocaed, and the pointer stay stable
     Array(u8) exe_buffer = {0};
+    buffer_allocate_size(&exe_buffer, max_exe_buffer);
+    exe_buffer.size = 0;
 
     IMAGE_DOS_HEADER *dos_header = buffer_allocate(&exe_buffer, IMAGE_DOS_HEADER);
     *dos_header = (IMAGE_DOS_HEADER){

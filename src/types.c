@@ -181,6 +181,7 @@ u64 TypeToByteSize(TypeInfo* type) {
 }
 
 bool TypeIsSigned(TypeInfo* type) {
+    if(type == NULL) return FALSE;
     return (
         type->symbolType == TYPE_S8  ||
         type->symbolType == TYPE_S16 ||
@@ -190,6 +191,7 @@ bool TypeIsSigned(TypeInfo* type) {
 }
 
 bool TypeIsUnsigned(TypeInfo* type) {
+    if(type == NULL) return FALSE;
     return (
         type->symbolType == TYPE_U8  ||
         type->symbolType == TYPE_U16 ||
@@ -199,6 +201,7 @@ bool TypeIsUnsigned(TypeInfo* type) {
 }
 
 bool TypeIsFloat(TypeInfo* type) {
+    if(type == NULL) return FALSE;
     return (
         type->symbolType == TYPE_F32 ||
         type->symbolType == TYPE_F64
@@ -206,14 +209,17 @@ bool TypeIsFloat(TypeInfo* type) {
 }
 
 bool TypeIsInt(TypeInfo* type) {
+    if(type == NULL) return FALSE;
     return TypeIsSigned(type) || TypeIsUnsigned(type);
 }
 
 bool TypeIsNumber(TypeInfo* type) {
+    if(type == NULL) return FALSE;
     return TypeIsInt(type) || TypeIsFloat(type);
 }
 
 bool TypeIsBool(TypeInfo* type) {
+    if(type == NULL) return FALSE;
     return type->symbolType == TYPE_BOOL;
 }
 

@@ -125,6 +125,21 @@ void saveVariable(TypecheckedScope* scope, String id, TypeInfo* type) {
     if(!HashmapSet(String, TypeInfoPtr)(&scope->variables, id, type)) {
         UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->variables.capacity, scope->variables.size, STR_PRINT(id));
     }
+
+    // save in the parent funtion scope for stack reservetion
+    it = scope;
+    TypecheckedScope* functionScope = scope;
+    while(it) {
+        if(it->isFunctionScope) {
+            functionScope = it;
+            break;
+        }
+
+        it = it->parent;
+    }
+    if(!HashmapSet(String, TypeInfoPtr)(&functionScope->allVariables, id, type)) {
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, functionScope->allVariables.capacity, functionScope->allVariables.size, STR_PRINT(id));
+    }
 }
 
 void saveConstant(TypecheckedScope* scope, String id, ConstValue val) {
@@ -161,11 +176,13 @@ void saveConstant(TypecheckedScope* scope, String id, ConstValue val) {
     }
 }
 
-TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent) {
+TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent, bool isFunctionScope) {
     TypecheckedScope* result = arena_alloc(mem, sizeof(TypecheckedScope));
     result->parent = parent;
+    result->isFunctionScope = isFunctionScope;
     HashmapInit(result->constants, 0x100); // TODO: init size
     HashmapInit(result->variables, 0x100); // TODO: init size
+    HashmapInit(result->allVariables, 0x100); // TODO: init size
     return result;
 }
 
@@ -217,7 +234,7 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
             TypeInfo* returnType = expr->expr.FUNCTION_LIT.returnType;
             bool isExtern = expr->expr.FUNCTION_LIT.isExtern;
 
-            TypecheckedScope* resultScope = TypecheckedScopeInit(mem, NULL); // NOTE: later set the scope correcly
+            TypecheckedScope* resultScope = TypecheckedScopeInit(mem, NULL, TRUE); // NOTE: later set the scope correcly
             Array(StringAndType) tmp = {0};
             for(u64 i = 0; i < args.size; ++i) {
                 FunctionArg arg = args.data[i];
@@ -409,20 +426,31 @@ TypeResult findVariableType(TypecheckedScope* scope, String identifier) {
     return (TypeResult){.err = TRUE};
 }
 
-TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, TypecheckedScope* scope) {
+// expected is the type that the expression should be to pass typechecking,
+// can be used when assigning number literals to symbols that have a concrete types,
+// this value can be null to just use the default type
+TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, TypecheckedScope* scope, TypeInfo* expected) {
     TypecheckedExpression* result = arena_alloc(mem, sizeof(TypecheckedExpression));
     memcpy(result, expr, sizeof(Expression));
     // NOTE: this has a high likelyhood of fucking me in the ass later on
 
     switch(expr->type) {
         case ExpressionType_INT_LIT: {
-            TypeInfo* t = TypeInitSimple(mem, TypeDefaultInt());
-            result->typeInfo = t;
+            if(TypeIsInt(expected)) {
+                result->typeInfo = expected;
+            } else {
+                TypeInfo* t = TypeInitSimple(mem, TypeDefaultInt());
+                result->typeInfo = t;
+            }
             result->typeInfo->isConstant = TRUE;
         } break;
         case ExpressionType_FLOAT_LIT: {
-            TypeInfo* t = TypeInitSimple(mem, TypeDefaultFloat());
-            result->typeInfo = t;
+            if(TypeIsFloat(expected)) {
+                result->typeInfo = expected;
+            } else {
+                TypeInfo* t = TypeInitSimple(mem, TypeDefaultFloat());
+                result->typeInfo = t;
+            }
             result->typeInfo->isConstant = TRUE;
         } break;
         case ExpressionType_STRING_LIT: {
@@ -480,7 +508,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 StringAndType fnArg = funcInfo->functionInfo.args.data[i];
                 Expression* providedArg = args.data[i];
                 TypeInfo* expectedArgType = fnArg.type;
-                TypecheckedExpression* providedArgType = typecheckExpression(mem, providedArg, scope);
+                TypecheckedExpression* providedArgType = typecheckExpression(mem, providedArg, scope, expectedArgType);
 
                 if(!TypeMatch(expectedArgType, providedArgType->typeInfo)) {
                     Location loc = {0}; // TODO: fix loc
@@ -533,10 +561,30 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             Token op = expr->expr.BINARY_EXPRESSION.operator;
             Expression* lhs = expr->expr.BINARY_EXPRESSION.lhs;
             Expression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
-            TypecheckedExpression* lhsType = typecheckExpression(mem, lhs, scope);
-            TypecheckedExpression* rhsType = typecheckExpression(mem, rhs, scope);
+
+            TypecheckedExpression* lhsType = 0;
+            TypecheckedExpression* rhsType = 0;
+            if(
+                (lhs->type == ExpressionType_INT_LIT || lhs->type == ExpressionType_FLOAT_LIT) &&
+                !(rhs->type == ExpressionType_INT_LIT || rhs->type == ExpressionType_FLOAT_LIT)
+            ) {
+                // lhs needs to be cast
+                rhsType = typecheckExpression(mem, rhs, scope, expected);
+                lhsType = typecheckExpression(mem, lhs, scope, rhsType->typeInfo);
+            } else if(
+                !(lhs->type == ExpressionType_INT_LIT || lhs->type == ExpressionType_FLOAT_LIT) &&
+                (rhs->type == ExpressionType_INT_LIT || rhs->type == ExpressionType_FLOAT_LIT)
+            ) {
+                // rhs needs to be cast
+                lhsType = typecheckExpression(mem, lhs, scope, expected);
+                rhsType = typecheckExpression(mem, rhs, scope, lhsType->typeInfo);
+            } else {
+                lhsType = typecheckExpression(mem, lhs, scope, expected);
+                rhsType = typecheckExpression(mem, rhs, scope, expected);
+            }
 
             // TODO: static assert on the number of operators
+            TypeInfo* typeBool = TypeInitSimple(mem, TYPE_BOOL);
             if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_ADD) {
                 result->typeInfo = lhsType->typeInfo;
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_SUB) {
@@ -546,17 +594,17 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_DIV) {
                 result->typeInfo = lhsType->typeInfo;
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_LESS) {
-                result->typeInfo = lhsType->typeInfo;
+                result->typeInfo = typeBool;
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_GREATER) {
-                result->typeInfo = lhsType->typeInfo;
+                result->typeInfo = typeBool;
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_LESS_EQ) {
-                result->typeInfo = lhsType->typeInfo;
+                result->typeInfo = typeBool;
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_GREATER_EQ) {
-                result->typeInfo = lhsType->typeInfo;
+                result->typeInfo = typeBool;
             } else if(((TypeIsBool(lhsType->typeInfo) && TypeIsBool(rhsType->typeInfo)) || (TypeIsNumber(rhsType->typeInfo) && TypeIsNumber(lhsType->typeInfo))) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_COMPARISON) {
-                result->typeInfo = lhsType->typeInfo;
+                result->typeInfo = typeBool;
             } else if(((TypeIsBool(lhsType->typeInfo) && TypeIsBool(rhsType->typeInfo)) || (TypeIsNumber(rhsType->typeInfo) && TypeIsNumber(lhsType->typeInfo))) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_NOT_EQUALS) {
-                result->typeInfo = lhsType->typeInfo;
+                result->typeInfo = typeBool;
             } else {
                 ERROR_VA(op.loc, "Invalid binary operation: %s "STR_FMT" %s", TypeStr[lhsType->typeInfo->symbolType], STR_PRINT(op.value), TypeStr[rhsType->typeInfo->symbolType]);
             }
@@ -569,7 +617,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
 
             Token op = expr->expr.UNARY_EXPRESSION.operator;
             Expression* opExpr = expr->expr.UNARY_EXPRESSION.expr;
-            TypecheckedExpression* typeInfo = typecheckExpression(mem, opExpr, scope);
+            TypecheckedExpression* typeInfo = typecheckExpression(mem, opExpr, scope, expected);
 
             // TODO: static assert on the number of operators
             if(TypeIsNumber(typeInfo->typeInfo) && op.type == TokenType_SUB) {
@@ -683,7 +731,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 Expression* expr = statement->node.VAR_DECL_ASSIGN.expr;
                 TypeInfo* type = statement->node.VAR_DECL_ASSIGN.type;
 
-                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result);
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, type);
                 if(inferedType->typeInfo->symbolType == TYPE_VOID) {
                     Location loc = {0}; // TODO: fix location
                     ERROR(loc, "Cannot assign void type");
@@ -722,7 +770,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                     ERROR_VA(loc, "Trying to assign to an undefined variable: "STR_FMT, STR_PRINT(id));
                 }
                 TypeInfo* expectedType = expectedRes.typeInfo;
-                TypecheckedExpression* inferedType  = typecheckExpression(mem, expr, result);
+                TypecheckedExpression* inferedType  = typecheckExpression(mem, expr, result, expectedType);
 
                 if(!TypeMatch(expectedType, inferedType->typeInfo)) {
                     Location loc = {0}; // TODO: fix loc
@@ -742,7 +790,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
             } break;
             case ASTNodeType_RET: {
                 Expression* expr = statement->node.RET.expr;
-                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result);
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, expectedReturnType);
                 // TODO: what do when returning from a void func, typecheck expression will seg fault
 
                 if(!TypeMatch(expectedReturnType, inferedType->typeInfo)) {
@@ -774,10 +822,9 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                     Expression* blockExpr = block.expr;
                     Scope* blockScope = block.scope;
 
-                    TypecheckedExpression* inferedType = typecheckExpression(mem, blockExpr, result);
-                    TypeInfo boolType = {0};
-                    boolType.symbolType = TYPE_BOOL;
-                    if(!TypeMatch(&boolType, inferedType->typeInfo)) {
+                    TypeInfo* boolType = TypeInitSimple(mem, TYPE_BOOL);
+                    TypecheckedExpression* inferedType = typecheckExpression(mem, blockExpr, result, boolType);
+                    if(!TypeMatch(boolType, inferedType->typeInfo)) {
                         Location loc = {0}; // TODO: fix loc
                         ERROR_VA(
                             loc,
@@ -802,10 +849,9 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 Expression* expr = statement->node.LOOP.expr;
                 Scope* scope = statement->node.LOOP.scope;
 
-                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result);
-                TypeInfo boolType = {0};
-                boolType.symbolType = TYPE_BOOL;
-                if(!(TypeMatch(&boolType, inferedType->typeInfo) || TypeIsNumber(inferedType->typeInfo))) {
+                TypeInfo* boolType = TypeInitSimple(mem, TYPE_BOOL);
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, boolType);
+                if(!(TypeMatch(boolType, inferedType->typeInfo) || TypeIsNumber(inferedType->typeInfo))) {
                     Location loc = {0}; // TODO: fix loc
                     ERROR_VA(
                         loc,
@@ -822,7 +868,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
             } break;
             case ASTNodeType_EXPRESSION: {
                 Expression* expr = statement->node.EXPRESSION.expr;
-                TypecheckedExpression* typeInfo = typecheckExpression(mem, expr, result);
+                TypecheckedExpression* typeInfo = typecheckExpression(mem, expr, result, NULL);
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
                 typechecked.node.EXPRESSION.expr = typeInfo;
@@ -858,7 +904,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
 }
 
 TypecheckedScope* typecheckScope(Arena* mem, Scope* scope, TypecheckedScope* parent, TypeInfo* expectedReturnType, bool isTopLevel) {
-    TypecheckedScope* target = TypecheckedScopeInit(mem, parent);
+    TypecheckedScope* target = TypecheckedScopeInit(mem, parent, FALSE);
     return typecheckScope2(mem, scope, target, expectedReturnType, isTopLevel);
 }
 

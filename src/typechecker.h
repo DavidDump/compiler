@@ -139,6 +139,13 @@ typedef struct TypecheckedScope {
     // global variables need to be constant, and evaluated
     // local variables only need to have a known type during compile time
 
+    // all the variables that are declared in this scope and all its child scopes
+    // when codegening the scope stack space needs to be reserved for all the local variables up front
+    // this includes variables declared in ifs and loops so all the variables get colleceted here
+    // variables declared in this scope specifically are stored in the `variables` field, this is used for typechecking
+    Hashmap(String, TypeInfoPtr) allVariables;
+    bool isFunctionScope;
+
     // TODO: this is probably not a good idea, remove later
     Array(u64) functionIndicies; // the indicies in the constants hashmap which contain function literals
     Array(TypecheckedStatement) statements;

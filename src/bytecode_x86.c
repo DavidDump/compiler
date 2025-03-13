@@ -693,7 +693,7 @@ void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentS
     }
 
     // clean up the scope
-    genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM32(localScope->stackSpaceForLocalVars)));
+    // genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM32(localScope->stackSpaceForLocalVars)));
 }
 
 void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope) {
@@ -787,7 +787,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             TypecheckedExpression* expr = statement.node.LOOP.expr;
             TypecheckedScope* scope = statement.node.LOOP.scope;
             TypeInfo* typeInfo = expr->typeInfo;
-            
+
             if(typeInfo->symbolType == TYPE_BOOL) {
                 // check condition every iteration
                 u64 conditionAddress = ctx->code.size;
@@ -891,7 +891,7 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
     genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
 
     // variables
-    HashmapFor(String, TypeInfoPtr, it, &scope->variables) {
+    HashmapFor(String, TypeInfoPtr, it, &scope->allVariables) {
         String key = it->key;
         TypeInfo* value = it->value;
 
