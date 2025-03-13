@@ -847,7 +847,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
             } break;
             case ASTNodeType_LOOP: {
                 Expression* expr = statement->node.LOOP.expr;
-                Scope* scope = statement->node.LOOP.scope;
+                Scope* loopScope = statement->node.LOOP.scope;
 
                 TypeInfo* boolType = TypeInitSimple(mem, TYPE_BOOL);
                 TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, boolType);
@@ -863,7 +863,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
                 typechecked.node.LOOP.expr = inferedType;
-                typechecked.node.LOOP.scope = typecheckScope(mem, scope, result, expectedReturnType, FALSE);
+                typechecked.node.LOOP.scope = typecheckScope(mem, loopScope, result, expectedReturnType, FALSE);
                 ArrayAppend(result->statements, typechecked);
             } break;
             case ASTNodeType_EXPRESSION: {
@@ -889,9 +889,9 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
         TypeInfo* returnType = expr->expr.FUNCTION_LIT.returnType;
         Scope* fnScope = expr->expr.FUNCTION_LIT.scope;
 
-        TypecheckedScope* target = fnValue.as_function;
-        target->parent = result; // NOTE: the parent doesnt get set in the `evaluateExpression()` call
-        fnValue.as_function = typecheckScope2(mem, fnScope, target, returnType, FALSE);
+        TypecheckedScope* fnTarget = fnValue.as_function;
+        fnTarget->parent = result; // NOTE: the parent doesnt get set in the `evaluateExpression()` call
+        fnValue.as_function = typecheckScope2(mem, fnScope, fnTarget, returnType, FALSE);
 
         // TODO: incorrect in case of a hash collision
         u64 index = HashmapHashFunc(String)(id) % result->constants.capacity;

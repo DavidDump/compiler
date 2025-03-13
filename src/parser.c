@@ -229,8 +229,8 @@ void ASTNodePrint(ASTNode* node, u64 indent) {
                 // statements
                 if(scope->statements.size > 0) {
                     genPrintHelper("    statements: [\n");
-                    for(u64 i = 0; i < scope->statements.size; ++i) {
-                        ASTNodePrint(scope->statements.data[i], indent + 2);
+                    for(u64 h = 0; h < scope->statements.size; ++h) {
+                        ASTNodePrint(scope->statements.data[h], indent + 2);
                     }
                     genPrintHelper("    ],\n");
                 } else {
