@@ -97,22 +97,7 @@ typedef enum OperandType {
     OPERAND_COUNT,
 } OperandType;
 
-#pragma GCC diagnostic ignored "-Wunused-variable"
-static char* OperandTypeStr[OPERAND_COUNT] = {
-    [OPERAND_NONE]              = "NONE",
-    [OPERAND_Register]          = "r",
-    [OPERAND_AddrInReg]         = "r/m",
-    [OPERAND_AddrInRegOffset8]  = "r/m",
-    [OPERAND_AddrInRegOffset32] = "r/m",
-    [OPERAND_SIB]               = "r/m",
-    [OPERAND_SIBOffset8]        = "r/m",
-    [OPERAND_SIBOffset32]       = "r/m",
-    [OPERAND_RIP]               = "[RIP + addr]",
-    [OPERAND_AbsoluteAddr]      = "[addr]",
-    [OPERAND_Immediate8]        = "imm8",
-    [OPERAND_Immediate32]       = "imm32",
-};
-#pragma GCC diagnostic pop
+extern char* OperandTypeStr[OPERAND_COUNT];
 
 typedef struct Operand {
     OperandType type;

@@ -76,11 +76,9 @@ typedef enum Mnemonic {
     Mnemonic_COUNT,
 } Mnemonic;
 
-#pragma GCC diagnostic ignored "-Wunused-variable"
 extern const char* MnemonicStr[Mnemonic_COUNT];
 
 #define MAX_ENCODING_FOR_INSTRUCTION 255
 extern InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION];
-#pragma GCC diagnostic pop
 
 #endif // COMP_INSTRUCTIONS_H

@@ -4,6 +4,34 @@
 #include <stdlib.h> // exit(), EXIT_FAILURE
 #include <stdio.h> // printf
 
+char* ExpressionTypeStr[] = {
+    [ExpressionType_BINARY_EXPRESSION] = "BINARY_EXPRESSION",
+    [ExpressionType_UNARY_EXPRESSION]  = "UNARY_EXPRESSION",
+    [ExpressionType_INT_LIT]           = "INT_LIT",
+    [ExpressionType_FLOAT_LIT]         = "FLOAT_LIT",
+    [ExpressionType_STRING_LIT]        = "STRING_LIT",
+    [ExpressionType_BOOL_LIT]          = "BOOL_LIT",
+    [ExpressionType_SYMBOL]            = "SYMBOL",
+    [ExpressionType_FUNCTION_CALL]     = "FUNCTION_CALL",
+    [ExpressionType_FUNCTION_LIT]      = "FUNCTION_LIT",
+};
+
+char* ASTNodeTypeStr[ASTNodeType_COUNT + 1] = {
+    [ASTNodeType_NONE]              = "NONE",
+    
+    [ASTNodeType_VAR_DECL]          = "VAR_DECL",
+    [ASTNodeType_VAR_DECL_ASSIGN]   = "VAR_DECL_ASSIGN",
+    [ASTNodeType_VAR_REASSIGN]      = "VAR_REASSIGN",
+    [ASTNodeType_VAR_CONST]         = "VAR_CONST",
+    [ASTNodeType_RET]               = "RET",
+    [ASTNodeType_IF]                = "IF",
+    [ASTNodeType_LOOP]              = "LOOP",
+    [ASTNodeType_EXPRESSION]        = "EXPRESSION",
+    [ASTNodeType_DIRECTIVE]         = "DIRECTIVE",
+
+    [ASTNodeType_COUNT]             = "COUNT",
+};
+
 ASTNode* NodeInit(Arena* mem){
     ASTNode* node = arena_alloc(mem, sizeof(ASTNode));
     assert(node, "Failed to allocate AST node");

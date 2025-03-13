@@ -243,7 +243,7 @@ void genInstruction(GenContext* ctx, Instruction inst) {
         Register index = 0; // NOTE: maybe need better invalid here
         Register rmReg = 0; // NOTE: maybe need better invalid here
         u8 regOrExt = 0;
-        for(u64 h = 0; h < INSTRUCTION_MAX_OPERANDS; h++) {
+        for(u8 h = 0; h < INSTRUCTION_MAX_OPERANDS; h++) {
             Operand op = inst.ops[h];
             OpType encodingOp = encoding.opTypes[h];
 
@@ -403,7 +403,7 @@ void genInstruction(GenContext* ctx, Instruction inst) {
 void gen_callExtern(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_RIP(0xDEADBEEF)));
-    int offset = ctx->code.size - 4;
+    u64 offset = ctx->code.size - 4;
     AddrToPatch patch = {
         .name = name,
         .offset = offset,
@@ -414,7 +414,7 @@ void gen_callExtern(GenContext* ctx, String name) {
 void gen_call(GenContext* ctx, String name) {
     // 8 + 8 + 32 bits pushed to the ctx, last 32 are the address
     genInstruction(ctx, INST(call, OP_IMM32(0xDEADBEEF)));
-    int offset = ctx->code.size - 4;
+    u64 offset = ctx->code.size - 4;
     AddrToPatch patch = {
         .name = name,
         .offset = offset,
@@ -431,7 +431,7 @@ void gen_DataInReg(GenContext* ctx, Register reg, String name) {
     // meaning instead of reading from the data begining, where the size is stored,
     // instead it reads the data stored in the entry
     genInstruction(ctx, INST(lea, OP_REG(reg), OP_RIP(sizeof(u64))));
-    int offset = ctx->code.size - 4;
+    u64 offset = ctx->code.size - 4;
     AddrToPatch patch = {
         .name = name,
         .offset = offset,
@@ -444,7 +444,7 @@ void gen_SizeInReg(GenContext* ctx, Register reg, String name) {
     // NOTE: the rip address get added to the patched address,
     // the address gets added to 0 so in this case we read the size field of the entry
     genInstruction(ctx, INST(mov, OP_REG(reg), OP_RIP(0)));
-    int offset = ctx->code.size - 4;
+    u64 offset = ctx->code.size - 4;
     AddrToPatch patch = {
         .name = name,
         .offset = offset,
@@ -456,6 +456,21 @@ void gen_SizeInReg(GenContext* ctx, Register reg, String name) {
 // TODO: the above section of the file should be in bytecode_x64.c
 // TODO: the below section of the file should be in codegen.c
 // 
+
+char* OperandTypeStr[OPERAND_COUNT] = {
+    [OPERAND_NONE]              = "NONE",
+    [OPERAND_Register]          = "r",
+    [OPERAND_AddrInReg]         = "r/m",
+    [OPERAND_AddrInRegOffset8]  = "r/m",
+    [OPERAND_AddrInRegOffset32] = "r/m",
+    [OPERAND_SIB]               = "r/m",
+    [OPERAND_SIBOffset8]        = "r/m",
+    [OPERAND_SIBOffset32]       = "r/m",
+    [OPERAND_RIP]               = "[RIP + addr]",
+    [OPERAND_AbsoluteAddr]      = "[addr]",
+    [OPERAND_Immediate8]        = "imm8",
+    [OPERAND_Immediate32]       = "imm32",
+};
 
 // NOTE: not tested
 u64 align(u64 num, u64 alignment) {
@@ -946,6 +961,7 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
     genScope->stackSpaceForLocalVars = align(genScope->stackSpaceForLocalVars, 16);
     genInstruction(ctx, INST(sub, OP_REG(RSP), OP_IMM32(genScope->stackSpaceForLocalVars))); // TODO: this needs to be generated after `mov rbp, rsp`
     genScope->stackPointer += genScope->stackSpaceForLocalVars / 8;
+    // TODO: store the stack pointer also in bytes
 
     // scope
     for(u64 h = 0; h < scope->statements.size; ++h) {

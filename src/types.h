@@ -34,29 +34,7 @@ typedef enum Type {
     TYPE_COUNT,
 } Type;
 
-#pragma GCC diagnostic ignored "-Wunused-variable"
-static char* TypeStr[TYPE_COUNT + 1] = {
-    [TYPE_NONE]     = "NONE",
-
-    [TYPE_U8]       = "U8",
-    [TYPE_U16]      = "U16",
-    [TYPE_U32]      = "U32",
-    [TYPE_U64]      = "U64",
-    [TYPE_S8]       = "S8",
-    [TYPE_S16]      = "S16",
-    [TYPE_S32]      = "S32",
-    [TYPE_S64]      = "S64",
-    [TYPE_F32]      = "F32",
-    [TYPE_F64]      = "F64",
-    [TYPE_STRING]   = "STRING",
-    [TYPE_BOOL]     = "BOOL",
-    [TYPE_VOID]     = "VOID",
-    [TYPE_FUNCTION] = "FUNCTION",
-    [TYPE_ARRAY]    = "ARRAY",
-
-    [TYPE_COUNT]    = "COUNT",
-};
-#pragma GCC diagnostic pop
+extern char* TypeStr[TYPE_COUNT + 1];
 
 typedef struct TypeInfo TypeInfo;
 typedef TypeInfo* TypeInfoPtr;
