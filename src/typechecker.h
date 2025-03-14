@@ -100,7 +100,7 @@ typedef struct TypechekedConditionalBlock {
 defArray(TypechekedConditionalBlock);
 
 typedef struct TypecheckedStatement {
-    ASTNodeType type;
+    StatementType type;
     union {
         // NOTE: VAR_DECL_ASSIGN and VAR_REASSIGN got combined into VAR_ACCESS
         struct {

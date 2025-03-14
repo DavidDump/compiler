@@ -11,9 +11,17 @@ typedef struct Scope Scope;
 typedef Scope* ScopePtr;
 defArray(ScopePtr);
 
+typedef struct GenericScope GenericScope;
+typedef struct GlobalScope GlobalScope;
+
 typedef struct Expression Expression;
 typedef Expression* ExpressionPtr;
 defArray(ExpressionPtr);
+defHashmapFuncs(String, ExpressionPtr)
+
+typedef struct Statement Statement;
+typedef Statement* StatementPtr;
+defArray(StatementPtr);
 
 // used when defining arguments during function declaration
 typedef struct FunctionArg {
@@ -76,60 +84,73 @@ typedef struct Expression {
         struct FUNCTION_LIT {
             TypeInfo* returnType;
             Array(FunctionArg) args;
-            Scope* scope;
+            GenericScope* scope;
             bool isExtern;
         } FUNCTION_LIT;
     } expr;
 } Expression;
 
-typedef enum ASTNodeType {
-    ASTNodeType_NONE,
+typedef enum StatementType {
+    StatementType_NONE,
     
-    ASTNodeType_VAR_DECL,
-    ASTNodeType_VAR_DECL_ASSIGN,
-    ASTNodeType_VAR_REASSIGN,
-    ASTNodeType_VAR_CONST,
-    ASTNodeType_RET,
-    ASTNodeType_IF,
-    ASTNodeType_LOOP,
-    ASTNodeType_EXPRESSION,
-    ASTNodeType_DIRECTIVE,
+    StatementType_VAR_DECL,
+    StatementType_VAR_DECL_ASSIGN,
+    StatementType_VAR_REASSIGN,
+    StatementType_VAR_CONST,
+    StatementType_RET,
+    StatementType_IF,
+    StatementType_LOOP,
+    StatementType_EXPRESSION,
+    StatementType_DIRECTIVE,
     
-    ASTNodeType_COUNT,
-} ASTNodeType;
+    StatementType_COUNT,
+} StatementType;
 
-extern char* ASTNodeTypeStr[ASTNodeType_COUNT + 1];
+extern char* StatementTypeStr[StatementType_COUNT + 1];
 
-typedef struct ASTNode ASTNode;
-typedef ASTNode* ASTNodePtr;
+// dumb fucking name, i dont know anymore
+typedef struct TypeAndExpr {
+    Expression* expr;
+    TypeInfo* type;
+} TypeAndExpr;
+defHashmapFuncs(String, TypeAndExpr)
 
-defArray(ASTNodePtr);
+typedef struct GlobalScope {
+    Hashmap(String, ExpressionPtr) constants;
+    Hashmap(String, TypeAndExpr) variables;
+} GlobalScope;
 
-defHashmapFuncs(String, ExpressionPtr)
+typedef enum ScopeType {
+    ScopeType_NONE,
+    ScopeType_GLOBAL,
+    ScopeType_GENERIC,
+} ScopeType;
 
 typedef struct Scope {
-    Arena mem;
-
-    Scope* parent;
-    Array(ScopePtr) children; // maybe?
-    Array(String) symbols; // symbols defined in this scope
-    Array(ASTNodePtr) statements;
-
-    // used for typechecking;
-    Hashmap(String, ExpressionPtr) constants;
+    ScopeType type;
+    union {
+        GenericScope* as_generic;
+        GlobalScope* as_global;
+    } scope;
 } Scope;
+
+typedef struct GenericScope {
+    Scope parent;
+    Hashmap(String, ExpressionPtr) constants;
+    Array(StatementPtr) statements;
+} GenericScope;
 
 typedef struct ConditionalBlock {
     Expression* expr;
-    Scope* scope;
+    GenericScope* scope;
 } ConditionalBlock;
 
 defArray(ConditionalBlock);
 
-// not really an ASTNode anymore, should be renamed to Statement
-typedef struct ASTNode {
-    ASTNodeType type;
-    union Node {
+// not really an Statement anymore, should be renamed to Statement
+typedef struct Statement {
+    StatementType type;
+    union {
         struct VAR_DECL {
             String identifier;
             TypeInfo* type;
@@ -153,17 +174,17 @@ typedef struct ASTNode {
         struct IF {
             Array(ConditionalBlock) blocks;
             bool hasElse;
-            Scope* elze;
+            GenericScope* elze;
         } IF;
         struct LOOP {
             Expression* expr;
-            Scope* scope;
+            GenericScope* scope;
         } LOOP;
         struct EXPRESSION {
             Expression* expr;
         } EXPRESSION;
-    } node;
-} ASTNode;
+    } statement;
+} Statement;
 
 typedef struct ParseContext {
     Array(Token) tokens;
@@ -171,7 +192,6 @@ typedef struct ParseContext {
     Hashmap(String, LibName) importLibraries;
     String currentImportLibraryName;
     String currentSymbolName; // TODO: scuffed solution, so i dont have to pass the symbol name to `parseExpression()`
-    Hashmap(String, FuncInfo) funcInfo;
 } ParseContext;
 
 typedef struct Operator {
@@ -179,32 +199,26 @@ typedef struct Operator {
     s64 presedence;
 } Operator;
 
-typedef struct ExpressionEvaluationResult {
-    u64 result;
-    bool isNegative;
-} ExpressionEvaluationResult;
-
 typedef struct ParseResult {
-    Scope* globalScope;
+    GlobalScope* globalScope;
     Hashmap(String, LibName) importLibraries;
-    Hashmap(String, FuncInfo) funcInfo;
 } ParseResult;
 
 Expression* parseExpression(ParseContext* ctx, Arena* mem);
 Expression* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec);
 Expression* parseLeaf(ParseContext* ctx, Arena* mem);
 ParseResult Parse(Array(Token) tokens, Arena* mem);
-ExpressionEvaluationResult evaluate_expression(Expression* expr);
-ASTNode* parseStatement(ParseContext* ctx, Arena* mem, Scope* parent);
-Scope* parseScopeInit(Arena* mem, Scope* parent);
+Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope);
 TypeInfo* parseType(ParseContext* ctx, Arena* mem);
 bool isFunctionLit(ParseContext* ctx, Token next);
+Scope makeScopeFromGlobal(GlobalScope* scope);
+Scope makeScopeFromGeneric(GenericScope* scope);
 
 bool parseCheckSemicolon(ParseContext* ctx);
-void parseScope2(ParseContext* ctx, Arena* mem, Scope* target);
+// void parseGenericScopeInto(ParseContext* ctx, Arena* mem, GenericScope* target);
 
-#if COMP_DEBUG
-void ASTPrint(Scope* root);
+#ifdef COMP_DEBUG
+#include "parser_debug.h"
 #endif // COMP_DEBUG
 
 #endif // COMP_PARSER_NEW_H

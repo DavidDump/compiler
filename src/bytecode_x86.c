@@ -638,7 +638,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             genInstruction(ctx, INST(neg, OP_REG(RAX)));
         }
     } else {
-        UNREACHABLE_VA("Unknown ASTNodeType in expression generator: %s\n", ExpressionTypeStr[expr->type]);
+        UNREACHABLE_VA("Unknown StatementType in expression generator: %s\n", ExpressionTypeStr[expr->type]);
     }
 }
 
@@ -713,15 +713,15 @@ void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentS
 
 void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope) {
     switch(statement.type) {
-        case ASTNodeType_VAR_DECL:
-        case ASTNodeType_VAR_CONST:
-        case ASTNodeType_NONE:
-        case ASTNodeType_COUNT: {
+        case StatementType_VAR_DECL:
+        case StatementType_VAR_CONST:
+        case StatementType_NONE:
+        case StatementType_COUNT: {
             UNREACHABLE("gen statement 2");
         } break;
 
-        case ASTNodeType_VAR_REASSIGN:
-        case ASTNodeType_VAR_DECL_ASSIGN: {
+        case StatementType_VAR_REASSIGN:
+        case StatementType_VAR_DECL_ASSIGN: {
             String id = statement.node.VAR_ACCESS.identifier;
             TypecheckedExpression* expr = statement.node.VAR_ACCESS.expr;
 
@@ -731,7 +731,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             gen_x86_64_expression(ctx, expr, genScope);
             genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
         } break;
-        case ASTNodeType_RET: {
+        case StatementType_RET: {
             TypecheckedExpression* expr = statement.node.RET.expr;
 
             gen_x86_64_expression(ctx, expr, genScope);
@@ -750,7 +750,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
                 genInstruction(ctx, INST(ret, {0}));
             }
         } break;
-        case ASTNodeType_IF: {
+        case StatementType_IF: {
             Array(TypechekedConditionalBlock) blocks = statement.node.IF.blocks;
             TypecheckedScope* elze = statement.node.IF.elze;
             bool hasElse = statement.node.IF.hasElse;
@@ -798,7 +798,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
 
             free(patchTargets.data);
         } break;
-        case ASTNodeType_LOOP: {
+        case StatementType_LOOP: {
             TypecheckedExpression* expr = statement.node.LOOP.expr;
             TypecheckedScope* scope = statement.node.LOOP.scope;
             TypeInfo* typeInfo = expr->typeInfo;
@@ -841,12 +841,12 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
                 //       do the cmp and jmp after the scope and only have one jump
             }
         } break;
-        case ASTNodeType_EXPRESSION: {
+        case StatementType_EXPRESSION: {
             TypecheckedExpression* expr = statement.node.EXPRESSION.expr;
             gen_x86_64_expression(ctx, expr, genScope);
         } break;
 
-        case ASTNodeType_DIRECTIVE: break;
+        case StatementType_DIRECTIVE: break;
     }
 }
 

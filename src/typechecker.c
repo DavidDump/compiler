@@ -639,18 +639,18 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
     TypecheckedScope* result = target;
     
     // evaluate constants
-    Array(ASTNodePtr) buckets[2] = {0};
+    Array(StatementPtr) buckets[2] = {0};
     for(u64 i = 0; i < scope->statements.size; ++i) {
-        ASTNode* statement = scope->statements.data[i];
+        Statement* statement = scope->statements.data[i];
         if(isTopLevel) {
-            // NOTE: temporarily removed ASTNodeType_VAR_DECL_ASSIGN as a valid top level statement
+            // NOTE: temporarily removed StatementType_VAR_DECL_ASSIGN as a valid top level statement
             //       global variables need to be a known value at compile time because we set them by writing the value into the output file
             //       currently we dont have a way to store this information
             // NOTE: should probably add a TypecheckedExpression, to solve this issue
-            // NOTE: ASTNodeType_DIRECTIVE is temporary until compiler directives are formalized
-            if(!(statement->type == ASTNodeType_VAR_CONST || statement->type == ASTNodeType_VAR_DECL || statement->type == ASTNodeType_DIRECTIVE /* || statement->type == ASTNodeType_VAR_DECL_ASSIGN */)) {
+            // NOTE: StatementType_DIRECTIVE is temporary until compiler directives are formalized
+            if(!(statement->type == StatementType_VAR_CONST || statement->type == StatementType_VAR_DECL || statement->type == StatementType_DIRECTIVE /* || statement->type == StatementType_VAR_DECL_ASSIGN */)) {
                 Location loc = {0}; // TODO: fix
-                ERROR_VA(loc, "Invalid toplevel statments: %s", ASTNodeTypeStr[statement->type]);
+                ERROR_VA(loc, "Invalid toplevel statments: %s", StatementTypeStr[statement->type]);
             }
         }
         ArrayAppend(buckets[0], statement);
@@ -665,9 +665,9 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
     u64 processedCount = 0;
     while(TRUE) {
         for(u64 i = 0; i < buckets[CURRENT_BUCKET].size; ++i) {
-            ASTNode* statement = buckets[CURRENT_BUCKET].data[i];
+            Statement* statement = buckets[CURRENT_BUCKET].data[i];
 
-            if(statement->type != ASTNodeType_VAR_CONST) continue;
+            if(statement->type != StatementType_VAR_CONST) continue;
 
             String id = statement->node.VAR_CONST.identifier;
             Expression* expr = statement->node.VAR_CONST.expr;
@@ -710,23 +710,23 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
 
     // infer the types in all the statements
     for(u64 i = 0; i < scope->statements.size; ++i) {
-        // NOTE: only the correct ASTNodeTypes should remain here in case of a top level scope, we error out before here if not
-        ASTNode* statement = scope->statements.data[i];
+        // NOTE: only the correct StatementTypes should remain here in case of a top level scope, we error out before here if not
+        Statement* statement = scope->statements.data[i];
 
         switch(statement->type) {
-            case ASTNodeType_NONE:
-            case ASTNodeType_COUNT: {
+            case StatementType_NONE:
+            case StatementType_COUNT: {
                 UNREACHABLE("invalid node types");
             } break;
 
-            case ASTNodeType_VAR_CONST: break;
-            case ASTNodeType_VAR_DECL: {
+            case StatementType_VAR_CONST: break;
+            case StatementType_VAR_DECL: {
                 String id = statement->node.VAR_DECL.identifier;
                 TypeInfo* type = statement->node.VAR_DECL.type;
 
                 saveVariable(result, id, type);
             } break;
-            case ASTNodeType_VAR_DECL_ASSIGN: {
+            case StatementType_VAR_DECL_ASSIGN: {
                 String id = statement->node.VAR_DECL_ASSIGN.identifier;
                 Expression* expr = statement->node.VAR_DECL_ASSIGN.expr;
                 TypeInfo* type = statement->node.VAR_DECL_ASSIGN.type;
@@ -759,7 +759,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 typechecked.node.VAR_ACCESS.expr = inferedType;
                 ArrayAppend(result->statements, typechecked);
             } break;
-            case ASTNodeType_VAR_REASSIGN: {
+            case StatementType_VAR_REASSIGN: {
                 String id = statement->node.VAR_REASSIGN.identifier;
                 Expression* expr = statement->node.VAR_REASSIGN.expr;
 
@@ -788,7 +788,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 typechecked.node.VAR_ACCESS.expr = inferedType;
                 ArrayAppend(result->statements, typechecked);
             } break;
-            case ASTNodeType_RET: {
+            case StatementType_RET: {
                 Expression* expr = statement->node.RET.expr;
                 TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, expectedReturnType);
                 // TODO: what do when returning from a void func, typecheck expression will seg fault
@@ -808,7 +808,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 typechecked.node.RET.expr = inferedType;
                 ArrayAppend(result->statements, typechecked);
             } break;
-            case ASTNodeType_IF: {
+            case StatementType_IF: {
                 Array(ConditionalBlock) blocks = statement->node.IF.blocks;
                 Scope* elze = statement->node.IF.elze;
                 bool hasElse = statement->node.IF.hasElse;
@@ -845,7 +845,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
 
                 ArrayAppend(result->statements, typechecked);
             } break;
-            case ASTNodeType_LOOP: {
+            case StatementType_LOOP: {
                 Expression* expr = statement->node.LOOP.expr;
                 Scope* loopScope = statement->node.LOOP.scope;
 
@@ -866,7 +866,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 typechecked.node.LOOP.scope = typecheckScope(mem, loopScope, result, expectedReturnType, FALSE);
                 ArrayAppend(result->statements, typechecked);
             } break;
-            case ASTNodeType_EXPRESSION: {
+            case StatementType_EXPRESSION: {
                 Expression* expr = statement->node.EXPRESSION.expr;
                 TypecheckedExpression* typeInfo = typecheckExpression(mem, expr, result, NULL);
                 TypecheckedStatement typechecked = {0};
@@ -875,7 +875,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 ArrayAppend(result->statements, typechecked);
             } break;
 
-            case ASTNodeType_DIRECTIVE: break;
+            case StatementType_DIRECTIVE: break;
         }
     }
 
