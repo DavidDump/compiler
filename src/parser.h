@@ -13,7 +13,6 @@ typedef Expression* ExpressionPtr;
 typedef struct Statement Statement;
 typedef Statement* StatementPtr;
 
-typedef struct TypeAndExpr TypeAndExpr;
 typedef struct ConditionalBlock ConditionalBlock;
 typedef struct ParseContext ParseContext;
 typedef struct Operator Operator;

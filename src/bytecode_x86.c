@@ -1,6 +1,6 @@
 #include "bytecode_x86.h"
-
 #include "parser.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -408,7 +408,7 @@ void gen_callExtern(GenContext* ctx, String name) {
         .name = name,
         .offset = offset,
     };
-    ArrayAppend(ctx->symbolsToPatch, patch);
+    ArrayAppend(ctx->externalsToPatch, patch);
 }
 
 void gen_call(GenContext* ctx, String name) {
@@ -419,7 +419,7 @@ void gen_call(GenContext* ctx, String name) {
         .name = name,
         .offset = offset,
     };
-    ArrayAppend(ctx->functionsToPatch, patch);
+    ArrayAppend(ctx->internalsToPatch, patch);
 }
 
 // lea rax, [rip + 0xdeadbeef + sizeof(u64)] ; load data
@@ -490,6 +490,7 @@ void genPop(GenContext* ctx, GenScope* scope, Register reg) {
 
 typedef struct SymbolLocationResult {
     bool err;
+    bool inDataSection;
     s64 value;
 } SymbolLocationResult;
 
@@ -498,6 +499,7 @@ SymbolLocationResult findSymbolLocation(GenScope* scope, String name) {
     GenScope* at = scope;
     while(at) {
         if(HashmapGet(String, s64)(&at->localVars, name, &result.value)) {
+            if(at->parent == NULL) result.inDataSection = TRUE;
             return result;
         }
         at = at->parent;
@@ -508,10 +510,10 @@ SymbolLocationResult findSymbolLocation(GenScope* scope, String name) {
 }
 
 TypeInfo* findFunctionType(GenScope* localScope, String id) {
-    TypeInfo* result = 0;
+    ConstValue result = {0};
     GenScope* it = localScope;
     while(it) {
-        if(HashmapGet(String, TypeInfoPtr)(&it->functions, id, &result)) return result;
+        if(HashmapGet(String, ConstValue)(it->functionsDefinedInThisScope, id, &result)) return result.typeInfo;
         it = it->parent;
     }
 
@@ -530,7 +532,6 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
     } else if(expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
     } else if(expr->type == ExpressionType_STRING_LIT) {
-        #if 1
         // TODO: this branch is implemented in a very scuffed way,
         //       only here because i needed a quick working version
         //       potential optimization is to collect all the string literals
@@ -543,11 +544,10 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             .dataLen = lit.length - 2,
             .dataRVA = INVALID_ADDRESS,
         };
-        if(!HashmapSet(String, UserDataEntry)(&ctx->data, lit, value)) {
-            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", ctx->data.capacity, ctx->data.size);
+        if(!HashmapSet(String, UserDataEntry)(&ctx->dataSection, lit, value)) {
+            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", ctx->dataSection.capacity, ctx->dataSection.size);
         }
         gen_DataInReg(ctx, RAX, lit);
-        #endif
     } else if(expr->type == ExpressionType_BOOL_LIT) {
         UNIMPLEMENTED("expression generation with bools");
     } else if(expr->type == ExpressionType_SYMBOL) {
@@ -558,7 +558,11 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(id));
         }
 
-        genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value)));
+        if(res.inDataSection) {
+            gen_DataInReg(ctx, RAX, id);
+        } else {
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value)));
+        }
     } else if(expr->type == ExpressionType_FUNCTION_CALL) {
         String id = expr->expr.FUNCTION_CALL.identifier;
         Array(TypecheckedExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
@@ -688,30 +692,33 @@ void gen_patchAddress(GenContext* ctx, u64 patchTarget, u64 targetAddress) {
     ctx->code.data[patchTarget + 3] = (offset >> (8 * 3)) & 0xFF;
 }
 
-GenScope* genScopeInit(GenContext* ctx, GenScope* parent) {
-    GenScope* scope = arena_alloc(&ctx->mem, sizeof(GenScope));
+// from is the scope this GenScope is generated from,
+// this is used to set the functions defined in this scope
+GenScope* genScopeInit(Arena* mem, TypecheckedScope* from, GenScope* parent) {
+    GenScope* scope = arena_alloc(mem, sizeof(GenScope));
     scope->parent = parent;
     HashmapInit(scope->localVars, 0x10); // TODO: some reasonable limit for local vars
-    HashmapInit(scope->functions, 0x10); // TODO: some reasonable limit for local vars
+    // HashmapInit(scope->functions, 0x10); // TODO: some reasonable limit for local vars
+    scope->functionsDefinedInThisScope = &from->functions;
     return scope;
 }
 
 // generate a scope used by loops and ifs
-void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentScope) {
-    GenScope* localScope = genScopeInit(ctx, parentScope);
+void genGenericScope(GenContext* ctx, Arena* mem, TypecheckedScope* scope, GenScope* parentScope) {
+    GenScope* localScope = genScopeInit(mem, scope, parentScope);
     localScope->stackPointer = parentScope->stackPointer;
 
     Array(TypecheckedStatement) statements = scope->statements;
     for(u64 i = 0; i < statements.size; ++i) {
         TypecheckedStatement statement = statements.data[i];
-        genStatement(ctx, statement, localScope);
+        genStatement(ctx, mem, statement, localScope);
     }
 
     // clean up the scope
     // genInstruction(ctx, INST(add, OP_REG(RSP), OP_IMM32(localScope->stackSpaceForLocalVars)));
 }
 
-void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope) {
+void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, GenScope* genScope) {
     switch(statement.type) {
         case StatementType_VAR_DECL:
         case StatementType_VAR_CONST:
@@ -729,7 +736,11 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             if(res.err) UNREACHABLE_VA("local variable not defined: "STR_FMT, STR_PRINT(id));
 
             gen_x86_64_expression(ctx, expr, genScope);
-            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
+            if(res.inDataSection) {
+                UNIMPLEMENTED("writing to values in data section not implemented");
+            } else {
+                genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
+            }
         } break;
         case StatementType_RET: {
             TypecheckedExpression* expr = statement.node.RET.expr;
@@ -760,7 +771,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             {
                 TypechekedConditionalBlock firstBlock = blocks.data[0];
                 u64 patchTarget = gen_x86_64_condition(ctx, firstBlock.expr, genScope);
-                genGenericScope(ctx, firstBlock.scope, genScope);
+                genGenericScope(ctx, mem, firstBlock.scope, genScope);
 
                 if(hasElse) {
                     genInstruction(ctx, INST(jmp, OP_IMM32(0)));
@@ -774,7 +785,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
             for(u64 h = 1; h < blocks.size; ++h) {
                 TypechekedConditionalBlock block = blocks.data[h];
                 u64 patchTarget = gen_x86_64_condition(ctx, block.expr, genScope);
-                genGenericScope(ctx, block.scope, genScope);
+                genGenericScope(ctx, mem, block.scope, genScope);
 
                 bool isLastBlock = !(h + 1 < blocks.size);
                 if(!(isLastBlock && !hasElse)) {
@@ -787,7 +798,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
 
             // optional else block
             if(hasElse) {
-                genGenericScope(ctx, elze, genScope);
+                genGenericScope(ctx, mem, elze, genScope);
             }
 
             // do all the patches
@@ -807,7 +818,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
                 // check condition every iteration
                 u64 conditionAddress = ctx->code.size;
                 u64 patchTarget = gen_x86_64_condition(ctx, expr, genScope);
-                genGenericScope(ctx, scope, genScope);
+                genGenericScope(ctx, mem, scope, genScope);
 
                 u64 addressAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
                 genInstruction(ctx, INST(jmp, OP_IMM32(conditionAddress - addressAfterJmp)));
@@ -825,7 +836,7 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
                 genInstruction(ctx, INST(cmp, OP_INDIRECT_OFFSET32(RBP, -(loopCountStackLocation * 8)), OP_IMM32(0))); // TODO: not correct
                 genInstruction(ctx, INST(je, OP_IMM32(0))); // jmp after scope
                 u64 firstJmpToPatch = ctx->code.size - 4;
-                genGenericScope(ctx, scope, genScope);
+                genGenericScope(ctx, mem, scope, genScope);
                 genInstruction(ctx, INST(dec, OP_INDIRECT_OFFSET32(RBP, -(loopCountStackLocation * 8)))); // TODO: not correct
                 u64 addrAfterJmp = ctx->code.size + 5; // 5 bytes for jmp instruction
                 genInstruction(ctx, INST(jmp, OP_IMM32(addrAtCmp - addrAfterJmp))); // jmp to condition
@@ -850,63 +861,8 @@ void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* gen
     }
 }
 
-GenContext gen_x86_64_bytecode(TypecheckedScope* scope) {
-    GenContext ctx = {0};
-
-    // ctx.funcInfo = funcInfo;
-
-    // TODO: use arena allocator
-    // TODO: make the default size something sane
-    HashmapInit(ctx.functions, 0x10);
-    HashmapInit(ctx.data, 0x10);
-    // HashmapInit(ctx.constants, 0x10);
-
-    GenScope* globalScope = genScopeInit(&ctx, NULL);
-
-    for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
-        u64 index = scope->functionIndicies.data[i];
-        String fnName = scope->constants.pairs[index].key;
-        ConstValue fnScope = scope->constants.pairs[index].value;
-        TypeInfo* typeInfo = fnScope.typeInfo;
-        assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx.mem, typeInfo)));
-
-        if(!HashmapSet(String, TypeInfoPtr)(&globalScope->functions, fnName, typeInfo)) UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", globalScope->functions.capacity, globalScope->functions.size);
-    }
-
-    for(u64 i = 0; i < scope->functionIndicies.size; ++i) {
-        u64 index = scope->functionIndicies.data[i];
-        String fnName = scope->constants.pairs[index].key;
-        ConstValue fnScope = scope->constants.pairs[index].value;
-
-        // codegen function
-        genFunction(&ctx, fnName, fnScope, globalScope);
-    }
-
-    return ctx;
-}
-
-void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* parent) {
-    TypecheckedScope* scope = fnScope.as_function;
-    TypeInfo* typeInfo = fnScope.typeInfo;
-
-    assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(&ctx->mem, typeInfo)));
-    if(typeInfo->functionInfo.isExternal) return;
-
-    u64 functionLocation = ctx->code.size;
-    // TODO: why is this an s64 and not a u64
-    if(!HashmapSet(String, s64)(&ctx->functions, id, functionLocation)) UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", ctx->functions.capacity, ctx->functions.size);
-
-    // NOTE: would be usefull here to generating code into a separate buffer
-    // TODO: make the main entrypoint name customisable
-    GenScope* genScope = genScopeInit(ctx, parent);
-    genScope->isMainScope = StringEqualsCstr(id, "main");
-    if(genScope->isMainScope) ctx->entryPointOffset = ctx->code.size; // NOTE: this isnt technically necessary as all the function offsets are recorded anyway
-
-    genPush(ctx, genScope, RBP); // TODO: this is sus, check after done refactor
-    genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
-
-    // variables
-    HashmapFor(String, TypeInfoPtr, it, &scope->allVariables) {
+void calculateSpaceForVariables(GenScope* genScope, TypecheckedScope* scope) {
+    HashmapFor(String, TypeInfoPtr, it, &scope->variables) {
         String key = it->key;
         TypeInfo* value = it->value;
 
@@ -923,9 +879,38 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
         }
     }
 
+    for(u64 i = 0; i < scope->children.size; ++i) {
+        TypecheckedScope* child = scope->children.data[i];
+        calculateSpaceForVariables(genScope, child);
+    }
+}
+
+GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope, GenScope* parent) {
+    TypecheckedScope* scope = fnScope.as_function;
+    TypeInfo* typeInfo = fnScope.typeInfo;
+
+    assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(mem, typeInfo)));
+    GenScope* genScope = genScopeInit(mem, scope, parent);
+    if(typeInfo->functionInfo.isExternal) return genScope;
+
+    u64 functionLocation = ctx->code.size;
+    // TODO: why is this an s64 and not a u64
+    if(!HashmapSet(String, s64)(&ctx->functionLocations, id, functionLocation)) UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", ctx->functionLocations.capacity, ctx->functionLocations.size);
+
+    // NOTE: would be usefull here to generating code into a separate buffer
+    // TODO: make the main entrypoint name customisable
+    genScope->isMainScope = StringEqualsCstr(id, "main");
+    if(genScope->isMainScope) ctx->entryPointOffset = ctx->code.size; // NOTE: this isnt technically necessary as all the function offsets are recorded anyway
+
+    genPush(ctx, genScope, RBP); // TODO: this is sus, check after done refactor
+    genInstruction(ctx, INST(mov, OP_REG(RBP), OP_REG(RSP)));
+
+    // variables
+    calculateSpaceForVariables(genScope, scope);
+
     // function arguments
     for(u64 i = 0; i < typeInfo->functionInfo.args.size; ++i) {
-        StringAndType fnArg = typeInfo->functionInfo.args.data[i];
+        FunctionArg fnArg = typeInfo->functionInfo.args.data[i];
         String argId = fnArg.id;
         TypeInfo* argType = fnArg.type;
         // Expression* argValue = fnArg.initialValue;
@@ -966,8 +951,58 @@ void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* paren
     // scope
     for(u64 h = 0; h < scope->statements.size; ++h) {
         TypecheckedStatement statement = scope->statements.data[h];
-        genStatement(ctx, statement, genScope);
+        genStatement(ctx, mem, statement, genScope);
     }
+
+    return genScope;
+}
+
+void genAllFunctionsRecursively(GenContext* ctx, Arena* mem, TypecheckedScope* scope, GenScope* parent) {
+    HashmapFor(String, ConstValue, it, &scope->functions) {
+        String fnName = it->key;
+        ConstValue fnScope = it->value;
+        TypecheckedScope* parentScope = fnScope.as_function;
+
+        // codegen function
+        GenScope* fnGenScope = genFunction(ctx, mem, fnName, fnScope, parent);
+
+        // codegen all the sub functions
+        for(u64 i = 0; i < parentScope->children.size; ++i) {
+            TypecheckedScope* childScope = parentScope->children.data[i];
+            genAllFunctionsRecursively(ctx, mem, childScope, fnGenScope);
+        }
+    }
+}
+
+GenContext gen_x86_64_bytecode(Arena* mem, TypecheckedScope* scope) {
+    GenContext ctx = {0};
+
+    // TODO: use arena allocator
+    // TODO: make the default size something sane
+    HashmapInit(ctx.functionLocations, 0x10);
+    HashmapInit(ctx.dataSection, 0x10);
+
+    GenScope* globalScope = genScopeInit(mem, scope, NULL);
+
+    // gen functions
+    genAllFunctionsRecursively(&ctx, mem, scope, globalScope);
+
+    // patch all the interal function calls
+    for(u64 i = 0; i < ctx.internalsToPatch.size; ++i) {
+        String name = ctx.internalsToPatch.data[i].name;
+        u64 offset = ctx.internalsToPatch.data[i].offset;
+
+        s64 addr = 0;
+        if(!HashmapGet(String, s64)(&ctx.functionLocations, name, &addr)) {
+            UNREACHABLE_VA("undefined function: "STR_FMT, STR_PRINT(name));
+        }
+
+        u32 nextInstructonAddr = offset + 4;
+        u8* targetAddr = &ctx.code.data[offset];
+        *(u32*)targetAddr += addr - nextInstructonAddr;
+    }
+
+    return ctx;
 }
 
 // TODO: make sure to preserve non volitile register when entering a function

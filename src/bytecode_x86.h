@@ -47,21 +47,17 @@ typedef enum Scale {
 
 #define INVALID_ADDRESS 0xCAFEBABE
 typedef struct GenContext {
-    Arena mem;
     Array(u8) code;
-
-    Array(AddrToPatch) symbolsToPatch;   // external function call, variable or other symbol
-    Array(AddrToPatch) functionsToPatch; // internal function call
-    // NOTE: temporarly disabled due to typechecking
-    Array(AddrToPatch) dataToPatch;      // data defined in the .data section
 
     // u32 freeRegisterMask;
     u64 entryPointOffset; // the offset from the begining of the code buffer to the entry point
 
-    Hashmap(String, s64) functions; // value is the offset to the begining of the function from the begining of the code buffer
-    // NOTE: temporarly disabled due to typechecking
-    Hashmap(String, UserDataEntry) data;  // value is a UserDataEntry, only for string data
-    // Hashmap(String, s64) constants; // value is the value of a constant that should be hardcoded
+    Array(AddrToPatch) externalsToPatch; // external function call, variable or other symbol, renamed form: symbolsToPatch
+    Array(AddrToPatch) internalsToPatch; // internal function call
+    Array(AddrToPatch) dataToPatch;      // data defined in the .data section
+
+    Hashmap(String, s64) functionLocations;     // value is the offset to the begining of the function from the begining of the code buffer
+    Hashmap(String, UserDataEntry) dataSection; // data to store in the data section of the executable, statmentType can only be VAR_DECL or VAR_DECL_ASSIGN
 } GenContext;
 
 // NOTE: i think this is going to get deleted
@@ -72,7 +68,8 @@ typedef struct GenScope {
     bool isMainScope; // indicates if the return instruction should generate a regular return or a ExitProcess()
     u64 stackSpaceForLocalVars; // stores the number of bytes reserved at the begining of the scope for the local variables that get declared in the scope
 
-    Hashmap(String, TypeInfoPtr) functions; // the funtions defined in this scope
+    // Hashmap(String, TypeInfoPtr) functions; // the funtions defined in this scope
+    Hashmap(String, ConstValue)* functionsDefinedInThisScope;
 } GenScope;
 
 typedef enum OperandType {
@@ -146,12 +143,10 @@ typedef struct Instruction {
 
 #define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
 
-void genStatement(GenContext* ctx, TypecheckedStatement statement, GenScope* genScope);
-void genGenericScope(GenContext* ctx, TypecheckedScope* scope, GenScope* parentScope);
-void genFunction(GenContext* ctx, String id, ConstValue fnScope, GenScope* parent);
-// void genFunctionScope(GenContext* ctx, Scope* scope, GenScope* functionScope);
+void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, GenScope* genScope);
+void genGenericScope(GenContext* ctx, Arena* mem, TypecheckedScope* scope, GenScope* parentScope);
 void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope);
-GenContext gen_x86_64_bytecode(TypecheckedScope* scope);
+GenContext gen_x86_64_bytecode(Arena* mem, TypecheckedScope* scope);
 
 #endif // COMP_BYTECODE_H
 

@@ -128,6 +128,7 @@ typedef struct TypecheckedStatement {
 } TypecheckedStatement;
 
 defArray(TypecheckedStatement);
+defHashmapFuncs(String, TypecheckedStatement)
 
 typedef struct TypecheckedScope {
     TypecheckedScope* parent; // NOTE: if the parent is NULL this is the global scope
