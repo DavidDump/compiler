@@ -722,7 +722,7 @@ void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, Type
 // constants is a hashmap of evaluated consts that was declared in a parent scope
 TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType) {
     TypecheckedScope* result = TypecheckedScopeInit(mem, parent);
-    Hashmap(String, ConstValue) constantsInThisScope; // these are the constants declared in this scope
+    Hashmap(String, ConstValue) constantsInThisScope = {0}; // these are the constants declared in this scope
     HashmapInit(constantsInThisScope, 0x100); // TODO: better default size
     
     HashmapFor(String, ConstValue, it, constants) {
@@ -918,7 +918,7 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope) {
     TypecheckedScope* result = TypecheckedScopeInit(mem, NULL);
     
     // initial processing of consts
-    Hashmap(String, ConstValue) constants;
+    Hashmap(String, ConstValue) constants = {0};
     HashmapInit(constants, 0x100); // TODO: better default size
     FunctionsInScope functions = typecheckProcessConsts(mem, makeScopeFromGlobal(scope), &constants);
 
