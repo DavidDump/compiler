@@ -189,9 +189,11 @@ int main(int argc, char **argv) {
     // clean
     if(clean && file_exists(BUILDPATH) == 1) {
         File_Paths buildDirPaths = {0};
-        if(!read_entire_dir(SRCPATH, &buildDirPaths)) return 1;
+        if(!read_entire_dir(BUILDPATH, &buildDirPaths)) return 1;
         for(int i = 0; i < buildDirPaths.count; ++i) {
-            if(!delete_file(buildDirPaths.items[i])) return 1;
+            if(strcmp(buildDirPaths.items[i], ".") == 0 || strcmp(buildDirPaths.items[i], "..") == 0) continue;
+            char* path = temp_sprintf("%s/%s", BUILDPATH, buildDirPaths.items[i]);
+            if(!delete_file(path)) return 1;
         }
 
         if(file_exists(TARGET) == 1) if(!delete_file(TARGET)) return 1;
