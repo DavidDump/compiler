@@ -13,6 +13,10 @@
 #include "string.h"
 #include "common.h"
 
+#ifdef COMP_DEBUG
+#include "parser_debug.h"
+#endif // COMP_DEBUG
+
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
@@ -126,7 +130,7 @@ int main(int argc, char** argv){
 #endif // COMP_DEBUG
 
     TypecheckedScope* typechecked = typecheck(&readFileMem, &parseResult);
-    GenContext bytecode = gen_x86_64_bytecode(typechecked);
+    GenContext bytecode = gen_x86_64_bytecode(&readFileMem, typechecked);
 
     if(StringEndsWith(outFilepath, STR(".bin"))) {
         if(!EntireFileWrite(outFilepath, bytecode.code)) {
@@ -134,7 +138,7 @@ int main(int argc, char** argv){
             exit(EXIT_FAILURE);
         }
     } else if(StringEndsWith(outFilepath, STR(".exe"))) {
-        Array(u8) exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.symbolsToPatch, &bytecode.data, bytecode.dataToPatch, &bytecode.functions, bytecode.functionsToPatch, bytecode.entryPointOffset);
+        Array(u8) exeBytes = genExecutable(&parseResult.importLibraries, bytecode.code, bytecode.externalsToPatch, &bytecode.dataSection, bytecode.dataToPatch, bytecode.entryPointOffset);
         if(!EntireFileWrite(outFilepath, exeBytes)) {
             printf("[ERROR] Failed to write output file: "STR_FMT"\n", STR_PRINT(outFilepath));
             exit(EXIT_FAILURE);

@@ -53,6 +53,6 @@ typedef struct ParsedDataSection {
     s32 importDirectorySize;
 } ParsedDataSection;
 
-Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Array(AddrToPatch) names, Hashmap(String, UserDataEntry)* userData, Array(AddrToPatch) dataToPatch, Hashmap(String, s64)* funcCalls, Array(AddrToPatch) funcsToPatch, u64 entryPointOffset);
+Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Array(AddrToPatch) names, Hashmap(String, UserDataEntry)* userData, Array(AddrToPatch) dataToPatch, u64 entryPointOffset);
 
 #endif // COMP_PE_WRITER_H

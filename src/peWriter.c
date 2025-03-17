@@ -121,13 +121,11 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
     if(libs->size > 0) *buffer_allocate(buffer, IMAGE_IMPORT_DESCRIPTOR) = (IMAGE_IMPORT_DESCRIPTOR) {0};
 
     // Data Section
-    if(userData->size != 0) { // TODO: find out why the memory is corrupted
-        HashmapFor(String, UserDataEntry, data, userData) {
-            data->value.dataRVA = get_rva();
-            buffer_append_u64(buffer, data->value.dataLen);
-            u8* bufferMem = buffer_allocate_size(buffer, data->value.dataLen);
-            memcpy(bufferMem, data->value.data, data->value.dataLen);
-        }
+    HashmapFor(String, UserDataEntry, data, userData) {
+        data->value.dataRVA = get_rva();
+        buffer_append_u64(buffer, data->value.dataLen);
+        u8* bufferMem = buffer_allocate_size(buffer, data->value.dataLen);
+        memcpy(bufferMem, data->value.data, data->value.dataLen);
     }
     
     assert(buffer->size < UINT32_MAX, "");
@@ -141,7 +139,7 @@ ParsedDataSection parseDataSection(Hashmap(String, LibName)* libs, Hashmap(Strin
 
 // names is the locations where imported functions were used, used for patching
 // dataToPatch is the locations where user defined data was refferenced, used for patching
-Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Array(AddrToPatch) names, Hashmap(String, UserDataEntry)* userData, Array(AddrToPatch) dataToPatch, Hashmap(String, s64)* funcCalls, Array(AddrToPatch) funcsToPatch, u64 entryPointOffset) {
+Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Array(AddrToPatch) names, Hashmap(String, UserDataEntry)* userData, Array(AddrToPatch) dataToPatch, u64 entryPointOffset) {
     // Sections
     IMAGE_SECTION_HEADER sections[3] = {
         [0] = {
@@ -281,25 +279,6 @@ Array(u8) genExecutable(Hashmap(String, LibName)* libs, Array(u8) bytecode, Arra
         addrLoc[3] = ((funcRVA - nextInstructonAddr) >> (8 * 3)) & 0xff;
     }
     
-    // patch the internal function call locations
-    for(u64 i = 0; i < funcsToPatch.size; ++i) {
-        u64 offset = funcsToPatch.data[i].offset;
-        String name = funcsToPatch.data[i].name;
-
-        u8* addrLoc = &beginingOfCode[offset];
-        u32 nextInstructonAddr = (beginingIndex + offset + 4) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
-        s64 addr = 0;
-        if(!HashmapGet(String, s64)(funcCalls, name, &addr)) {
-            assertf(FALSE, "[UNREACHABLE] Failed to get the location of a function during pe writing: "STR_FMT"\n", STR_PRINT(name));
-        }
-        u32 funcRVA = (beginingIndex + addr) - text_section_header->PointerToRawData + text_section_header->VirtualAddress;
-
-        addrLoc[0] = ((funcRVA - nextInstructonAddr) >> (8 * 0)) & 0xff;
-        addrLoc[1] = ((funcRVA - nextInstructonAddr) >> (8 * 1)) & 0xff;
-        addrLoc[2] = ((funcRVA - nextInstructonAddr) >> (8 * 2)) & 0xff;
-        addrLoc[3] = ((funcRVA - nextInstructonAddr) >> (8 * 3)) & 0xff;
-    }
-
     // patch the data reference locations
     for(u64 i = 0; i < dataToPatch.size; ++i) {
         u64 offset = dataToPatch.data[i].offset;

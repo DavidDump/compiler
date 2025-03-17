@@ -336,7 +336,7 @@ ConstResult findConstant(Hashmap(String, ConstValue)* constants, String identifi
     return (ConstResult){.err = TRUE};
 }
 
-TypeResult findFunctionType(TypecheckedScope* scope, String id) {
+TypeResult typecheckFindFunctionType(TypecheckedScope* scope, String id) {
     TypecheckedScope* it = scope;
     while(it) {
         ConstValue value = {0};
@@ -468,7 +468,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             String id = expr->expr.FUNCTION_CALL.identifier;
             Array(ExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
 
-            TypeResult res = findFunctionType(scope, id);
+            TypeResult res = typecheckFindFunctionType(scope, id);
             if(res.err) {
                 Location loc = {0}; // TODO: fix loc
                 ERROR_VA(loc, "Undefined symbol used as function call: "STR_FMT, STR_PRINT(id));
