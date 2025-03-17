@@ -1,3 +1,6 @@
+#ifndef COMP_PARSER_DEBUG_H
+#define COMP_PARSER_DEBUG_H
+
 #include "parser.h"
 #include "common.h"
 
@@ -52,8 +55,8 @@ void ExpressionPrint(Expression* expr, u64 indent) {
         } break;
         case ExpressionType_FUNCTION_LIT: {
             // String id = expr->expr.FUNCTION_LIT.identifier;
-            TypeInfo* retType = expr->expr.FUNCTION_LIT.returnType;
-            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.args;
+            TypeInfo* retType = expr->expr.FUNCTION_LIT.typeInfo.returnType;
+            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.typeInfo.args;
             GenericScope* scope = expr->expr.FUNCTION_LIT.scope;
 
             genPrintHelper("FUNCTION_LIT: {\n");
@@ -295,11 +298,18 @@ void ASTPrint(Scope root) {
             GlobalScope* scope = root.scope.as_global;
 
             printf("Scope variables:\n");
-            HashmapFor(String, TypeAndExpr, it, &scope->variables) {
+            HashmapFor(String, StatementPtr, it, &scope->variables) {
                 String id = it->key;
-                TypeAndExpr value = it->value;
-                TypeInfo* type = value.type;
-                Expression* expr = value.expr;
+                Statement* value = it->value;
+                assertf(value->type == StatementType_VAR_DECL || value->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[value->type]);
+                TypeInfo* type = 0;
+                Expression* expr = 0;
+                if(value->type == StatementType_VAR_DECL) {
+                    type = value->statement.VAR_DECL.type;
+                } else if(value->type == StatementType_VAR_DECL_ASSIGN) {
+                    type = value->statement.VAR_DECL_ASSIGN.type;
+                    expr = value->statement.VAR_DECL_ASSIGN.expr;
+                }
 
                 VariablePrint(id, expr, type);
             }
@@ -331,3 +341,5 @@ void ASTPrint(Scope root) {
         } break;
     }
 }
+
+#endif // COMP_PARSER_DEBUG_H

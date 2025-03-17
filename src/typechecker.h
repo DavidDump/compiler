@@ -8,6 +8,8 @@
 #include "commonTypes.h"
 
 typedef struct TypecheckedScope TypecheckedScope;
+typedef struct TypecheckedScope* TypecheckedScopePtr;
+defArray(TypecheckedScopePtr);
 
 typedef struct ConstValue {
     TypeInfo* typeInfo;
@@ -127,31 +129,18 @@ typedef struct TypecheckedStatement {
 
 defArray(TypecheckedStatement);
 
-// NOTE: result of the typechecking operation should have
-//       - list of all the functions to generate, this includes the ones that are defined inside another function body
-//       - each scope should contain a list constants defined in that scope
 typedef struct TypecheckedScope {
-    struct TypecheckedScope* parent;
-    // TODO: is this needed anywhere, maybe remove `params`
-    Array(StringAndType) params;            // in case the scope is a function scope these are the parameters of the function
-    Hashmap(String, ConstValue) constants;  // TODO: remove constants, the value of a constant should replace the leaf SYMBOL node in the Expression
-    Hashmap(String, TypeInfoPtr) variables; // global or local variables, depending on if this is the toplevel scope
-    // global variables need to be constant, and evaluated
-    // local variables only need to have a known type during compile time
+    TypecheckedScope* parent; // NOTE: if the parent is NULL this is the global scope
+    Hashmap(String, TypeInfoPtr) variables;
+    Hashmap(String, ConstValue)  functions;
+    // Hashmap(String, TypeInfoPtr) structs; // TODO: structs not yet implemented
+    // Hashmap(String, TypeInfoPtr) enums; // TODO: enums not yet implemented
 
-    // all the variables that are declared in this scope and all its child scopes
-    // when codegening the scope stack space needs to be reserved for all the local variables up front
-    // this includes variables declared in ifs and loops so all the variables get colleceted here
-    // variables declared in this scope specifically are stored in the `variables` field, this is used for typechecking
-    Hashmap(String, TypeInfoPtr) allVariables;
-    bool isFunctionScope;
-
-    // TODO: this is probably not a good idea, remove later
-    Array(u64) functionIndicies; // the indicies in the constants hashmap which contain function literals
     Array(TypecheckedStatement) statements;
+    Array(TypecheckedScopePtr) children;
 } TypecheckedScope;
 
-TypecheckedScope* typecheckScope(Arena* mem, Scope* scope, TypecheckedScope* parent, TypeInfo* expectedReturnType, bool isTopLevel);
+TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType);
 TypecheckedScope* typecheck(Arena* mem, ParseResult* parseResult);
 
 #endif // TYPECHECKER_H

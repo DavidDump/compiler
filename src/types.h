@@ -1,14 +1,25 @@
 #ifndef COMP_TYPES_H
 #define COMP_TYPES_H
 
-#include "common.h"
+typedef struct TypeInfo TypeInfo;
+typedef TypeInfo* TypeInfoPtr;
+
+typedef struct FunctionInfo FunctionInfo;
+typedef struct ArrayInfo ArrayInfo;
+
+typedef struct FunctionArg FunctionArg;
+
 #include "dataStructures.h"
+
+defArray(TypeInfoPtr);
+defArray(FunctionArg);
+
+#include "common.h"
 #include "string.h"
 
 typedef enum Type {
     TYPE_NONE,
 
-    // NOTE: the order cannot change
     TYPE_U8,
     TYPE_U16,
     TYPE_U32,
@@ -19,7 +30,6 @@ typedef enum Type {
     TYPE_S64,
     TYPE_F32,
     TYPE_F64,
-
     TYPE_STRING,
     TYPE_BOOL,
     TYPE_VOID,
@@ -36,19 +46,15 @@ typedef enum Type {
 
 extern char* TypeStr[TYPE_COUNT + 1];
 
-typedef struct TypeInfo TypeInfo;
-typedef TypeInfo* TypeInfoPtr;
-defArray(TypeInfoPtr);
-
-typedef struct StringAndType {
+// used when defining arguments during function declaration
+typedef struct FunctionArg {
     String id;
     TypeInfo* type;
-} StringAndType;
-
-defArray(StringAndType);
+    // Expression* initialValue; // the expression this argument should be initialized with
+} FunctionArg;
 
 typedef struct FunctionInfo {
-    Array(StringAndType) args;
+    Array(FunctionArg) args;
     TypeInfo* returnType;
     bool isExternal;
 } FunctionInfo;

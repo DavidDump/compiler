@@ -94,176 +94,140 @@ ConstValue evaluateUnaryExpression(Token operator, ConstValue value) {
     return value;
 }
 
-void saveVariable(TypecheckedScope* scope, String id, TypeInfo* type) {
-    // check for redefinition
-    TypecheckedScope* it = scope;
+// TODO: if any of the scope structs change i need to update here
+// static_assert(sizeof(TypecheckedGlobalScope) == ?);
+// static_assert(sizeof(TypecheckedGenericScope) == ?);
+bool isSymbolDefined(TypecheckedScope* containing, Hashmap(String, ConstValue)* constants, String id) {
+    ConstValue tmp = {0};
+    TypeInfo*  tmp2 = 0;
+
+    if(HashmapGet(String, ConstValue)(constants, id, &tmp)) return TRUE;
+
+    TypecheckedScope* it = containing;
     while(it) {
-        for(u64 i = 0; i < it->params.size; ++i) {
-            StringAndType arg = it->params.data[i];
-            if(StringEquals(arg.id, id)) {
-                Location loc = {0}; // TODO: fix
-                ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
-            }
-        }
-
-        TypeInfo* tmp1 = {0};
-        if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &tmp1)) {
-            Location loc = {0}; // TODO: fix
-            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
-        }
-
-        ConstValue tmp2 = {0};
-        if(HashmapGet(String, ConstValue)(&it->constants, id, &tmp2)) {
-            Location loc = {0}; // TODO: fix
-            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
-        }
+        if(HashmapGet(String, ConstValue)(&it->functions, id, &tmp)) return TRUE;
+        if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &tmp2)) return TRUE;
 
         it = it->parent;
+    }
+
+    return FALSE;
+}
+
+void saveVariable(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, String id, TypeInfo* type) {
+    // check for redefinition
+    if(isSymbolDefined(scope, constants, id)) {
+        Location loc = {0}; // TODO: fix
+        ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
     }
 
     // save the symbol
     if(!HashmapSet(String, TypeInfoPtr)(&scope->variables, id, type)) {
         UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->variables.capacity, scope->variables.size, STR_PRINT(id));
     }
-
-    // save in the parent funtion scope for stack reservetion
-    it = scope;
-    TypecheckedScope* functionScope = scope;
-    while(it) {
-        if(it->isFunctionScope) {
-            functionScope = it;
-            break;
-        }
-
-        it = it->parent;
-    }
-    if(!HashmapSet(String, TypeInfoPtr)(&functionScope->allVariables, id, type)) {
-        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, functionScope->allVariables.capacity, functionScope->allVariables.size, STR_PRINT(id));
-    }
 }
 
-void saveConstant(TypecheckedScope* scope, String id, ConstValue val) {
+// containing is the scope that this constant is declared in
+void saveConstant(TypecheckedScope* containing, Hashmap(String, ConstValue)* constants, String id, ConstValue val) {
     // check for redefinition
-    TypecheckedScope* it = scope;
-    while(it) {
-        for(u64 i = 0; i < it->params.size; ++i) {
-            StringAndType arg = it->params.data[i];
-            if(StringEquals(arg.id, id)) {
-                Location loc = {0}; // TODO: fix
-                ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
-            }
-        }
-
-        TypeInfo* tmp1 = {0};
-        if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &tmp1)) {
-            Location loc = {0}; // TODO: fix
-            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
-        }
-
-        ConstValue tmp2 = {0};
-        if(HashmapGet(String, ConstValue)(&it->constants, id, &tmp2)) {
-            Location loc = {0}; // TODO: fix
-            ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
-        }
-
-        it = it->parent;
+    if(isSymbolDefined(containing, constants, id)) {
+        Location loc = {0}; // TODO: fix
+        ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
     }
 
+    // TODO: params somehow
+    // for(u64 i = 0; i < it->params.size; ++i) {
+    //     StringAndType arg = it->params.data[i];
+    //     if(StringEquals(arg.id, id)) {
+    //         Location loc = {0}; // TODO: fix
+    //         ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+    //     }
+    // }
 
     // save the symbol
-    if(!HashmapSet(String, ConstValue)(&scope->constants, id, val)) {
-        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->constants.capacity, scope->constants.size, STR_PRINT(id));
+    if(!HashmapSet(String, ConstValue)(constants, id, val)) {
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, constants->capacity, constants->size, STR_PRINT(id));
     }
 }
 
-TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent, bool isFunctionScope) {
+void saveFunction(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, String id, ConstValue val) {
+    // check for redefinition
+    if(isSymbolDefined(scope, constants, id)) {
+        Location loc = {0}; // TODO: fix
+        ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+    }
+
+    // TODO: params somehow
+    // for(u64 i = 0; i < it->params.size; ++i) {
+    //     StringAndType arg = it->params.data[i];
+    //     if(StringEquals(arg.id, id)) {
+    //         Location loc = {0}; // TODO: fix
+    //         ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+    //     }
+    // }
+
+    // save the function
+    if(!HashmapSet(String, ConstValue)(&scope->functions, id, val)) {
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->functions.capacity, scope->functions.size, STR_PRINT(id));
+    }
+}
+
+TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent) {
     TypecheckedScope* result = arena_alloc(mem, sizeof(TypecheckedScope));
     result->parent = parent;
-    result->isFunctionScope = isFunctionScope;
-    HashmapInit(result->constants, 0x100); // TODO: init size
+    HashmapInit(result->functions, 0x100); // TODO: init size
     HashmapInit(result->variables, 0x100); // TODO: init size
-    HashmapInit(result->allVariables, 0x100); // TODO: init size
     return result;
 }
 
 EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(String, ConstValue)* evaluatedConstatants) {
-    EvaluateConstantResult result1 = {0};
-    ConstValue result = {0};
+    EvaluateConstantResult result = {0};
 
     switch(expr->type) {
         case ExpressionType_INT_LIT: {
-            result.typeInfo = TypeInitSimple(mem, TYPE_S64);
-            result.as_s64 = StringToS64(expr->expr.INT_LIT.value);
+            result.val.typeInfo = TypeInitSimple(mem, TYPE_S64);
+            result.val.as_s64 = StringToS64(expr->expr.INT_LIT.value);
         } break;
         case ExpressionType_FLOAT_LIT: {
-            result.typeInfo = TypeInitSimple(mem, TYPE_F64);
+            result.val.typeInfo = TypeInitSimple(mem, TYPE_F64);
             u64 fractPartLen = expr->expr.FLOAT_LIT.fractPart.length;
             s64 wholePart = StringToS64(expr->expr.FLOAT_LIT.wholePart);
             s64 fractPart = StringToS64(expr->expr.FLOAT_LIT.fractPart);
 
-            result.as_f64 = ((f64)wholePart) + ((f64)fractPart / (10 * fractPartLen));
+            result.val.as_f64 = ((f64)wholePart) + ((f64)fractPart / (10 * fractPartLen));
         } break;
         case ExpressionType_STRING_LIT: {
-            result.typeInfo = TypeInitSimple(mem, TYPE_STRING);
-            result.as_String = expr->expr.STRING_LIT.value;
+            result.val.typeInfo = TypeInitSimple(mem, TYPE_STRING);
+            result.val.as_String = expr->expr.STRING_LIT.value;
         } break;
         case ExpressionType_BOOL_LIT: {
-            result.typeInfo = TypeInitSimple(mem, TYPE_BOOL);
-            if(StringEqualsCstr(expr->expr.BOOL_LIT.value, "true")) result.as_bool = TRUE;
-            else if(StringEqualsCstr(expr->expr.BOOL_LIT.value, "false")) result.as_bool = FALSE;
+            result.val.typeInfo = TypeInitSimple(mem, TYPE_BOOL);
+            if(StringEqualsCstr(expr->expr.BOOL_LIT.value, "true")) result.val.as_bool = TRUE;
+            else if(StringEqualsCstr(expr->expr.BOOL_LIT.value, "false")) result.val.as_bool = FALSE;
         } break;
         case ExpressionType_SYMBOL: {
             String key = expr->expr.SYMBOL.identifier;
-            ConstValue val = {0};
-            if(!HashmapGet(String, ConstValue)(evaluatedConstatants, key, &val)) {
+            if(!HashmapGet(String, ConstValue)(evaluatedConstatants, key, &result.val)) {
                 // not evaluated yet
-                result1.error = ConstantEvaluationError_UNDEFINED_SYMBOL;
-            } else {
-                result = val;
+                result.error = ConstantEvaluationError_UNDEFINED_SYMBOL;
             }
         } break;
         case ExpressionType_FUNCTION_CALL: {
             Location loc = {.filename = STR(""), .collum = 1, .line = 1}; // TODO: fix loc
             ERROR(loc, "Function call cannot be used in a constant, use #run");
         } break;
-        case ExpressionType_FUNCTION_LIT: {
-            // NOTE: this case is technically not an error we just want to propagate to the caller that this was a function literal
-            result1.error = ConstantEvaluationError_FUNCTION_LITERAL;
-
-            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.args;
-            TypeInfo* returnType = expr->expr.FUNCTION_LIT.returnType;
-            bool isExtern = expr->expr.FUNCTION_LIT.isExtern;
-
-            TypecheckedScope* resultScope = TypecheckedScopeInit(mem, NULL, TRUE); // NOTE: later set the scope correcly
-            Array(StringAndType) tmp = {0};
-            for(u64 i = 0; i < args.size; ++i) {
-                FunctionArg arg = args.data[i];
-                String argId = arg.id;
-                TypeInfo* argType = arg.type;
-
-                StringAndType asd = {.id = argId, .type = argType};
-                ArrayAppend(resultScope->params, asd);
-                ArrayAppend(tmp, asd);
-            }
-
-            result.typeInfo = TypeInitSimple(mem, TYPE_FUNCTION);
-            result.typeInfo->functionInfo.isExternal = isExtern;
-            result.typeInfo->functionInfo.args = tmp;
-            result.typeInfo->functionInfo.returnType = returnType;
-            result.as_function = resultScope;
-        } break;
         case ExpressionType_BINARY_EXPRESSION: {
             EvaluateConstantResult lhsRes = evaluateConstant(expr->expr.BINARY_EXPRESSION.lhs, mem, evaluatedConstatants);
             ConstValue lhs = lhsRes.val;
             if(lhsRes.error) {
-                result1.error = TRUE;
+                result.error = TRUE;
                 break;
             }
 
             EvaluateConstantResult rhsRes = evaluateConstant(expr->expr.BINARY_EXPRESSION.rhs, mem, evaluatedConstatants);
             ConstValue rhs = rhsRes.val;
             if(rhsRes.error) {
-                result1.error = TRUE;
+                result.error = TRUE;
                 break;
             }
 
@@ -272,13 +236,13 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
                 ERROR_VA(op.loc, "Cannot perform binary operation: "STR_FMT" on a function literal", STR_PRINT(op.value));
             }
 
-            result = evaluateBinaryExpression(lhs, op, rhs);
+            result.val = evaluateBinaryExpression(lhs, op, rhs);
         } break;
         case ExpressionType_UNARY_EXPRESSION: {
             EvaluateConstantResult valRes = evaluateConstant(expr->expr.UNARY_EXPRESSION.expr, mem, evaluatedConstatants);
             ConstValue val = valRes.val;
             if(valRes.error) {
-                result1.error = TRUE;
+                result.error = TRUE;
                 break;
             }
 
@@ -287,12 +251,14 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
                 ERROR_VA(op.loc, "Cannot perform unary operation: "STR_FMT" on a function literal", STR_PRINT(op.value));
             }
 
-            result = evaluateUnaryExpression(op, val);
+            result.val = evaluateUnaryExpression(op, val);
+        } break;
+        case ExpressionType_FUNCTION_LIT: {
+            UNREACHABLE("invalid type ExpressionType_FUNCTION_LIT in evaluateConstant: all functions should be skipped before we get to this part");
         } break;
     }
 
-    result1.val = result;
-    return result1;
+    return result;
 }
 
 Expression ConstValueToExpression(Arena* mem, ConstValue value) {
@@ -344,17 +310,8 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
         case TYPE_FUNCTION: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_FUNCTION");
             result.type = ExpressionType_FUNCTION_LIT;
-            
-            Array(FunctionArg) args = {0};
-            for(u64 i = 0; i < value.typeInfo->functionInfo.args.size; ++i) {
-                StringAndType dat = value.typeInfo->functionInfo.args.data[i];
-                FunctionArg arg = {.id = dat.id, .type = dat.type};
-                ArrayAppend(args, arg);
-            }
-            
-            result.expr.FUNCTION_LIT.args = args;
-            result.expr.FUNCTION_LIT.isExtern = value.typeInfo->functionInfo.isExternal;
-            result.expr.FUNCTION_LIT.returnType = value.typeInfo->functionInfo.returnType;
+
+            result.expr.FUNCTION_LIT.typeInfo = value.typeInfo->functionInfo;
             // result.expr.FUNCTION_LIT.scope = ;
         } break;
         case TYPE_ARRAY: {
@@ -370,58 +327,83 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
     return result;
 }
 
-ConstResult findConstant(TypecheckedScope* scope, String identifier) {
-    TypecheckedScope* it = scope;
-    while(it) {
-        ConstValue val = {0};
-        if(HashmapGet(String, ConstValue)(&it->constants, identifier, &val)) {
-            return (ConstResult){.value = val};
-        }
-
-        it = it->parent;
+ConstResult findConstant(Hashmap(String, ConstValue)* constants, String identifier) {
+    ConstValue val = {0};
+    if(HashmapGet(String, ConstValue)(constants, identifier, &val)) {
+        return (ConstResult){.value = val};
     }
 
     return (ConstResult){.err = TRUE};
 }
 
-// symbol means both constant and variable
-TypeResult findSymbolType(TypecheckedScope* scope, String identifier) {
+TypeResult findFunctionType(TypecheckedScope* scope, String id) {
     TypecheckedScope* it = scope;
     while(it) {
-        for(u64 i = 0; i < it->params.size; ++i) {
-            StringAndType arg = it->params.data[i];
-            if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
-        }
-
-        ConstValue val = {0};
-        if(HashmapGet(String, ConstValue)(&it->constants, identifier, &val)) {
-            return (TypeResult){.typeInfo = val.typeInfo};
-        }
-
-        TypeInfo* info = {0};
-        if(HashmapGet(String, TypeInfoPtr)(&it->variables, identifier, &info)) {
-            return (TypeResult){.typeInfo = info};
-        }
+        ConstValue value = {0};
+        if(HashmapGet(String, ConstValue)(&it->functions, id, &value)) return (TypeResult){.typeInfo = value.typeInfo};
         it = it->parent;
     }
+
+    Location loc = {0};
+    ERROR_VA(loc, "Undefined function: "STR_FMT, STR_PRINT(id));
+    return (TypeResult){0}; // remove warning;
+}
+
+// symbol means both constant and variable
+#if 0
+TypeResult findSymbolType(TypecheckedScope scope, Hashmap(String, ConstValue)* constants, String id) {
+    ConstValue val1 = {0};
+    TypeInfo*  val2 = 0;
+    if(HashmapGet(String, ConstValue)(constants, id, &val1)) return (TypeResult){.typeInfo = val1.typeInfo};
+    
+    TypecheckedScope it = scope;
+    while(it.type != TypecheckedScopeType_NONE) {
+        switch(it.type) {
+            case TypecheckedScopeType_NONE: {
+                UNREACHABLE("TypecheckedScopeType_NONE invalid type: cant store function");
+            } break;
+            case TypecheckedScopeType_GLOBAL: {
+                TypecheckedGlobalScope* s = it.scope.as_global;
+
+                if(HashmapGet(String, ConstValue)(&s->functions, id, &val1)) return (TypeResult){.typeInfo = val1.typeInfo};
+                if(HashmapGet(String, TypeInfoPtr)(&s->variables, id, &val2)) return (TypeResult){.typeInfo = val2};
+
+                it.type = TypecheckedScopeType_NONE;
+            } break;
+            case TypecheckedScopeType_GENERIC: {
+                TypecheckedGenericScope* s = it.scope.as_generic;
+
+                if(HashmapGet(String, TypeInfoPtr)(&s->variables, id, &val2)) return (TypeResult){.typeInfo = val2};
+
+                it = s->parent;
+            } break;
+        }
+    }
+
+    // TODO: something about params
+    // for(u64 i = 0; i < it->params.size; ++i) {
+    //     StringAndType arg = it->params.data[i];
+    //     if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
+    // }
 
     return (TypeResult){.err = TRUE};
 }
+#endif
 
-TypeResult findVariableType(TypecheckedScope* scope, String identifier) {
+TypeResult findVariableType(TypecheckedScope* scope, String id) {
+    TypeInfo*  result = 0;
     TypecheckedScope* it = scope;
     while(it) {
-        for(u64 i = 0; i < it->params.size; ++i) {
-            StringAndType arg = it->params.data[i];
-            if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
-        }
+        if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &result)) return (TypeResult){.typeInfo = result};
 
-        TypeInfo* info = {0};
-        if(HashmapGet(String, TypeInfoPtr)(&it->variables, identifier, &info)) {
-            return (TypeResult){.typeInfo = info};
-        }
         it = it->parent;
     }
+
+    // TODO: something about params
+    // for(u64 i = 0; i < it->params.size; ++i) {
+    //     StringAndType arg = it->params.data[i];
+    //     if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
+    // }
 
     return (TypeResult){.err = TRUE};
 }
@@ -429,7 +411,7 @@ TypeResult findVariableType(TypecheckedScope* scope, String identifier) {
 // expected is the type that the expression should be to pass typechecking,
 // can be used when assigning number literals to symbols that have a concrete types,
 // this value can be null to just use the default type
-TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, TypecheckedScope* scope, TypeInfo* expected) {
+TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, TypeInfo* expected) {
     TypecheckedExpression* result = arena_alloc(mem, sizeof(TypecheckedExpression));
     memcpy(result, expr, sizeof(Expression));
     // NOTE: this has a high likelyhood of fucking me in the ass later on
@@ -467,7 +449,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             // look up in the constants or symbols and find the type
             String id = expr->expr.SYMBOL.identifier;
 
-            ConstResult res1 = findConstant(scope, id);
+            ConstResult res1 = findConstant(constants, id);
             if(res1.err) {
                 TypeResult res2 = findVariableType(scope, id);
                 if(res2.err) {
@@ -486,18 +468,13 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             String id = expr->expr.FUNCTION_CALL.identifier;
             Array(ExpressionPtr) args = expr->expr.FUNCTION_CALL.args;
 
-            TypeResult res = findSymbolType(scope, id);
+            TypeResult res = findFunctionType(scope, id);
             if(res.err) {
                 Location loc = {0}; // TODO: fix loc
                 ERROR_VA(loc, "Undefined symbol used as function call: "STR_FMT, STR_PRINT(id));
             }
 
             TypeInfo* funcInfo = res.typeInfo;
-            if(funcInfo->symbolType != TYPE_FUNCTION) {
-                Location loc = {0}; // TODO: fix loc
-                ERROR_VA(loc, "Trying to use non function symbol \""STR_FMT"\" as function", STR_PRINT(id));
-            }
-
             if(funcInfo->functionInfo.args.size != args.size) {
                 Location loc = {0}; // TODO: fix loc
                 ERROR_VA(loc, "Incorrect number of arguments for funnction call, provided: %llu, expected: %llu", args.size, funcInfo->functionInfo.args.size);
@@ -505,11 +482,11 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
 
             Array(TypecheckedExpressionPtr) typecheckedArgs = {0};
             for(u64 i = 0; i < args.size; ++i) {
-                StringAndType fnArg = funcInfo->functionInfo.args.data[i];
+                FunctionArg fnArg = funcInfo->functionInfo.args.data[i];
                 Expression* providedArg = args.data[i];
                 TypeInfo* expectedArgType = fnArg.type;
-                TypecheckedExpression* providedArgType = typecheckExpression(mem, providedArg, scope, expectedArgType);
 
+                TypecheckedExpression* providedArgType = typecheckExpression(mem, providedArg, scope, constants, expectedArgType);
                 if(!TypeMatch(expectedArgType, providedArgType->typeInfo)) {
                     Location loc = {0}; // TODO: fix loc
                     ERROR_VA(
@@ -533,26 +510,13 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             result->typeInfo->isConstant = FALSE;
         } break;
         case ExpressionType_FUNCTION_LIT: {
-            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.args;
-            TypeInfo* returnType = expr->expr.FUNCTION_LIT.returnType;
-            bool isExtern = expr->expr.FUNCTION_LIT.isExtern;
+            FunctionInfo fnInfo = expr->expr.FUNCTION_LIT.typeInfo;
             // Scope* functionScope = expr->expr.FUNCTION_LIT.scope;
 
-            // TODO: deduplicate, FUNCTION_LIT and FunctionInfo are basically the same struct
-            Array(StringAndType) tmp = {0};
-            for(u64 i = 0; i < args.size; ++i) {
-                FunctionArg arg = args.data[i];
-                String argId = arg.id;
-                TypeInfo* argType = arg.type;
-                StringAndType asd = {.id = argId, .type = argType};
-                ArrayAppend(tmp, asd);
-            }
-
             result->typeInfo->symbolType = TYPE_FUNCTION;
-            result->typeInfo->functionInfo.args = tmp;
-            result->typeInfo->functionInfo.isExternal = isExtern;
-            result->typeInfo->functionInfo.returnType = returnType;
+            result->typeInfo->functionInfo = fnInfo;
             result->typeInfo->isConstant = TRUE;
+            // TODO: this is where the function should be added to global scope for codegen
         } break;
         case ExpressionType_BINARY_EXPRESSION: {
             // 1. verify the type binary operation can be performed on the types
@@ -569,18 +533,18 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 !(rhs->type == ExpressionType_INT_LIT || rhs->type == ExpressionType_FLOAT_LIT)
             ) {
                 // lhs needs to be cast
-                rhsType = typecheckExpression(mem, rhs, scope, expected);
-                lhsType = typecheckExpression(mem, lhs, scope, rhsType->typeInfo);
+                rhsType = typecheckExpression(mem, rhs, scope, constants, expected);
+                lhsType = typecheckExpression(mem, lhs, scope, constants, rhsType->typeInfo);
             } else if(
                 !(lhs->type == ExpressionType_INT_LIT || lhs->type == ExpressionType_FLOAT_LIT) &&
                 (rhs->type == ExpressionType_INT_LIT || rhs->type == ExpressionType_FLOAT_LIT)
             ) {
                 // rhs needs to be cast
-                lhsType = typecheckExpression(mem, lhs, scope, expected);
-                rhsType = typecheckExpression(mem, rhs, scope, lhsType->typeInfo);
+                lhsType = typecheckExpression(mem, lhs, scope, constants, expected);
+                rhsType = typecheckExpression(mem, rhs, scope, constants, lhsType->typeInfo);
             } else {
-                lhsType = typecheckExpression(mem, lhs, scope, expected);
-                rhsType = typecheckExpression(mem, rhs, scope, expected);
+                lhsType = typecheckExpression(mem, lhs, scope, constants, expected);
+                rhsType = typecheckExpression(mem, rhs, scope, constants, expected);
             }
 
             // TODO: static assert on the number of operators
@@ -617,7 +581,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
 
             Token op = expr->expr.UNARY_EXPRESSION.operator;
             Expression* opExpr = expr->expr.UNARY_EXPRESSION.expr;
-            TypecheckedExpression* typeInfo = typecheckExpression(mem, opExpr, scope, expected);
+            TypecheckedExpression* typeInfo = typecheckExpression(mem, opExpr, scope, constants, expected);
 
             // TODO: static assert on the number of operators
             if(TypeIsNumber(typeInfo->typeInfo) && op.type == TokenType_SUB) {
@@ -631,76 +595,86 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
     return result;
 }
 
-// expectedReturnType is used for typechecking return statement
-// target is the scope to parse the statements into
-TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* target, TypeInfo* expectedReturnType, bool isTopLevel) {
-#define OTHER_BUCKET (currentIt == 1 ? 0 : 1)
-#define CURRENT_BUCKET (currentIt)
-    TypecheckedScope* result = target;
-    
-    // evaluate constants
-    Array(StatementPtr) buckets[2] = {0};
-    for(u64 i = 0; i < scope->statements.size; ++i) {
-        Statement* statement = scope->statements.data[i];
-        if(isTopLevel) {
-            // NOTE: temporarily removed StatementType_VAR_DECL_ASSIGN as a valid top level statement
-            //       global variables need to be a known value at compile time because we set them by writing the value into the output file
-            //       currently we dont have a way to store this information
-            // NOTE: should probably add a TypecheckedExpression, to solve this issue
-            // NOTE: StatementType_DIRECTIVE is temporary until compiler directives are formalized
-            if(!(statement->type == StatementType_VAR_CONST || statement->type == StatementType_VAR_DECL || statement->type == StatementType_DIRECTIVE /* || statement->type == StatementType_VAR_DECL_ASSIGN */)) {
-                Location loc = {0}; // TODO: fix
-                ERROR_VA(loc, "Invalid toplevel statments: %s", StatementTypeStr[statement->type]);
-            }
-        }
-        ArrayAppend(buckets[0], statement);
+typedef struct FunctionsInScope {
+    Array(String) names;
+    Array(ExpressionPtr) values;
+} FunctionsInScope;
+
+FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String, ConstValue)* target) {
+    FunctionsInScope result;
+
+    Hashmap(String, ExpressionPtr)* constants;
+    switch(scope.type) {
+        case ScopeType_NONE: {
+            UNREACHABLE("ScopeType_NONE is invalid type: cannot eval consts");
+        } break;
+        case ScopeType_GLOBAL: {
+            constants = &scope.scope.as_global->constants;
+        } break;
+        case ScopeType_GENERIC: {
+            constants = &scope.scope.as_generic->constants;
+        } break;
     }
 
-    // NOTE: these are the functions that need to be typechecked once the current scope is done
-    Array(ExpressionPtr) fnScopes = {0};
-    Array(String) fnNames = {0};
-    Array(ConstValue) fnValues = {0};
-
+#define OTHER_BUCKET (currentIt == 1 ? 0 : 1)
+#define CURRENT_BUCKET (currentIt)
     u64 currentIt = 0;
+
+    Array(String) deferedNames[2] = {0};
+    Array(ExpressionPtr) deferedExprs[2] = {0};
+
+    // initial processing of consts
+    HashmapFor(String, ExpressionPtr, it, constants) {
+        String key = it->key;
+        Expression* value = it->value;
+
+        if(value->type == ExpressionType_FUNCTION_LIT) {
+            ArrayAppend(result.names, key);
+            ArrayAppend(result.values, value);
+            continue;
+        }
+
+        EvaluateConstantResult res = evaluateConstant(value, mem, target);
+        if(res.error == ConstantEvaluationError_UNDEFINED_SYMBOL) {
+            // add to other bucket, defer
+            ArrayAppend(deferedNames[CURRENT_BUCKET], key);
+            ArrayAppend(deferedExprs[CURRENT_BUCKET], value);
+        } else {
+            if(!HashmapSet(String, ConstValue)(target, key, res.val)) {
+                UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, target->capacity, target->size, STR_PRINT(key));
+            }
+        }
+    }
+
+    // resolve unordered dependencies in consts
     u64 processedCount = 0;
-    while(TRUE) {
-        for(u64 i = 0; i < buckets[CURRENT_BUCKET].size; ++i) {
-            Statement* statement = buckets[CURRENT_BUCKET].data[i];
+    for(;;) {
+        for(u64 i = 0; i < deferedNames[CURRENT_BUCKET].size; ++i) {
+            String id = deferedNames[CURRENT_BUCKET].data[i];
+            Expression* expr = deferedExprs[CURRENT_BUCKET].data[i];
 
-            if(statement->type != StatementType_VAR_CONST) continue;
-
-            String id = statement->node.VAR_CONST.identifier;
-            Expression* expr = statement->node.VAR_CONST.expr;
-            EvaluateConstantResult res = evaluateConstant(expr, mem, &result->constants);
-
+            EvaluateConstantResult res = evaluateConstant(expr, mem, target);
             if(res.error == ConstantEvaluationError_UNDEFINED_SYMBOL) {
-                // add to other bucket
-                ArrayAppend(buckets[OTHER_BUCKET], statement);
-            } else if(res.error == ConstantEvaluationError_FUNCTION_LITERAL) {
-                // record the function scope for later typechecking
-                assert(expr->type == ExpressionType_FUNCTION_LIT, "only function literal here");
-                ArrayAppend(fnScopes, expr);
-                ArrayAppend(fnNames, id);
-                ArrayAppend(fnValues, res.val);
-
-                saveConstant(result, id, res.val);
-                // TODO: should there be a `processedCount++;` here? how could that fuck up
-
-                if(!StringEquals(result->constants.last->key, id)) UNREACHABLE("The last inserted element is not the same as the last linked list element");
+                // add to other bucket, defer
+                ArrayAppend(deferedNames[OTHER_BUCKET], id);
+                ArrayAppend(deferedExprs[OTHER_BUCKET], expr);
             } else {
-                saveConstant(result, id, res.val);
-                processedCount++;
+                processedCount += 1;
+                if(!HashmapSet(String, ConstValue)(target, id, res.val)) {
+                    UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, target->capacity, target->size, STR_PRINT(id));
+                }
             }
         }
 
-        if(buckets[OTHER_BUCKET].size == 0) break;
+        if(deferedNames[OTHER_BUCKET].size == 0) break;
         if(processedCount == 0) {
             Location loc = {0}; // TODO: fix
             ERROR(loc, "Circular dependencies in constants");
         }
 
-        // empty current bucket
-        buckets[CURRENT_BUCKET].size = 0;
+        // empty current buckets
+        deferedNames[CURRENT_BUCKET].size = 0;
+        deferedExprs[CURRENT_BUCKET].size = 0;
 
         // swap the two buckets
         if(currentIt == 0) currentIt = 1;
@@ -708,9 +682,63 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
         processedCount = 0;
     }
 
+    free(deferedNames->data);
+    free(deferedExprs->data);
+    return result;
+
+#undef OTHER_BUCKET
+#undef CURRENT_BUCKET
+}
+
+void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, TypecheckedScope* parent, FunctionsInScope functions) {
+    for(u64 i = 0; i < functions.names.size; ++i) {
+        String id = functions.names.data[i];
+        Expression* expr = functions.values.data[i];
+        assert(expr->type == ExpressionType_FUNCTION_LIT, "Expected function lit in typecheckFunctions");
+
+        GenericScope* fnScope = expr->expr.FUNCTION_LIT.scope;
+        TypeInfo* returnType = expr->expr.FUNCTION_LIT.typeInfo.returnType;
+
+        TypeInfo* fnTypeInfo = TypeInitSimple(mem, TYPE_FUNCTION);
+        fnTypeInfo->functionInfo = expr->expr.FUNCTION_LIT.typeInfo;
+
+        TypecheckedScope* resultScope = typecheckScope(mem, fnScope, parent, constants, returnType);
+
+        ConstValue asd = {0};
+        asd.typeInfo = fnTypeInfo;
+        asd.as_function = resultScope;
+        saveFunction(parent, constants, id, asd);
+    }
+}
+
+// NOTE: this was the messege left, where we checked is a scope is top level or not:
+            // NOTE: temporarily removed StatementType_VAR_DECL_ASSIGN as a valid top level statement
+            //       global variables need to be a known value at compile time because we set them by writing the value into the output file
+            //       currently we dont have a way to store this information
+            // NOTE: should probably add a TypecheckedExpression, to solve this issue
+            // NOTE: StatementType_DIRECTIVE is temporary until compiler directives are formalized
+
+// expectedReturnType is used for typechecking return statement
+// constants is a hashmap of evaluated consts that was declared in a parent scope
+TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType) {
+    TypecheckedScope* result = TypecheckedScopeInit(mem, parent);
+    Hashmap(String, ConstValue) constantsInThisScope; // these are the constants declared in this scope
+    HashmapInit(constantsInThisScope, 0x100); // TODO: better default size
+    
+    HashmapFor(String, ConstValue, it, constants) {
+        String key = it->key;
+        ConstValue value = it->value;
+
+        if(!HashmapSet(String, ConstValue)(&constantsInThisScope, key, value)) {
+            UNREACHABLE("failed to instert into hashmap");
+        }
+    }
+
+    // evaluate constants
+    FunctionsInScope  functions = typecheckProcessConsts(mem, makeScopeFromGeneric(scope), &constantsInThisScope);
+
     // infer the types in all the statements
     for(u64 i = 0; i < scope->statements.size; ++i) {
-        // NOTE: only the correct StatementTypes should remain here in case of a top level scope, we error out before here if not
         Statement* statement = scope->statements.data[i];
 
         switch(statement->type) {
@@ -721,23 +749,23 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
 
             case StatementType_VAR_CONST: break;
             case StatementType_VAR_DECL: {
-                String id = statement->node.VAR_DECL.identifier;
-                TypeInfo* type = statement->node.VAR_DECL.type;
+                String id = statement->statement.VAR_DECL.identifier;
+                TypeInfo* type = statement->statement.VAR_DECL.type;
 
-                saveVariable(result, id, type);
+                saveVariable(result, &constantsInThisScope, id, type);
             } break;
             case StatementType_VAR_DECL_ASSIGN: {
-                String id = statement->node.VAR_DECL_ASSIGN.identifier;
-                Expression* expr = statement->node.VAR_DECL_ASSIGN.expr;
-                TypeInfo* type = statement->node.VAR_DECL_ASSIGN.type;
+                String id = statement->statement.VAR_DECL_ASSIGN.identifier;
+                Expression* expr = statement->statement.VAR_DECL_ASSIGN.expr;
+                TypeInfo* type = statement->statement.VAR_DECL_ASSIGN.type;
 
-                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, type);
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, type);
                 if(inferedType->typeInfo->symbolType == TYPE_VOID) {
                     Location loc = {0}; // TODO: fix location
                     ERROR(loc, "Cannot assign void type");
                 }
 
-                if(type->symbolType == TYPE_VOID) {
+                if(type->symbolType == TYPE_NONE) {
                     type = inferedType->typeInfo;
                 } else {
                     if(!TypeMatch(type, inferedType->typeInfo)) {
@@ -751,7 +779,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                     }
                 }
 
-                saveVariable(result, id, type);
+                saveVariable(result, &constantsInThisScope, id, type);
 
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
@@ -760,8 +788,8 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 ArrayAppend(result->statements, typechecked);
             } break;
             case StatementType_VAR_REASSIGN: {
-                String id = statement->node.VAR_REASSIGN.identifier;
-                Expression* expr = statement->node.VAR_REASSIGN.expr;
+                String id = statement->statement.VAR_REASSIGN.identifier;
+                Expression* expr = statement->statement.VAR_REASSIGN.expr;
 
                 // find variable
                 TypeResult expectedRes = findVariableType(result, id);
@@ -770,7 +798,7 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                     ERROR_VA(loc, "Trying to assign to an undefined variable: "STR_FMT, STR_PRINT(id));
                 }
                 TypeInfo* expectedType = expectedRes.typeInfo;
-                TypecheckedExpression* inferedType  = typecheckExpression(mem, expr, result, expectedType);
+                TypecheckedExpression* inferedType  = typecheckExpression(mem, expr, result, &constantsInThisScope, expectedType);
 
                 if(!TypeMatch(expectedType, inferedType->typeInfo)) {
                     Location loc = {0}; // TODO: fix loc
@@ -789,8 +817,8 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 ArrayAppend(result->statements, typechecked);
             } break;
             case StatementType_RET: {
-                Expression* expr = statement->node.RET.expr;
-                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, expectedReturnType);
+                Expression* expr = statement->statement.RET.expr;
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, expectedReturnType);
                 // TODO: what do when returning from a void func, typecheck expression will seg fault
 
                 if(!TypeMatch(expectedReturnType, inferedType->typeInfo)) {
@@ -809,9 +837,9 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 ArrayAppend(result->statements, typechecked);
             } break;
             case StatementType_IF: {
-                Array(ConditionalBlock) blocks = statement->node.IF.blocks;
-                Scope* elze = statement->node.IF.elze;
-                bool hasElse = statement->node.IF.hasElse;
+                Array(ConditionalBlock) blocks = statement->statement.IF.blocks;
+                GenericScope* elze = statement->statement.IF.elze;
+                bool hasElse = statement->statement.IF.hasElse;
 
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
@@ -820,10 +848,10 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 for(u64 h = 0; h < blocks.size; ++h) {
                     ConditionalBlock block = blocks.data[h];
                     Expression* blockExpr = block.expr;
-                    Scope* blockScope = block.scope;
+                    GenericScope* blockScope = block.scope;
 
                     TypeInfo* boolType = TypeInitSimple(mem, TYPE_BOOL);
-                    TypecheckedExpression* inferedType = typecheckExpression(mem, blockExpr, result, boolType);
+                    TypecheckedExpression* inferedType = typecheckExpression(mem, blockExpr, result, &constantsInThisScope, boolType);
                     if(!TypeMatch(boolType, inferedType->typeInfo)) {
                         Location loc = {0}; // TODO: fix loc
                         ERROR_VA(
@@ -834,23 +862,23 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                     }
 
                     TypechekedConditionalBlock typecheckedBlock = {0};
-                    typecheckedBlock.scope = typecheckScope(mem, blockScope, result, expectedReturnType, FALSE);
+                    typecheckedBlock.scope = typecheckScope(mem, blockScope, result, &constantsInThisScope, expectedReturnType);
                     typecheckedBlock.expr = inferedType;
                     ArrayAppend(typechecked.node.IF.blocks, typecheckedBlock);
                 }
 
                 if(hasElse) {
-                    typechecked.node.IF.elze = typecheckScope(mem, elze, result, expectedReturnType, FALSE);
+                    typechecked.node.IF.elze = typecheckScope(mem, elze, result, &constantsInThisScope, expectedReturnType);
                 }
 
                 ArrayAppend(result->statements, typechecked);
             } break;
             case StatementType_LOOP: {
-                Expression* expr = statement->node.LOOP.expr;
-                Scope* loopScope = statement->node.LOOP.scope;
+                Expression* expr = statement->statement.LOOP.expr;
+                GenericScope* loopScope = statement->statement.LOOP.scope;
 
                 TypeInfo* boolType = TypeInitSimple(mem, TYPE_BOOL);
-                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, boolType);
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, boolType);
                 if(!(TypeMatch(boolType, inferedType->typeInfo) || TypeIsNumber(inferedType->typeInfo))) {
                     Location loc = {0}; // TODO: fix loc
                     ERROR_VA(
@@ -863,12 +891,12 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
                 typechecked.node.LOOP.expr = inferedType;
-                typechecked.node.LOOP.scope = typecheckScope(mem, loopScope, result, expectedReturnType, FALSE);
+                typechecked.node.LOOP.scope = typecheckScope(mem, loopScope, result, &constantsInThisScope, expectedReturnType);
                 ArrayAppend(result->statements, typechecked);
             } break;
             case StatementType_EXPRESSION: {
-                Expression* expr = statement->node.EXPRESSION.expr;
-                TypecheckedExpression* typeInfo = typecheckExpression(mem, expr, result, NULL);
+                Expression* expr = statement->statement.EXPRESSION.expr;
+                TypecheckedExpression* typeInfo = typecheckExpression(mem, expr, result, &constantsInThisScope, NULL);
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
                 typechecked.node.EXPRESSION.expr = typeInfo;
@@ -880,37 +908,29 @@ TypecheckedScope* typecheckScope2(Arena* mem, Scope* scope, TypecheckedScope* ta
     }
 
     // typecheck all the function bodies
-    assert(fnScopes.size == fnNames.size, "names size does not match scopes size");
-    for(u64 i = 0; i < fnScopes.size; ++i) {
-        Expression* expr = fnScopes.data[i];
-        String id = fnNames.data[i];
-        ConstValue fnValue = fnValues.data[i];
+    typecheckFunctions(mem, &constantsInThisScope, result, functions);
 
-        TypeInfo* returnType = expr->expr.FUNCTION_LIT.returnType;
-        Scope* fnScope = expr->expr.FUNCTION_LIT.scope;
-
-        TypecheckedScope* fnTarget = fnValue.as_function;
-        fnTarget->parent = result; // NOTE: the parent doesnt get set in the `evaluateExpression()` call
-        fnValue.as_function = typecheckScope2(mem, fnScope, fnTarget, returnType, FALSE);
-
-        // TODO: incorrect in case of a hash collision
-        u64 index = HashmapHashFunc(String)(id) % result->constants.capacity;
-        ArrayAppend(result->functionIndicies, index);
-    }
-
-#undef OTHER_BUCKET
-#undef CURRENT_BUCKET
+    free(constantsInThisScope.pairs);
     return result;
 }
 
-TypecheckedScope* typecheckScope(Arena* mem, Scope* scope, TypecheckedScope* parent, TypeInfo* expectedReturnType, bool isTopLevel) {
-    TypecheckedScope* target = TypecheckedScopeInit(mem, parent, FALSE);
-    return typecheckScope2(mem, scope, target, expectedReturnType, isTopLevel);
+TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope) {
+    TypecheckedScope* result = TypecheckedScopeInit(mem, NULL);
+    
+    // initial processing of consts
+    Hashmap(String, ConstValue) constants;
+    HashmapInit(constants, 0x100); // TODO: better default size
+    FunctionsInScope functions = typecheckProcessConsts(mem, makeScopeFromGlobal(scope), &constants);
+
+    // typecheck functions
+    typecheckFunctions(mem, &constants, result, functions);
+
+    return result;
 }
 
 TypecheckedScope* typecheck(Arena* mem, ParseResult* parseResult) {
-    Scope* globalScope = parseResult->globalScope;
-    return typecheckScope(mem, globalScope, NULL, NULL, TRUE);
+    GlobalScope* globalScope = parseResult->globalScope;
+    return typecheckGlobalScope(mem, globalScope);
 }
 
 /*

@@ -49,7 +49,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             result.length = strlen(TypeStr[typeInfo->symbolType]);
         } break;
         case TYPE_FUNCTION: {
-            Array(StringAndType) args = typeInfo->functionInfo.args;
+            Array(FunctionArg) args = typeInfo->functionInfo.args;
             bool isExternal = typeInfo->functionInfo.isExternal;
             TypeInfo* returnType = typeInfo->functionInfo.returnType;
             UNUSED(isExternal);
@@ -59,7 +59,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             Array(String) argTypes = {0};
             u64 totalLen = 2; // NOTE: start from 2 for the opening and closing parenthesis
             for(u64 i = 0; i < args.size; ++i) {
-                StringAndType arg = args.data[i];
+                FunctionArg arg = args.data[i];
                 String argStr = TypeToString(mem, arg.type);
                 totalLen += argStr.length;
                 ArrayAppend(argTypes, argStr);
@@ -260,8 +260,8 @@ bool TypeMatch(TypeInfo* type1, TypeInfo* type2) {
         result = result && type1->functionInfo.isExternal == type2->functionInfo.isExternal;
         result = result && type1->functionInfo.args.size == type2->functionInfo.args.size;
         for(u64 i = 0; i < type1->functionInfo.args.size; ++i) {
-            StringAndType info1 = type1->functionInfo.args.data[i];
-            StringAndType info2 = type2->functionInfo.args.data[i];
+            FunctionArg info1 = type1->functionInfo.args.data[i];
+            FunctionArg info2 = type2->functionInfo.args.data[i];
             result = result && TypeMatch(info1.type, info2.type);
         }
     }

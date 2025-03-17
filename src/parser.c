@@ -71,7 +71,8 @@ void parseGenericScopeStoreConst(Scope scope, String id, Expression* expr) {
     }
 }
 
-void parseGenericScopeStoreVar(Scope scope, String id, Expression* expr, TypeInfo* type) {
+void parseGlobalScopeStoreVar(Scope scope, String id, Statement* statement) {
+    assertf(statement->type == StatementType_VAR_DECL || statement->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[statement->type]);
     switch(scope.type) {
         case ScopeType_GENERIC:
         case ScopeType_NONE: {
@@ -79,8 +80,7 @@ void parseGenericScopeStoreVar(Scope scope, String id, Expression* expr, TypeInf
         } break;
         case ScopeType_GLOBAL: {
             GlobalScope* target = scope.scope.as_global;
-            TypeAndExpr value = {.expr = expr, .type = type};
-            if(!HashmapSet(String, TypeAndExpr)(&target->variables, id, value)) {
+            if(!HashmapSet(String, StatementPtr)(&target->variables, id, statement)) {
                 UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, target->constants.capacity, target->constants.size, STR_PRINT(id));
             }
         } break;
@@ -333,16 +333,16 @@ Expression* makeFunctionLit(ParseContext* ctx, Arena* mem, bool isExtern) {
 
     GenericScope* functionScope = parseGenericScopeInit(mem, (Scope){0}); // NOTE: this gets fixed later in parseStatement
     result->expr.FUNCTION_LIT.scope = functionScope;
-    result->expr.FUNCTION_LIT.isExtern = isExtern;
-    result->expr.FUNCTION_LIT.args = functionArgs(ctx, mem);
+    result->expr.FUNCTION_LIT.typeInfo.isExternal = isExtern;
+    result->expr.FUNCTION_LIT.typeInfo.args = functionArgs(ctx, mem);
 
     // ret type
     Token next = parsePeek(ctx, 0);
     if(next.type == TokenType_RARROW) {
         parseConsume(ctx); // ->
-        result->expr.FUNCTION_LIT.returnType = parseType(ctx, mem);
+        result->expr.FUNCTION_LIT.typeInfo.returnType = parseType(ctx, mem);
     } else {
-        result->expr.FUNCTION_LIT.returnType = TypeInitSimple(mem, TYPE_VOID);
+        result->expr.FUNCTION_LIT.typeInfo.returnType = TypeInitSimple(mem, TYPE_VOID);
     }
 
     // scope
@@ -776,17 +776,12 @@ GlobalScope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
             parseGenericScopeStoreConst(s, id, expr);
         } else if(statement->type == StatementType_VAR_DECL || statement->type == StatementType_VAR_DECL_ASSIGN) {
             String id = {0};
-            Expression* expr = 0;
-            TypeInfo* type = 0;
             if(statement->type == StatementType_VAR_DECL) {
                 id = statement->statement.VAR_DECL.identifier;
-                type = statement->statement.VAR_DECL.type;
             } else if(statement->type == StatementType_VAR_DECL_ASSIGN) {
                 id = statement->statement.VAR_DECL_ASSIGN.identifier;
-                type = statement->statement.VAR_DECL_ASSIGN.type;
-                expr = statement->statement.VAR_DECL_ASSIGN.expr;
             }
-            parseGenericScopeStoreVar(s, id, expr, type);
+            parseGlobalScopeStoreVar(s, id, statement);
         }
     }
 

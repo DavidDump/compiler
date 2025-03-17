@@ -1,36 +1,37 @@
 #ifndef COMP_PARSER_NEW_H
 #define COMP_PARSER_NEW_H
 
-#include "types.h"
-#include "arena.h"
-#include "string.h"
-#include "lexer.h"
-#include "dataStructuresDefs.h"
-
 typedef struct Scope Scope;
 typedef Scope* ScopePtr;
-defArray(ScopePtr);
 
 typedef struct GenericScope GenericScope;
 typedef struct GlobalScope GlobalScope;
 
 typedef struct Expression Expression;
 typedef Expression* ExpressionPtr;
-defArray(ExpressionPtr);
-defHashmapFuncs(String, ExpressionPtr)
 
 typedef struct Statement Statement;
 typedef Statement* StatementPtr;
+
+typedef struct TypeAndExpr TypeAndExpr;
+typedef struct ConditionalBlock ConditionalBlock;
+typedef struct ParseContext ParseContext;
+typedef struct Operator Operator;
+typedef struct ParseResult ParseResult;
+
+#include "dataStructuresDefs.h"
+
+defArray(ScopePtr);
+defArray(ExpressionPtr);
+defHashmapFuncs(String, ExpressionPtr)
 defArray(StatementPtr);
+defHashmapFuncs(String, StatementPtr)
+defArray(ConditionalBlock);
 
-// used when defining arguments during function declaration
-typedef struct FunctionArg {
-    String id;
-    TypeInfo* type;
-    Expression* initialValue; // the expression this argument should be initialized with
-} FunctionArg;
-
-defArray(FunctionArg);
+#include "string.h"
+#include "arena.h"
+#include "types.h"
+#include "lexer.h"
 
 typedef enum ExpressionType {
     // complex nodes
@@ -82,10 +83,8 @@ typedef struct Expression {
             Array(ExpressionPtr) args;
         } FUNCTION_CALL;
         struct FUNCTION_LIT {
-            TypeInfo* returnType;
-            Array(FunctionArg) args;
+            FunctionInfo typeInfo;
             GenericScope* scope;
-            bool isExtern;
         } FUNCTION_LIT;
     } expr;
 } Expression;
@@ -108,16 +107,9 @@ typedef enum StatementType {
 
 extern char* StatementTypeStr[StatementType_COUNT + 1];
 
-// dumb fucking name, i dont know anymore
-typedef struct TypeAndExpr {
-    Expression* expr;
-    TypeInfo* type;
-} TypeAndExpr;
-defHashmapFuncs(String, TypeAndExpr)
-
 typedef struct GlobalScope {
     Hashmap(String, ExpressionPtr) constants;
-    Hashmap(String, TypeAndExpr) variables;
+    Hashmap(String, StatementPtr) variables;
 } GlobalScope;
 
 typedef enum ScopeType {
@@ -144,8 +136,6 @@ typedef struct ConditionalBlock {
     Expression* expr;
     GenericScope* scope;
 } ConditionalBlock;
-
-defArray(ConditionalBlock);
 
 // not really an Statement anymore, should be renamed to Statement
 typedef struct Statement {
@@ -216,10 +206,6 @@ Scope makeScopeFromGeneric(GenericScope* scope);
 
 bool parseCheckSemicolon(ParseContext* ctx);
 // void parseGenericScopeInto(ParseContext* ctx, Arena* mem, GenericScope* target);
-
-#ifdef COMP_DEBUG
-#include "parser_debug.h"
-#endif // COMP_DEBUG
 
 #endif // COMP_PARSER_NEW_H
 // TODO: instead of storing symbol information (like function, variable, constant, declaration) in hashmaps
