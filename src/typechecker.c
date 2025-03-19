@@ -601,7 +601,7 @@ typedef struct FunctionsInScope {
 } FunctionsInScope;
 
 FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String, ConstValue)* target) {
-    FunctionsInScope result;
+    FunctionsInScope result = {0};
 
     Hashmap(String, ExpressionPtr)* constants;
     switch(scope.type) {
