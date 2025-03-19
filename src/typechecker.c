@@ -177,6 +177,7 @@ TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent) {
     result->parent = parent;
     HashmapInit(result->functions, 0x100); // TODO: init size
     HashmapInit(result->variables, 0x100); // TODO: init size
+    if(parent) ArrayAppend(parent->children, result);
     return result;
 }
 
@@ -735,7 +736,7 @@ TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedSco
     }
 
     // evaluate constants
-    FunctionsInScope  functions = typecheckProcessConsts(mem, makeScopeFromGeneric(scope), &constantsInThisScope);
+    FunctionsInScope functions = typecheckProcessConsts(mem, makeScopeFromGeneric(scope), &constantsInThisScope);
 
     // infer the types in all the statements
     for(u64 i = 0; i < scope->statements.size; ++i) {
@@ -910,6 +911,9 @@ TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedSco
     // typecheck all the function bodies
     typecheckFunctions(mem, &constantsInThisScope, result, functions);
 
+    free(functions.names.data);
+    free(functions.values.data);
+
     free(constantsInThisScope.pairs);
     return result;
 }
@@ -924,6 +928,9 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope) {
 
     // typecheck functions
     typecheckFunctions(mem, &constants, result, functions);
+
+    free(functions.names.data);
+    free(functions.values.data);
 
     return result;
 }

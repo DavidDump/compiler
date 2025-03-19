@@ -908,6 +908,15 @@ GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope
     // variables
     calculateSpaceForVariables(genScope, scope);
 
+    // print the local variables define in this function
+    #if 0
+    printf("Function "STR_FMT"\n", STR_PRINT(id));
+    HashmapFor(String, s64 , it, &genScope->localVars) {
+        String key = it->key;
+        printf("  local var: "STR_FMT"\n", STR_PRINT(key));
+    }
+    #endif
+
     // function arguments
     for(u64 i = 0; i < typeInfo->functionInfo.args.size; ++i) {
         FunctionArg fnArg = typeInfo->functionInfo.args.data[i];
