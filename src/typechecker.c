@@ -4,19 +4,6 @@
 #include <string.h>
 #include <math.h>
 
-// typedef ConstValue (*EvalBinaryFuncPtr)(ConstValue lhs, ConstValue rhs);
-
-// typedef struct Operation {
-//     TokenType op;
-//     Type lhs;
-//     Type rhs;
-//     EvalBinaryFuncPtr func;
-// } Operation;
-
-// Operation Operations[] = {
-//     {.lhs = TYPE_U8,  .op = TokenType_ADD, .rhs = TYPE_U8,  .func = _add_u8_u8},
-// };
-
 ConstValue evaluateBinaryExpression(ConstValue lhs, Token operator, ConstValue rhs) {
     STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
     if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_ADD) {
@@ -88,10 +75,11 @@ ConstValue evaluateUnaryExpression(Token operator, ConstValue value) {
             case TYPE_VOID:
             case TYPE_ARRAY:
             case TYPE_TYPE:
+            case TYPE_STRUCT:
             case TYPE_FUNCTION: {
                 Location loc = {.filename = STR(""), .collum = 1, .line = 1}; // TODO: fix loc
                 ERROR_VA(loc, "Can not perform - unary operator on: %s", TypeStr[value.typeInfo->symbolType]);
-            } break;
+        } break;
         }
     } else {
         UNREACHABLE_VA("invalid unary operator: %s", TokenTypeStr[operator.type]);
@@ -191,12 +179,26 @@ void saveFunction(TypecheckedScope* scope, Hashmap(String, ConstValue)* constant
     }
 }
 
+void saveStruct(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, String id, ConstValue val) {
+    // check for redefinition
+    if(isSymbolDefined(scope, constants, id)) {
+        Location loc = {0}; // TODO: fix
+        ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+    }
+
+    // save the struct
+    if(!HashmapSet(String, ConstValue)(&scope->structs, id, val)) {
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->functions.capacity, scope->functions.size, STR_PRINT(id));
+    }
+}
+
 TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent) {
     TypecheckedScope* result = arena_alloc(mem, sizeof(TypecheckedScope));
     result->parent = parent;
     HashmapInit(result->functions, 0x100);  // TODO: init size
     HashmapInit(result->variables, 0x100);  // TODO: init size
     HashmapInit(result->parameters, 0x100); // TODO: init size
+    HashmapInit(result->structs, 0x100);   // TODO: init size
     if(parent) ArrayAppend(parent->children, result);
     return result;
 }
@@ -230,7 +232,7 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
             String key = expr->expr.SYMBOL.identifier;
             if(!HashmapGet(String, ConstValue)(evaluatedConstatants, key, &result.val)) {
                 // not evaluated yet
-                result.error = ConstantEvaluationError_UNDEFINED_SYMBOL;
+                result.error = TRUE;
             }
         } break;
         case ExpressionType_FUNCTION_CALL: {
@@ -274,8 +276,9 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
 
             result.val = evaluateUnaryExpression(op, val);
         } break;
+        case ExpressionType_STRUCT_LIT:
         case ExpressionType_FUNCTION_LIT: {
-            UNREACHABLE("invalid type ExpressionType_FUNCTION_LIT in evaluateConstant: all functions should be skipped before we get to this part");
+            UNREACHABLE("invalid type ExpressionType_FUNCTION_LIT and ExpressionType_STRUCT_LIT in evaluateConstant: all functions and structs should be skipped before we get to this part");
         } break;
         case ExpressionType_TYPE: {
             result.val.typeInfo = TypeInitSimple(mem, TYPE_TYPE);
@@ -342,6 +345,12 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
         } break;
         case TYPE_TYPE: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_TYPE");
+        } break;
+        case TYPE_STRUCT: {
+            UNIMPLEMENTED("ConstValueToExpression: TYPE_STRUCT");
+            result.type = ExpressionType_STRUCT_LIT;
+
+            // result.expr.STRUCT_LIT.scope = ;
         } break;
         case TYPE_ARRAY: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_ARRAY");
@@ -571,6 +580,23 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             result->typeInfo->isConstant = TRUE;
             // TODO: this is where the function should be added to global scope for codegen
         } break;
+        case ExpressionType_STRUCT_LIT: {
+            GlobalScope* structScope = expr->expr.STRUCT_LIT.scope;
+            TypecheckedScope* typechecked = typecheckGlobalScope(mem, structScope, constants);
+
+            Array(FunctionArg) fields = {0};
+            HashmapFor(String, TypeInfoPtr, it, &typechecked->variables) {
+                String key = it->key;
+                TypeInfo* typeInfo = it->value;
+
+                FunctionArg field = {.id = key, .type = typeInfo};
+                ArrayAppend(fields, field);
+            }
+
+            result->typeInfo->symbolType = TYPE_STRUCT;
+            result->typeInfo->isConstant = TRUE;
+            result->typeInfo->structInfo.fields = fields;
+        } break;
         case ExpressionType_BINARY_EXPRESSION: {
             // 1. verify the type binary operation can be performed on the types
             // 2. get the type after the operation is performed
@@ -660,8 +686,10 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
 }
 
 typedef struct FunctionsInScope {
-    Array(String) names;
-    Array(ExpressionPtr) values;
+    Array(String) fnNames;
+    Array(ExpressionPtr) fnValues;
+    Array(String) structNames;
+    Array(ExpressionPtr) structValues;
 } FunctionsInScope;
 
 FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String, ConstValue)* target) {
@@ -693,13 +721,19 @@ FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String,
         Expression* value = it->value;
 
         if(value->type == ExpressionType_FUNCTION_LIT) {
-            ArrayAppend(result.names, key);
-            ArrayAppend(result.values, value);
+            ArrayAppend(result.fnNames, key);
+            ArrayAppend(result.fnValues, value);
+            continue;
+        }
+
+        if(value->type == ExpressionType_STRUCT_LIT) {
+            ArrayAppend(result.structNames, key);
+            ArrayAppend(result.structValues, value);
             continue;
         }
 
         EvaluateConstantResult res = evaluateConstant(value, mem, target);
-        if(res.error == ConstantEvaluationError_UNDEFINED_SYMBOL) {
+        if(res.error) {
             // add to other bucket, defer
             ArrayAppend(deferedNames[CURRENT_BUCKET], key);
             ArrayAppend(deferedExprs[CURRENT_BUCKET], value);
@@ -718,7 +752,7 @@ FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String,
             Expression* expr = deferedExprs[CURRENT_BUCKET].data[i];
 
             EvaluateConstantResult res = evaluateConstant(expr, mem, target);
-            if(res.error == ConstantEvaluationError_UNDEFINED_SYMBOL) {
+            if(res.error) {
                 // add to other bucket, defer
                 ArrayAppend(deferedNames[OTHER_BUCKET], id);
                 ArrayAppend(deferedExprs[OTHER_BUCKET], expr);
@@ -755,9 +789,9 @@ FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String,
 }
 
 void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, TypecheckedScope* parent, FunctionsInScope functions) {
-    for(u64 i = 0; i < functions.names.size; ++i) {
-        String id = functions.names.data[i];
-        Expression* expr = functions.values.data[i];
+    for(u64 i = 0; i < functions.fnNames.size; ++i) {
+        String id = functions.fnNames.data[i];
+        Expression* expr = functions.fnValues.data[i];
         assert(expr->type == ExpressionType_FUNCTION_LIT, "Expected function lit in typecheckFunctions");
 
         GenericScope* fnScope = expr->expr.FUNCTION_LIT.scope;
@@ -980,10 +1014,10 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
     }
 
     // typecheck all the function bodies
+    // TODO: functions need to be added into the scope.functions hashmap before their scopes are typechecked
+    //       or functions that havent beed typechecked yet will report undefined errors,
+    //      potential fix: when constants are resolved the functions have to be added but marked as not typechecked
     typecheckFunctions(mem, &constantsInThisScope, result, functions);
-
-    free(functions.names.data);
-    free(functions.values.data);
 
     free(constantsInThisScope.pairs);
 }
@@ -994,44 +1028,64 @@ TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedSco
     return result;
 }
 
-TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope) {
+TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(String, ConstValue)* constants) {
     TypecheckedScope* result = TypecheckedScopeInit(mem, NULL);
     
     // initial processing of consts
-    Hashmap(String, ConstValue) constants = {0};
-    HashmapInit(constants, 0x100); // TODO: better default size
-    FunctionsInScope functions = typecheckProcessConsts(mem, makeScopeFromGlobal(scope), &constants);
+    Hashmap(String, ConstValue) constantsInThisScope = {0};
+    HashmapInit(constantsInThisScope, 0x100); // TODO: better default size
+
+    if(constants) {
+        HashmapFor(String, ConstValue, it, constants) {
+            String key = it->key;
+            ConstValue value = it->value;
+
+            if(!HashmapSet(String, ConstValue)(&constantsInThisScope, key, value)) {
+                UNREACHABLE("failed to instert into hashmap");
+            }
+        }
+    }
+
+    FunctionsInScope functions = typecheckProcessConsts(mem, makeScopeFromGlobal(scope), &constantsInThisScope);
+
+    // typecheck structs
+    for(u64 i = 0; i < functions.structNames.size; ++i) {
+        String id = functions.structNames.data[i];
+        Expression* expr = functions.structValues.data[i];
+        assert(expr->type == ExpressionType_STRUCT_LIT, "Expected struct lit in typecheckStructs");
+
+        GlobalScope* structScope = expr->expr.STRUCT_LIT.scope;
+        TypecheckedScope* typechecked = typecheckGlobalScope(mem, structScope, &constantsInThisScope);
+
+        TypeInfo* structTypeInfo = TypeInitSimple(mem, TYPE_STRUCT);
+        Array(FunctionArg) fields = {0};
+        HashmapFor(String, TypeInfoPtr, it, &typechecked->variables) {
+            String key = it->key;
+            TypeInfo* typeInfo = it->value;
+
+            FunctionArg field = {.id = key, .type = typeInfo};
+            ArrayAppend(fields, field);
+        }
+        structTypeInfo->structInfo.fields = fields;
+
+        ConstValue structValue = {0};
+        structValue.typeInfo = structTypeInfo;
+        structValue.as_struct = typechecked;
+        saveStruct(result, &constantsInThisScope, id, structValue);
+    }
 
     // typecheck functions
-    typecheckFunctions(mem, &constants, result, functions);
-
-    free(functions.names.data);
-    free(functions.values.data);
+    // TODO: functions need to be added into the scope.functions hashmap before their scopes are typechecked
+    //       or functions that havent beed typechecked yet will report undefined errors,
+    //      potential fix: when constants are resolved the functions have to be added but marked as not typechecked
+    typecheckFunctions(mem, &constantsInThisScope, result, functions);
 
     return result;
 }
 
 TypecheckedScope* typecheck(Arena* mem, ParseResult* parseResult) {
     GlobalScope* globalScope = parseResult->globalScope;
-    return typecheckGlobalScope(mem, globalScope);
+    return typecheckGlobalScope(mem, globalScope, NULL);
 }
-
-/*
-typecheckTopLevelScope :: () {
-    // iterate statements
-    // only valid top level statements are constants and variable decl or decl and assing
-    // evaluate all the constants and save the indecies of functions
-    // infer the types of all the variables - global
-    // iterate all the function bodies and call typecheckScope
-}
-
-typecheckScope :: () {
-    // iterate statements
-    // all statements are valid
-    // evaluate all the constants and save the indecies of functions
-    // infer the types of all the variables
-    // iterate all the function bodies, and children scopes and call typecheckScope
-}
-*/
 
 // TODO: function variables not done fully, their bodies never get typechecked and as a result they never get generated

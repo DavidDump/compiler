@@ -21,6 +21,7 @@ typedef struct ConstValue {
         bool as_bool;
         TypecheckedScope* as_function;
         TypeInfo* as_type;
+        TypecheckedScope* as_struct;
     };
 } ConstValue;
 defArray(ConstValue);
@@ -35,14 +36,8 @@ typedef struct ConstResult {
     ConstValue value;
 } ConstResult;
 
-typedef enum ConstantEvaluationError {
-    ConstantEvaluationError_NONE,
-    ConstantEvaluationError_UNDEFINED_SYMBOL, // symbol has not yet been evaluated, defer for later
-    ConstantEvaluationError_FUNCTION_LITERAL, // symbol is of type funtion literal and should be evaluated in the second pass
-} ConstantEvaluationError;
-
 typedef struct EvaluateConstantResult {
-    ConstantEvaluationError error;
+    bool error;
     ConstValue val;
 } EvaluateConstantResult;
 
@@ -85,14 +80,19 @@ typedef struct TypecheckedExpression {
             Array(TypecheckedExpressionPtr) args;
         } FUNCTION_CALL;
         struct {
-            TypeInfo* returnType;
-            Array(FunctionArg) args;
-            Scope* scope;
-            bool isExtern;
+            FunctionInfo typeInfo;
+            GenericScope* scope;
         } FUNCTION_LIT;
         struct {
             TypeInfo* typeInfo;
         } TYPE;
+        struct {
+            GlobalScope* scope;
+
+            // NOTE: only for later once parameterized structs get added
+            // Array(FunctionArg) args;
+            // bool hasArgs;
+        } STRUCT_LIT;
     } expr;
     // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
     TypeInfo* typeInfo;
@@ -139,7 +139,7 @@ typedef struct TypecheckedScope {
     Hashmap(String, TypeInfoPtr) variables;
     Hashmap(String, TypeInfoPtr) parameters; // function paremeters in function scopes
     Hashmap(String, ConstValue)  functions;
-    // Hashmap(String, TypeInfoPtr) structs; // TODO: structs not yet implemented
+    Hashmap(String, ConstValue) structs; // TODO: structs not yet implemented
     // Hashmap(String, TypeInfoPtr) enums; // TODO: enums not yet implemented
 
     Array(TypecheckedStatement) statements;
@@ -148,6 +148,7 @@ typedef struct TypecheckedScope {
 
 TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType);
 void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* result, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType);
+TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(String, ConstValue)* constants);
 TypecheckedScope* typecheck(Arena* mem, ParseResult* parseResult);
 
 #endif // TYPECHECKER_H

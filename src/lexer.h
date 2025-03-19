@@ -19,6 +19,7 @@ typedef enum TokenType{
     TokenType_IF,            // if
     TokenType_ELSE,          // else
     TokenType_LOOP,          // loop
+    TokenType_STRUCT,        // struct
 
     TokenType_TYPE,          // like u8
     TokenType_SEMICOLON,     // ;

@@ -35,10 +35,10 @@ typedef enum Type {
     TYPE_BOOL,
     TYPE_VOID,
     TYPE_FUNCTION,
+    TYPE_STRUCT,
     TYPE_ARRAY,
     TYPE_TYPE,
     // TYPE_ANY,
-    // TYPE_STRUCT,
     // TYPE_ENUM,
     // TYPE_SCOPE,
 
@@ -60,6 +60,10 @@ typedef struct FunctionInfo {
     bool isExternal;
 } FunctionInfo;
 
+typedef struct StructInfo {
+    Array(FunctionArg) fields;
+} StructInfo;
+
 typedef struct ArrayInfo {
     bool isDynamic;
     u64 arraySize;
@@ -72,6 +76,7 @@ typedef struct TypeInfo {
     bool isConstant; // flag if all the leaves of the expression are constant values, example.: 1 + 1
     ArrayInfo arrayInfo;
     FunctionInfo* functionInfo;
+    StructInfo structInfo;
 } TypeInfo;
 
 TypeInfo* TypeInitSimple(Arena* mem, Type t);

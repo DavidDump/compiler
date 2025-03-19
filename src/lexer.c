@@ -11,6 +11,7 @@ char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_IF]            = "IF",
     [TokenType_ELSE]          = "ELSE",
     [TokenType_LOOP]          = "LOOP",
+    [TokenType_STRUCT]        = "STRUCT",
     [TokenType_TYPE]          = "TYPE",
     [TokenType_SEMICOLON]     = "SEMICOLON",
     [TokenType_COLON]         = "COLON",
@@ -116,14 +117,15 @@ Array(Token) Tokenize(Arena* mem, String source, String filename) {
             value.length = len;
 
             // compare keywords and types
-            if(StringEqualsCstr(value, "return"))     type = TokenType_RETURN;
-            else if(StringEqualsCstr(value, "if"))    type = TokenType_IF;
-            else if(StringEqualsCstr(value, "else"))  type = TokenType_ELSE;
-            else if(StringEqualsCstr(value, "loop"))  type = TokenType_LOOP;
-            else if(StringEqualsCstr(value, "true"))  type = TokenType_BOOL_LITERAL;
-            else if(StringEqualsCstr(value, "false")) type = TokenType_BOOL_LITERAL;
-            else if(StringEqualsCstr(value, "as"))    type = TokenType_AS;
-            else if(isType(value))                    type = TokenType_TYPE;
+            if(StringEqualsCstr(value, "return"))      type = TokenType_RETURN;
+            else if(StringEqualsCstr(value, "if"))     type = TokenType_IF;
+            else if(StringEqualsCstr(value, "else"))   type = TokenType_ELSE;
+            else if(StringEqualsCstr(value, "loop"))   type = TokenType_LOOP;
+            else if(StringEqualsCstr(value, "struct")) type = TokenType_STRUCT;
+            else if(StringEqualsCstr(value, "true"))   type = TokenType_BOOL_LITERAL;
+            else if(StringEqualsCstr(value, "false"))  type = TokenType_BOOL_LITERAL;
+            else if(StringEqualsCstr(value, "as"))     type = TokenType_AS;
+            else if(isType(value))                     type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
         } else if(isNumber(c)) {
             // numbers

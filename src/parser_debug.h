@@ -6,6 +6,8 @@
 
 #include <stdio.h> // printf
 
+void GlobalScopePrint(GlobalScope* scope, u64 indent);
+void GenericScopePrint(GenericScope* scope, u64 indent);
 void StatementPrint(Statement* node, u64 indent);
 
 #define genPrintHelper(...) do{for(u64 h = 0; h < indent; ++h) printf("    "); printf(__VA_ARGS__);}while(0)
@@ -122,6 +124,13 @@ void ExpressionPrint(Expression* expr, u64 indent) {
         case ExpressionType_TYPE: {
             TypeInfo* typeInfo = expr->expr.TYPE.typeInfo;
             TypePrint(typeInfo, indent);
+        } break;
+        case ExpressionType_STRUCT_LIT: {
+            GlobalScope* scope = expr->expr.STRUCT_LIT.scope;
+
+            genPrintHelper("FUNCTION_CALL: {\n");
+            GlobalScopePrint(scope, indent + 1);
+            genPrintHelper("}\n");
         } break;
     }
 }
@@ -296,57 +305,61 @@ void StatementPrint(Statement* node, u64 indent) {
         case StatementType_DIRECTIVE: break;
     }
 }
+
+void GlobalScopePrint(GlobalScope* scope, u64 indent) {
+    genPrintHelper("Scope variables:\n");
+    HashmapFor(String, StatementPtr, it, &scope->variables) {
+        String id = it->key;
+        Statement* value = it->value;
+        assertf(value->type == StatementType_VAR_DECL || value->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[value->type]);
+        TypeInfo* type = 0;
+        Expression* expr = 0;
+        if(value->type == StatementType_VAR_DECL) {
+            type = value->statement.VAR_DECL.type;
+        } else if(value->type == StatementType_VAR_DECL_ASSIGN) {
+            type = value->statement.VAR_DECL_ASSIGN.type;
+            expr = value->statement.VAR_DECL_ASSIGN.expr;
+        }
+
+        VariablePrint(id, expr, type);
+    }
+
+    genPrintHelper("Scope constants:\n");
+    HashmapFor(String, ExpressionPtr, it, &scope->constants) {
+        String id = it->key;
+        Expression* expr = it->value;
+        genPrintHelper("VAR_CONST: "STR_FMT, STR_PRINT(id));
+        ExpressionPrint(expr, indent + 1);
+    }
+}
+
+void GenericScopePrint(GenericScope* scope, u64 indent) {
+    genPrintHelper("Scope constants:\n");
+    HashmapFor(String, ExpressionPtr, it, &scope->constants) {
+        String id = it->key;
+        Expression* expr = it->value;
+        genPrintHelper("VAR_CONST: "STR_FMT, STR_PRINT(id));
+        ExpressionPrint(expr, indent + 1);
+    }
+
+    genPrintHelper("Scope statements:\n");
+    for(u64 i = 0; i < scope->statements.size; ++i) {
+        Statement* statement = scope->statements.data[i];
+        StatementPrint(statement, indent + 1);
+    }
+}
 #undef genPrintHelper
 
-void ASTPrint(Scope root) {
-    switch(root.type) {
+void RootPrint(Scope scope) {
+    switch(scope.type) {
         case ScopeType_NONE: {
             UNREACHABLE("ScopeType_NONE is invalid: cannot be printed");
         } break;
         case ScopeType_GLOBAL: {
-            GlobalScope* scope = root.scope.as_global;
-
-            printf("Scope variables:\n");
-            HashmapFor(String, StatementPtr, it, &scope->variables) {
-                String id = it->key;
-                Statement* value = it->value;
-                assertf(value->type == StatementType_VAR_DECL || value->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[value->type]);
-                TypeInfo* type = 0;
-                Expression* expr = 0;
-                if(value->type == StatementType_VAR_DECL) {
-                    type = DebugExpressionToType(value->statement.VAR_DECL.type);
-                } else if(value->type == StatementType_VAR_DECL_ASSIGN) {
-                    type = DebugExpressionToType(value->statement.VAR_DECL_ASSIGN.type);
-                    expr = value->statement.VAR_DECL_ASSIGN.expr;
-                }
-
-                VariablePrint(id, expr, type);
-            }
-
-            printf("Scope constants:\n");
-            HashmapFor(String, ExpressionPtr, it, &scope->constants) {
-                String id = it->key;
-                Expression* expr = it->value;
-                printf("VAR_CONST: "STR_FMT, STR_PRINT(id));
-                ExpressionPrint(expr, 0);
-            }
+            GlobalScopePrint(scope.scope.as_global, 0);
         } break;
         case ScopeType_GENERIC: {
-            GenericScope* scope = root.scope.as_generic;
-
-            printf("Scope constants:\n");
-            HashmapFor(String, ExpressionPtr, it, &scope->constants) {
-                String id = it->key;
-                Expression* expr = it->value;
-                printf("VAR_CONST: "STR_FMT, STR_PRINT(id));
-                ExpressionPrint(expr, 0);
-            }
-
-            printf("Scope statements:\n");
-            for(u64 i = 0; i < scope->statements.size; ++i) {
-                Statement* statement = scope->statements.data[i];
-                StatementPrint(statement, 0);
-            }
+            GenericScopePrint(scope.scope.as_generic, 0);
         } break;
     }
 

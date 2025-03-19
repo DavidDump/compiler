@@ -126,7 +126,7 @@ int main(int argc, char** argv){
     
     ParseResult parseResult = Parse(tokens, &readFileMem);
 #ifdef COMP_DEBUG
-    if(printAST) ASTPrint(makeScopeFromGlobal(parseResult.globalScope));
+    if(printAST) RootPrint(makeScopeFromGlobal(parseResult.globalScope));
 #endif // COMP_DEBUG
 
     TypecheckedScope* typechecked = typecheck(&readFileMem, &parseResult);
@@ -159,8 +159,6 @@ int main(int argc, char** argv){
     arena_free(&readFileMem);
     exit(EXIT_SUCCESS);
 }
-
-// TODO: remove arenas from scope struct, all ast nodes and scope data should be allocated in one arena
 
 // TODO: implement a symetrical operation to parsing, reverseParse() that takes an AST and generates code,
 // maintain multiple versions, to migrate from older versions of the code to newer,

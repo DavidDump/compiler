@@ -108,6 +108,60 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             result.str = buffer;
             free(argTypes.data);
         } break;
+        case TYPE_STRUCT: {
+            // struct {fieldName: type; ...}
+            // struct {  // 8 characters
+            // }         // 1 character
+            // ': '      // 2 characters per field
+            // '; '      // 2 characters per field - 1
+            // fieldName // length characters
+            // type      // length characters
+            Array(FunctionArg) fields = typeInfo->structInfo.fields;
+
+            u64 totalCharCount = 8 + 1 + (2 * fields.size) + 2* (fields.size - 1);
+
+            Array(String) typeStrs = {0};
+            for(u64 i = 0; i < fields.size; ++i) {
+                FunctionArg field = fields.data[i];
+
+                String typeStr = TypeToString(mem, field.type);
+                ArrayAppend(typeStrs, typeStr);
+
+                totalCharCount += field.id.length;
+                totalCharCount += typeStr.length;
+            }
+
+            u8* buffer = arena_alloc(mem, totalCharCount);
+            u64 at = 0;
+            char* tmpStrDat = "struct {";
+            u64 tmpStrLen = strlen(tmpStrDat);
+            memcpy(&buffer[at], tmpStrDat, tmpStrLen);
+            at += tmpStrLen;
+
+            for(u64 i = 0; i < fields.size; ++i) {
+                FunctionArg field = fields.data[i];
+                String typeStr = typeStrs.data[i];
+
+                memcpy(&buffer[at], field.id.str, field.id.length);
+                at += field.id.length;
+
+                buffer[at++] = ':';
+                buffer[at++] = ' ';
+
+                memcpy(&buffer[at], typeStr.str, typeStr.length);
+                at += typeStr.length;
+
+                if(i + 1 < fields.size) {
+                    buffer[at++] = ';';
+                    buffer[at++] = ' ';
+                }
+            }
+
+            result.str = buffer;
+            result.length = totalCharCount;
+
+            free(typeStrs.data);
+        } break;
         case TYPE_ARRAY: {
             u64 arraySize = typeInfo->arrayInfo.arraySize;
             TypeInfo* elementType = typeInfo->arrayInfo.elementType;
@@ -173,6 +227,16 @@ u64 TypeToByteSize(TypeInfo* type) {
         case TYPE_FUNCTION:
         case TYPE_VOID: {
             return 0;
+        } break;
+
+        case TYPE_STRUCT: {
+            Array(FunctionArg) fields = type->structInfo.fields;
+            u64 sizeInBytes = 0;
+            for(u64 i = 0; i < fields.size; ++i) {
+                FunctionArg field = fields.data[i];
+                sizeInBytes += TypeToByteSize(field.type);
+            }
+            return sizeInBytes;
         } break;
 
         case TYPE_BOOL:

@@ -51,7 +51,7 @@ Token parsePeek(ParseContext* ctx, int num){
 	return ctx->tokens.data[ctx->index + num];
 }
 
-void parseGenericScopeStoreConst(Scope scope, String id, Expression* expr) {
+void parseScopeStoreConst(Scope scope, String id, Expression* expr) {
     switch(scope.type) {
         case ScopeType_NONE: {
             UNREACHABLE("ScopeType_NONE is invalid: cannot store constant");
@@ -71,19 +71,10 @@ void parseGenericScopeStoreConst(Scope scope, String id, Expression* expr) {
     }
 }
 
-void parseGlobalScopeStoreVar(Scope scope, String id, Statement* statement) {
+void parseGlobalScopeStoreVar(GlobalScope* scope, String id, Statement* statement) {
     assertf(statement->type == StatementType_VAR_DECL || statement->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[statement->type]);
-    switch(scope.type) {
-        case ScopeType_GENERIC:
-        case ScopeType_NONE: {
-            UNREACHABLE("ScopeType_NONE and ScopeType_GENERIC is invalid: cannot store variable");
-        } break;
-        case ScopeType_GLOBAL: {
-            GlobalScope* target = scope.scope.as_global;
-            if(!HashmapSet(String, StatementPtr)(&target->variables, id, statement)) {
-                UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, target->constants.capacity, target->constants.size, STR_PRINT(id));
-            }
-        } break;
+    if(!HashmapSet(String, StatementPtr)(&scope->variables, id, statement)) {
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->constants.capacity, scope->constants.size, STR_PRINT(id));
     }
 }
 
@@ -259,8 +250,9 @@ GenericScope* parseGenericScopeInit(Arena* mem, Scope parent) {
     return result;
 }
 
-GlobalScope* parseGlobalScopeInit(Arena* mem) {
+GlobalScope* parseGlobalScopeInit(Arena* mem, Scope parent) {
     GlobalScope* result = arena_alloc(mem, sizeof(GlobalScope));
+    result->parent = parent;
     HashmapInit(result->constants, 0x100); // TODO: better default
     HashmapInit(result->variables, 0x100); // TODO: better default
     return result;
@@ -293,7 +285,7 @@ void parseGenericScopeInto(ParseContext* ctx, Arena* mem, GenericScope* target) 
         if(statement->type == StatementType_VAR_CONST) {
             String id = statement->statement.VAR_CONST.identifier;
             Expression* expr = statement->statement.VAR_CONST.expr;
-            parseGenericScopeStoreConst(s, id, expr);
+            parseScopeStoreConst(s, id, expr);
         } else {
             ArrayAppend(target->statements, statement);
         }
@@ -307,7 +299,7 @@ void parseGenericScopeInto(ParseContext* ctx, Arena* mem, GenericScope* target) 
         if(statement->type == StatementType_VAR_CONST) {
             String id = statement->statement.VAR_CONST.identifier;
             Expression* expr = statement->statement.VAR_CONST.expr;
-            parseGenericScopeStoreConst(s, id, expr);
+            parseScopeStoreConst(s, id, expr);
         } else {
             ArrayAppend(target->statements, statement);
         }
@@ -485,6 +477,25 @@ TypeInfo* parseType(ParseContext* ctx, Arena* mem) {
     return 0;
 }
 
+Expression* makeStructLit(ParseContext* ctx, Arena* mem) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_STRUCT_LIT;
+
+    GlobalScope* structScope = parseGlobalScopeInit(mem, (Scope){0}); // TODO: fix parent scope
+    result->expr.STRUCT_LIT.scope = structScope;
+    // result->expr.STRUCT_LIT.args = functionArgs(ctx, structScope);
+
+    Token next = parseConsume(ctx);
+    if(next.type != TokenType_LSCOPE) {
+        ERROR_VA(next.loc, "Struct keyword needs to be followed by a scope, expected: '{', got: '"STR_FMT"'", STR_PRINT(next.value));
+    }
+
+    // scope
+    parseGlobalScopeInto(ctx, mem, structScope);
+
+    return result;
+}
+
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
 
@@ -494,6 +505,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
     if(next.type == TokenType_TYPE)         return makeType(ctx, mem, next);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
+    if(next.type == TokenType_STRUCT)       return makeStructLit(ctx, mem);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);
@@ -636,6 +648,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
             result->statement.LOOP.expr = parseExpression(ctx, mem);
             result->statement.LOOP.scope = parseGenericScope(ctx, mem, containingScope);
         } break;
+        case TokenType_STRUCT:
         case TokenType_INT_LITERAL:
         case TokenType_STRING_LIT:
         case TokenType_BOOL_LITERAL:
@@ -708,12 +721,16 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 result->statement.VAR_DECL_ASSIGN.type = ExpressionTypeInitSimple(mem, TYPE_NONE);
 
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
-                bool checkSemiColon = (result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT);
+                bool checkSemiColon = (
+                    result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_FUNCTION_LIT &&
+                    result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_STRUCT_LIT
+                );
                 if(checkSemiColon) parseCheckSemicolon(ctx);
                 // NOTE: this is yet another supid fix for a problem,
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
-                if(!checkSemiColon) result->statement.VAR_CONST.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
+                if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_DECL_ASSIGN.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
+                if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_STRUCT_LIT) result->statement.VAR_DECL_ASSIGN.expr->expr.STRUCT_LIT.scope->parent = containingScope;
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
                 String identifier = t.value;
@@ -741,12 +758,16 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 result->statement.VAR_CONST.expr = parseExpression(ctx, mem);
 
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
-                bool checkSemiColon = (result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT);
+                bool checkSemiColon = (
+                    result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT &&
+                    result->statement.VAR_CONST.expr->type != ExpressionType_STRUCT_LIT
+                );
                 if(checkSemiColon) parseCheckSemicolon(ctx);
                 // NOTE: this is yet another supid fix for a problem,
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
-                if(!checkSemiColon) result->statement.VAR_CONST.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
+                if(result->statement.VAR_CONST.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_CONST.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
+                if(result->statement.VAR_CONST.expr->type == ExpressionType_STRUCT_LIT) result->statement.VAR_CONST.expr->expr.STRUCT_LIT.scope->parent = containingScope;
             } else {
                 ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }
@@ -789,16 +810,16 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
     return result;
 }
 
-GlobalScope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
-    GlobalScope* globalScope = parseGlobalScopeInit(mem);
+GlobalScope* parseGlobalScopeInto(ParseContext* ctx, Arena* mem, GlobalScope* globalScope) {
     Scope s = makeScopeFromGlobal(globalScope);
 
+    Token next = parsePeek(ctx, 0);
     while(ctx->index < ctx->tokens.size) {
         Statement* statement = parseStatement(ctx, mem, s);
         if(statement->type == StatementType_VAR_CONST) {
             String id = statement->statement.VAR_CONST.identifier;
             Expression* expr = statement->statement.VAR_CONST.expr;
-            parseGenericScopeStoreConst(s, id, expr);
+            parseScopeStoreConst(s, id, expr);
         } else if(statement->type == StatementType_VAR_DECL || statement->type == StatementType_VAR_DECL_ASSIGN) {
             String id = {0};
             if(statement->type == StatementType_VAR_DECL) {
@@ -806,11 +827,22 @@ GlobalScope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
             } else if(statement->type == StatementType_VAR_DECL_ASSIGN) {
                 id = statement->statement.VAR_DECL_ASSIGN.identifier;
             }
-            parseGlobalScopeStoreVar(s, id, statement);
+            parseGlobalScopeStoreVar(globalScope, id, statement);
+        }
+
+        next = parsePeek(ctx, 0);
+        if(next.type == TokenType_RSCOPE) {
+            parseConsume(ctx);
+            break;
         }
     }
 
     return globalScope;
+}
+
+GlobalScope* parseGlobalScope(ParseContext* ctx, Arena* mem) {
+    GlobalScope* globalScope = parseGlobalScopeInit(mem, (Scope){0}); // NOTE: global scope has no parent
+    return parseGlobalScopeInto(ctx, mem, globalScope);
 }
 
 ParseResult Parse(Array(Token) tokens, Arena* mem) {

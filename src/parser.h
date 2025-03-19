@@ -48,6 +48,7 @@ typedef enum ExpressionType {
     ExpressionType_FUNCTION_CALL,     // bar()
     ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
     ExpressionType_TYPE,              // u8
+    ExpressionType_STRUCT_LIT,        // struct { ... } OR struct (arg: type) { ... }
 } ExpressionType;
 
 extern char* ExpressionTypeStr[];
@@ -91,6 +92,13 @@ typedef struct Expression {
         struct TYPE {
             TypeInfo* typeInfo;
         } TYPE;
+        struct STRUCT_LIT {
+            GlobalScope* scope;
+
+            // NOTE: only for later once parameterized structs get added
+            // Array(FunctionArg) args;
+            // bool hasArgs;
+        } STRUCT_LIT;
     } expr;
 } Expression;
 
@@ -112,11 +120,6 @@ typedef enum StatementType {
 
 extern char* StatementTypeStr[StatementType_COUNT + 1];
 
-typedef struct GlobalScope {
-    Hashmap(String, ExpressionPtr) constants;
-    Hashmap(String, StatementPtr) variables;
-} GlobalScope;
-
 typedef enum ScopeType {
     ScopeType_NONE,
     ScopeType_GLOBAL,
@@ -136,6 +139,12 @@ typedef struct GenericScope {
     Hashmap(String, ExpressionPtr) constants;
     Array(StatementPtr) statements;
 } GenericScope;
+
+typedef struct GlobalScope {
+    Scope parent;
+    Hashmap(String, ExpressionPtr) constants;
+    Hashmap(String, StatementPtr) variables;
+} GlobalScope;
 
 typedef struct ConditionalBlock {
     Expression* expr;
@@ -211,6 +220,7 @@ Scope makeScopeFromGeneric(GenericScope* scope);
 
 bool parseCheckSemicolon(ParseContext* ctx);
 // void parseGenericScopeInto(ParseContext* ctx, Arena* mem, GenericScope* target);
+GlobalScope* parseGlobalScopeInto(ParseContext* ctx, Arena* mem, GlobalScope* globalScope);
 
 #endif // COMP_PARSER_NEW_H
 // TODO: instead of storing symbol information (like function, variable, constant, declaration) in hashmaps
