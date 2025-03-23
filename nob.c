@@ -92,7 +92,7 @@ void buildMsvc(bool full, bool debug) {
 void buildGcc(bool full, bool debug) {
 #define CXX "gcc"
 #define CFLAGS "-Wall", "-Wextra", "-Werror", "-Wshadow", "-pedantic"
-#define DEBUGFLAGS "-O0", "-ggdb", "-DCOMP_DEBUG"
+#define DEBUGFLAGS "-O0", "-ggdb", "-DCOMP_DEBUG", "-Wno-unused-local-typedefs"
 
     Cmd cmd = {0};
 
