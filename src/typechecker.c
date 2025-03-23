@@ -653,7 +653,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 // TODO: accually check if the cast is valid
                 result->typeInfo = rhsType->expr.TYPE.typeInfo;
             } else {
-                ERROR_VA(op.loc, "Invalid binary operation: %s "STR_FMT" %s", TypeStr[lhsType->typeInfo->symbolType], STR_PRINT(op.value), TypeStr[rhsType->typeInfo->symbolType]);
+                ERROR_VA(op.loc, "Invalid binary operation in expression: %s "STR_FMT" %s", TypeStr[lhsType->typeInfo->symbolType], STR_PRINT(op.value), TypeStr[rhsType->typeInfo->symbolType]);
             }
 
             result->expr.BINARY_EXPRESSION.lhs = lhsType;
@@ -671,6 +671,8 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             // TODO: static assert on the number of operators
             if(TypeIsNumber(typeInfo->typeInfo) && op.type == TokenType_SUB) {
                 result->typeInfo = typeInfo->typeInfo;
+            } else {
+                ERROR_VA(op.loc, "Invalid unary operation in expression: "STR_FMT" %s", STR_PRINT(op.value), TypeStr[typeInfo->typeInfo->symbolType]);
             }
 
             result->expr.UNARY_EXPRESSION.expr = typeInfo;
