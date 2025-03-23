@@ -10,11 +10,16 @@ void StatementPrint(Statement* node, u64 indent);
 
 #define genPrintHelper(...) do{for(u64 h = 0; h < indent; ++h) printf("    "); printf(__VA_ARGS__);}while(0)
 
+static Arena debugArena = {0};
+
 void TypePrint(TypeInfo* type, u64 indent) {
-    UNUSED(indent);
-    // UNIMPLEMENTED("TypePrint");
-    
-    printf("%s", TypeStr[type->symbolType]);
+    String typeStr = TypeToString(&debugArena, type);
+    genPrintHelper(" "STR_FMT, STR_PRINT(typeStr));
+}
+
+TypeInfo* DebugExpressionToType(Expression* expr) {
+    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
+    return expr->expr.TYPE.typeInfo;
 }
 
 void ExpressionPrint(Expression* expr, u64 indent) {
@@ -55,8 +60,8 @@ void ExpressionPrint(Expression* expr, u64 indent) {
         } break;
         case ExpressionType_FUNCTION_LIT: {
             // String id = expr->expr.FUNCTION_LIT.identifier;
-            TypeInfo* retType = expr->expr.FUNCTION_LIT.typeInfo.returnType;
-            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.typeInfo.args;
+            TypeInfo* retType = DebugExpressionToType(expr->expr.FUNCTION_LIT.typeInfo->returnType);
+            Array(FunctionArg) args = expr->expr.FUNCTION_LIT.typeInfo->args;
             GenericScope* scope = expr->expr.FUNCTION_LIT.scope;
 
             genPrintHelper("FUNCTION_LIT: {\n");
@@ -70,7 +75,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
                 genPrintHelper("    args: [\n");
                 for(u64 i = 0; i < args.size; ++i) {
                     String argId = args.data[i].id;
-                    TypeInfo* argType = args.data[i].type;
+                    TypeInfo* argType = DebugExpressionToType(args.data[i].type);
 
                     genPrintHelper("        {id: "STR_FMT", type: ", STR_PRINT(argId));
                     TypePrint(argType, indent);
@@ -114,6 +119,10 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             }
             genPrintHelper("}\n");
         } break;
+        case ExpressionType_TYPE: {
+            TypeInfo* typeInfo = expr->expr.TYPE.typeInfo;
+            TypePrint(typeInfo, indent);
+        } break;
     }
 }
 
@@ -137,7 +146,7 @@ void StatementPrint(Statement* node, u64 indent) {
 
         case StatementType_VAR_DECL: {
             String id = node->statement.VAR_DECL.identifier;
-            TypeInfo* type = node->statement.VAR_DECL.type;
+            TypeInfo* type = DebugExpressionToType(node->statement.VAR_DECL.type);
 
             genPrintHelper("VAR_DECL: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
@@ -148,7 +157,7 @@ void StatementPrint(Statement* node, u64 indent) {
         } break;
         case StatementType_VAR_DECL_ASSIGN: {
             String id = node->statement.VAR_DECL_ASSIGN.identifier;
-            TypeInfo* type = node->statement.VAR_DECL_ASSIGN.type;
+            TypeInfo* type = DebugExpressionToType(node->statement.VAR_DECL_ASSIGN.type);
             Expression* expr = node->statement.VAR_DECL_ASSIGN.expr;
 
             genPrintHelper("VAR_DECL_ASSIGN: {\n");
@@ -305,9 +314,9 @@ void ASTPrint(Scope root) {
                 TypeInfo* type = 0;
                 Expression* expr = 0;
                 if(value->type == StatementType_VAR_DECL) {
-                    type = value->statement.VAR_DECL.type;
+                    type = DebugExpressionToType(value->statement.VAR_DECL.type);
                 } else if(value->type == StatementType_VAR_DECL_ASSIGN) {
-                    type = value->statement.VAR_DECL_ASSIGN.type;
+                    type = DebugExpressionToType(value->statement.VAR_DECL_ASSIGN.type);
                     expr = value->statement.VAR_DECL_ASSIGN.expr;
                 }
 
@@ -340,6 +349,8 @@ void ASTPrint(Scope root) {
             }
         } break;
     }
+
+    arena_free(&debugArena);
 }
 
 #endif // COMP_PARSER_DEBUG_H

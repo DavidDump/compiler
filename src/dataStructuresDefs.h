@@ -13,11 +13,6 @@ typedef struct UserDataEntry {
     u64 dataRVA;
 } UserDataEntry;
 
-// TODO: move to a proper location
-typedef struct FuncInfo {
-    bool isExtern;
-} FuncInfo;
-
 typedef struct FuncName {
     u64 nameRva;
     u64 iatRva;
@@ -28,7 +23,6 @@ typedef struct FuncName {
 
 defHashmapFuncs(String, s64)
 defHashmapFuncs(String, UserDataEntry)
-defHashmapFuncs(String, FuncInfo)
 defHashmapFuncs(String, FuncName)
 
 typedef struct LibName {

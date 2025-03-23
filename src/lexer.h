@@ -50,6 +50,7 @@ typedef enum TokenType{
     TokenType_ASSIGNMENT,    // =
     TokenType_DOUBLECOLON,   // ::
     TokenType_INITIALIZER,   // :=
+    TokenType_AS,            // as
 
     TokenType_IDENTIFIER,    // any string that is not a keyword
     TokenType_INT_LITERAL,   // 69

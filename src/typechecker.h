@@ -20,6 +20,7 @@ typedef struct ConstValue {
         String as_String;
         bool as_bool;
         TypecheckedScope* as_function;
+        TypeInfo* as_type;
     };
 } ConstValue;
 defArray(ConstValue);
@@ -89,6 +90,9 @@ typedef struct TypecheckedExpression {
             Scope* scope;
             bool isExtern;
         } FUNCTION_LIT;
+        struct {
+            TypeInfo* typeInfo;
+        } TYPE;
     } expr;
     // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
     TypeInfo* typeInfo;

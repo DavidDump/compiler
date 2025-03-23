@@ -18,7 +18,7 @@
 // };
 
 ConstValue evaluateBinaryExpression(ConstValue lhs, Token operator, ConstValue rhs) {
-    // TODO: static assert on the number of operators
+    STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
     if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_ADD) {
         return _add(lhs, rhs);
     } else if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_SUB) {
@@ -39,8 +39,13 @@ ConstValue evaluateBinaryExpression(ConstValue lhs, Token operator, ConstValue r
         return _equals(lhs, rhs);
     } else if(((TypeIsBool(lhs.typeInfo) && TypeIsBool(rhs.typeInfo)) || (TypeIsNumber(rhs.typeInfo) && TypeIsNumber(lhs.typeInfo))) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_NOT_EQUALS) {
         return _not_equals(lhs, rhs);
+    } else if(operator.type == TokenType_AS && TypeIsType(rhs.typeInfo) && (TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.as_type))) {
+        return _as(lhs, rhs);
     } else {
-        ERROR_VA(operator.loc, "Invalid binary operation: %s "STR_FMT" %s", TypeStr[lhs.typeInfo->symbolType], STR_PRINT(operator.value), TypeStr[rhs.typeInfo->symbolType]);
+        Arena tmp = {0};
+        String lhsType = TypeToString(&tmp, lhs.typeInfo);
+        String rhsType = TypeToString(&tmp, rhs.typeInfo);
+        ERROR_VA(operator.loc, "Invalid binary operation: "STR_FMT" "STR_FMT" "STR_FMT, STR_PRINT(lhsType), STR_PRINT(operator.value), STR_PRINT(rhsType));
     }
 
     // NOTE: add custom operator definitions here
@@ -82,6 +87,7 @@ ConstValue evaluateUnaryExpression(Token operator, ConstValue value) {
             case TYPE_BOOL:
             case TYPE_VOID:
             case TYPE_ARRAY:
+            case TYPE_TYPE:
             case TYPE_FUNCTION: {
                 Location loc = {.filename = STR(""), .collum = 1, .line = 1}; // TODO: fix loc
                 ERROR_VA(loc, "Can not perform - unary operator on: %s", TypeStr[value.typeInfo->symbolType]);
@@ -257,6 +263,12 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
         case ExpressionType_FUNCTION_LIT: {
             UNREACHABLE("invalid type ExpressionType_FUNCTION_LIT in evaluateConstant: all functions should be skipped before we get to this part");
         } break;
+        case ExpressionType_TYPE: {
+            result.val.typeInfo = TypeInitSimple(mem, TYPE_TYPE);
+            result.val.typeInfo->typeInfo = expr->expr.TYPE.typeInfo;
+            result.val.as_type = expr->expr.TYPE.typeInfo;
+            // NOTE: this is probably the wrong way to store this, as identical typeInfo gets sotred in two separate places
+        } break;
     }
 
     return result;
@@ -314,6 +326,9 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
 
             result.expr.FUNCTION_LIT.typeInfo = value.typeInfo->functionInfo;
             // result.expr.FUNCTION_LIT.scope = ;
+        } break;
+        case TYPE_TYPE: {
+            UNIMPLEMENTED("ConstValueToExpression: TYPE_TYPE");
         } break;
         case TYPE_ARRAY: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_ARRAY");
@@ -409,6 +424,29 @@ TypeResult findVariableType(TypecheckedScope* scope, String id) {
     return (TypeResult){.err = TRUE};
 }
 
+TypeInfo* ExpressionToType(Expression* expr, Hashmap(String, ConstValue)* constants) {
+    assert(expr->type == ExpressionType_TYPE || expr->type == ExpressionType_SYMBOL, "Can only convert type or symbol Expressions to TypeInfo");
+    if(expr->type == ExpressionType_SYMBOL) {
+        String id = expr->expr.SYMBOL.identifier;
+        ConstResult res = findConstant(constants, id);
+        if(res.err) {
+            Location loc = {0}; // TODO: fix loc
+            ERROR_VA(loc, "Undefined symbol: "STR_FMT, STR_PRINT(id));
+        }
+
+        ConstValue value = res.value;
+        if(!TypeIsType(value.typeInfo)) {
+            Arena tmp = {0};
+            Location loc = {0}; // TODO: fix loc
+            ERROR_VA(loc, "Trying to use none type symbol as type: "STR_FMT": "STR_FMT, STR_PRINT(id), TypeToString(&tmp, value.typeInfo));
+        }
+
+        return value.as_type;
+    } else if(expr->type == ExpressionType_TYPE) {
+        return expr->expr.TYPE.typeInfo;
+    }
+}
+
 // expected is the type that the expression should be to pass typechecking,
 // can be used when assigning number literals to symbols that have a concrete types,
 // this value can be null to just use the default type
@@ -476,16 +514,16 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             }
 
             TypeInfo* funcInfo = res.typeInfo;
-            if(funcInfo->functionInfo.args.size != args.size) {
+            if(funcInfo->functionInfo->args.size != args.size) {
                 Location loc = {0}; // TODO: fix loc
-                ERROR_VA(loc, "Incorrect number of arguments for funnction call, provided: %llu, expected: %llu", args.size, funcInfo->functionInfo.args.size);
+                ERROR_VA(loc, "Incorrect number of arguments for funnction call, provided: %llu, expected: %llu", args.size, funcInfo->functionInfo->args.size);
             }
 
             Array(TypecheckedExpressionPtr) typecheckedArgs = {0};
             for(u64 i = 0; i < args.size; ++i) {
-                FunctionArg fnArg = funcInfo->functionInfo.args.data[i];
+                FunctionArg fnArg = funcInfo->functionInfo->args.data[i];
                 Expression* providedArg = args.data[i];
-                TypeInfo* expectedArgType = fnArg.type;
+                TypeInfo* expectedArgType = ExpressionToType(fnArg.type, constants);
 
                 TypecheckedExpression* providedArgType = typecheckExpression(mem, providedArg, scope, constants, expectedArgType);
                 if(!TypeMatch(expectedArgType, providedArgType->typeInfo)) {
@@ -504,16 +542,19 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             }
             result->expr.FUNCTION_CALL.args = typecheckedArgs; // NOTE: this needs to be set here becouse the types are different
 
-            result->typeInfo = funcInfo->functionInfo.returnType;
+            result->typeInfo = ExpressionToType(funcInfo->functionInfo->returnType, constants);
             // NOTE: for now all function calls are non constant values, but it really depends on:
             //       - is the funtion being called a pure funtion
             //       - are all the funtion parameters constant values
             result->typeInfo->isConstant = FALSE;
         } break;
         case ExpressionType_FUNCTION_LIT: {
-            FunctionInfo fnInfo = expr->expr.FUNCTION_LIT.typeInfo;
+            // NOTE: this is the case of foo := (bar: u8) -> u8 { ... }
+            UNIMPLEMENTED("typecheckExpression: ExpressionType_FUNCTION_LIT");
+            FunctionInfo* fnInfo = expr->expr.FUNCTION_LIT.typeInfo;
             // Scope* functionScope = expr->expr.FUNCTION_LIT.scope;
 
+            // NOTE: typeInfo is NULL here
             result->typeInfo->symbolType = TYPE_FUNCTION;
             result->typeInfo->functionInfo = fnInfo;
             result->typeInfo->isConstant = TRUE;
@@ -548,6 +589,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 rhsType = typecheckExpression(mem, rhs, scope, constants, expected);
             }
 
+            STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
             // TODO: static assert on the number of operators
             TypeInfo* typeBool = TypeInitSimple(mem, TYPE_BOOL);
             if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_ADD) {
@@ -570,6 +612,9 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 result->typeInfo = typeBool;
             } else if(((TypeIsBool(lhsType->typeInfo) && TypeIsBool(rhsType->typeInfo)) || (TypeIsNumber(rhsType->typeInfo) && TypeIsNumber(lhsType->typeInfo))) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_NOT_EQUALS) {
                 result->typeInfo = typeBool;
+            } else if(op.type == TokenType_AS && TypeIsType(rhsType->typeInfo) && (TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->expr.TYPE.typeInfo))) {
+                // TODO: accually check if the cast is valid
+                result->typeInfo = rhsType->expr.TYPE.typeInfo;
             } else {
                 ERROR_VA(op.loc, "Invalid binary operation: %s "STR_FMT" %s", TypeStr[lhsType->typeInfo->symbolType], STR_PRINT(op.value), TypeStr[rhsType->typeInfo->symbolType]);
             }
@@ -590,6 +635,10 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             }
 
             result->typeInfo->isConstant = typeInfo->typeInfo->isConstant;
+        } break;
+        case ExpressionType_TYPE: {
+            result->typeInfo = TypeInitSimple(mem, TYPE_TYPE);
+            result->typeInfo->typeInfo = expr->expr.TYPE.typeInfo;
         } break;
     }
 
@@ -698,7 +747,7 @@ void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, Type
         assert(expr->type == ExpressionType_FUNCTION_LIT, "Expected function lit in typecheckFunctions");
 
         GenericScope* fnScope = expr->expr.FUNCTION_LIT.scope;
-        TypeInfo* returnType = expr->expr.FUNCTION_LIT.typeInfo.returnType;
+        TypeInfo* returnType = ExpressionToType(expr->expr.FUNCTION_LIT.typeInfo->returnType, constants);
 
         TypeInfo* fnTypeInfo = TypeInitSimple(mem, TYPE_FUNCTION);
         fnTypeInfo->functionInfo = expr->expr.FUNCTION_LIT.typeInfo;
@@ -751,14 +800,14 @@ TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedSco
             case StatementType_VAR_CONST: break;
             case StatementType_VAR_DECL: {
                 String id = statement->statement.VAR_DECL.identifier;
-                TypeInfo* type = statement->statement.VAR_DECL.type;
+                TypeInfo* type = ExpressionToType(statement->statement.VAR_DECL.type, &constantsInThisScope);
 
                 saveVariable(result, &constantsInThisScope, id, type);
             } break;
             case StatementType_VAR_DECL_ASSIGN: {
                 String id = statement->statement.VAR_DECL_ASSIGN.identifier;
                 Expression* expr = statement->statement.VAR_DECL_ASSIGN.expr;
-                TypeInfo* type = statement->statement.VAR_DECL_ASSIGN.type;
+                TypeInfo* type = ExpressionToType(statement->statement.VAR_DECL_ASSIGN.type, &constantsInThisScope);
 
                 TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, type);
                 if(inferedType->typeInfo->symbolType == TYPE_VOID) {

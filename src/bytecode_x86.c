@@ -229,6 +229,7 @@ void genInstruction(GenContext* ctx, Instruction inst) {
         InstructionEncoding encoding = instructionEncodings[i];
         if(isZeroStruct(&encoding)) break;
         if(!checkTypesMatch(inst.ops[0].type, encoding.opTypes[0]) || !checkTypesMatch(inst.ops[1].type, encoding.opTypes[1])) continue;
+        if(encoding.type != inst.type) continue;
 
         // NOTE: what about instructions with no operands?
         u8 rexR = 0;
@@ -521,13 +522,72 @@ TypeInfo* findFunctionType(GenScope* localScope, String id) {
     return 0; // silence warninig
 }
 
+void gen_x86_64_cast(GenContext* ctx, TypecheckedExpression* lhs, TypecheckedExpression* rhs, GenScope* localScope) {
+    UNIMPLEMENTED("gen_x86_64_cast");
+    assert(lhs->type == ExpressionType_INT_LIT || lhs->type == ExpressionType_SYMBOL, "Can only cast integers");
+    assert(rhs->type == ExpressionType_TYPE, "Can only cast to a type");
+
+    if(lhs->type == ExpressionType_INT_LIT) {
+        String value = lhs->expr.INT_LIT.value;
+
+        u64 intValue = 0;
+        if(TypeIsSigned(lhs->typeInfo)) intValue = (u64)StringToS64(value);
+        else if(TypeIsUnsigned(lhs->typeInfo)) intValue = StringToU64(value);
+
+        Instruction inst = {0};
+        Type symbolType = rhs->expr.TYPE.typeInfo->symbolType;
+        if(0);
+        else if(symbolType == TYPE_S8 || symbolType == TYPE_U8) inst = INST(mov, OP_REG(RAX), OP_IMM8(intValue));
+        else if(symbolType == TYPE_S16 || symbolType == TYPE_U16) inst = INST(mov, OP_REG(RAX), OP_IMM16(intValue));
+        else if(symbolType == TYPE_S32 || symbolType == TYPE_U32) inst = INST(mov, OP_REG(RAX), OP_IMM32(intValue));
+        else if(symbolType == TYPE_S64 || symbolType == TYPE_U64) inst = INST(mov, OP_REG(RAX), OP_IMM64(intValue));
+        genInstruction(ctx, inst);
+    } else if(lhs->type == ExpressionType_SYMBOL) {
+        String id = lhs->expr.SYMBOL.identifier;
+
+        SymbolLocationResult res = findSymbolLocation(localScope, id);
+        if(res.err) {
+            UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(id));
+        }
+
+        if(res.inDataSection) {
+            gen_DataInReg(ctx, RAX, id);
+        } else {
+            Instruction inst = {0};
+            Type lhsSymbolType = lhs->typeInfo->symbolType;
+            if(lhsSymbolType == TYPE_S8 || lhsSymbolType == TYPE_U8 || lhsSymbolType == TYPE_S16 || lhsSymbolType == TYPE_U16) {
+                inst = INST(movzx, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value));
+            } else {
+                inst = INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value));
+            }
+
+            Type rhsSymbolType = rhs->expr.TYPE.typeInfo->symbolType;
+            if(0);
+            else if(rhsSymbolType == TYPE_S8 || rhsSymbolType == TYPE_U8) inst.type = InstructionType_8BIT;
+            else if(rhsSymbolType == TYPE_S16 || rhsSymbolType == TYPE_U16) inst.type = InstructionType_16BIT;
+            else if(rhsSymbolType == TYPE_S32 || rhsSymbolType == TYPE_U32) inst.type = InstructionType_32BIT;
+            else if(rhsSymbolType == TYPE_S64 || rhsSymbolType == TYPE_U64) inst.type = InstructionType_64BIT;
+            genInstruction(ctx, inst);
+        }
+    }
+}
+
 void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope) {
     // TODO: change this to a switch
     if(expr->type == ExpressionType_INT_LIT) {
         String value = expr->expr.INT_LIT.value;
-        // TODO: check if the number is signed or unsigned and parse it differently based on that
-        u32 intValue = StringToU32(value);
-        Instruction inst = INST(mov, OP_REG(RAX), OP_IMM32(intValue));
+
+        u64 intValue = 0;
+        if(TypeIsSigned(expr->typeInfo)) intValue = (u64)StringToS64(value);
+        else if(TypeIsUnsigned(expr->typeInfo)) intValue = StringToU64(value);
+
+        Instruction inst = {0};
+        Type symbolType = expr->typeInfo->symbolType;
+        if(0);
+        else if(symbolType == TYPE_S8 || symbolType == TYPE_U8) inst = INST(mov, OP_REG(RAX), OP_IMM8(intValue));
+        else if(symbolType == TYPE_S16 || symbolType == TYPE_U16) inst = INST(mov, OP_REG(RAX), OP_IMM16(intValue));
+        else if(symbolType == TYPE_S32 || symbolType == TYPE_U32) inst = INST(mov, OP_REG(RAX), OP_IMM32(intValue));
+        else if(symbolType == TYPE_S64 || symbolType == TYPE_U64) inst = INST(mov, OP_REG(RAX), OP_IMM64(intValue));
         genInstruction(ctx, inst);
     } else if(expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
@@ -561,7 +621,15 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         if(res.inDataSection) {
             gen_DataInReg(ctx, RAX, id);
         } else {
-            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value)));
+            Instruction inst = INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value));
+
+            Type symbolType = expr->typeInfo->symbolType;
+            if(0);
+            else if(symbolType == TYPE_S8 || symbolType == TYPE_U8) inst.type = InstructionType_8BIT;
+            else if(symbolType == TYPE_S16 || symbolType == TYPE_U16) inst.type = InstructionType_16BIT;
+            else if(symbolType == TYPE_S32 || symbolType == TYPE_U32) inst.type = InstructionType_32BIT;
+            else if(symbolType == TYPE_S64 || symbolType == TYPE_U64) inst.type = InstructionType_64BIT;
+            genInstruction(ctx, inst);
         }
     } else if(expr->type == ExpressionType_FUNCTION_CALL) {
         String id = expr->expr.FUNCTION_CALL.identifier;
@@ -586,7 +654,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
 
         TypeInfo* fnType = findFunctionType(localScope, id);
         assert(fnType->symbolType == TYPE_FUNCTION, "");
-        if(fnType->functionInfo.isExternal) {
+        if(fnType->functionInfo->isExternal) {
             // NOTE: "In the Microsoft x64 calling convention, it is the caller's responsibility to allocate 32 bytes of "shadow space"
             //       on the stack right before calling the function, and to pop the stack after the call."
             //       -wikipedia, https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions
@@ -604,6 +672,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         TypecheckedExpression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but then again what do i know
+        STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
         if(StringEqualsCstr(operator, "+")) {
             gen_x86_64_expression(ctx, lhs, localScope);
             genPush(ctx, localScope, RAX);
@@ -632,6 +701,9 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             genInstruction(ctx, INST(mov, OP_REG(RDX), OP_IMM8(0))); // TODO: this can be changed to: xor rdx, rdx
             genPop(ctx, localScope, RCX);
             genInstruction(ctx, INST(div, OP_REG(RCX)));
+        } else if(StringEqualsCstr(operator, "as")) {
+            // UNIMPLEMENTED("codegen for cast");
+            printf("[WARNING] as op not accually finished\n");
         }
     } else if(expr->type == ExpressionType_UNARY_EXPRESSION) {
         Token operator = expr->expr.UNARY_EXPRESSION.operator;
@@ -885,13 +957,18 @@ void calculateSpaceForVariables(GenScope* genScope, TypecheckedScope* scope) {
     }
 }
 
+TypeInfo* codegenExpressionToType(Expression* expr) {
+    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
+    return expr->expr.TYPE.typeInfo;
+}
+
 GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope, GenScope* parent) {
     TypecheckedScope* scope = fnScope.as_function;
     TypeInfo* typeInfo = fnScope.typeInfo;
 
     assertf(typeInfo->symbolType == TYPE_FUNCTION, "fnScope has to be of type function, got: "STR_FMT, STR_PRINT(TypeToString(mem, typeInfo)));
     GenScope* genScope = genScopeInit(mem, scope, parent);
-    if(typeInfo->functionInfo.isExternal) return genScope;
+    if(typeInfo->functionInfo->isExternal) return genScope;
 
     u64 functionLocation = ctx->code.size;
     // TODO: why is this an s64 and not a u64
@@ -918,10 +995,10 @@ GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope
     #endif
 
     // function arguments
-    for(u64 i = 0; i < typeInfo->functionInfo.args.size; ++i) {
-        FunctionArg fnArg = typeInfo->functionInfo.args.data[i];
+    for(u64 i = 0; i < typeInfo->functionInfo->args.size; ++i) {
+        FunctionArg fnArg = typeInfo->functionInfo->args.data[i];
         String argId = fnArg.id;
-        TypeInfo* argType = fnArg.type;
+        TypeInfo* argType = codegenExpressionToType(fnArg.type);
         // Expression* argValue = fnArg.initialValue;
         // UNUSED(argValue);
 

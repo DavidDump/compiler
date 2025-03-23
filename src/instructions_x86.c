@@ -105,11 +105,14 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         // 89 /r             | MOV r/m16, r16         | MR    | Valid       | Valid           | Move r16 to r/m16.
         // 89 /r             | MOV r/m32, r32         | MR    | Valid       | Valid           | Move r32 to r/m32.
         // REX.W + 89 /r     | MOV r/m64, r64         | MR    | Valid       | N.E.            | Move r64 to r/m64.
-        {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0x89, .modRMType = ModRMType_REG, .opTypes[0] = OpType_RM,  .opTypes[1] = OpType_REG},
+        {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0x89, .modRMType = ModRMType_REG, .opTypes[0] = OpType_RM, .opTypes[1] = OpType_REG},
         // 8A /r             | MOV r8, r/m8           | RM    | Valid       | Valid           | Move r/m8 to r8.
-        // REX + 8A /r       | MOV r81, r/m81         | RM    | Valid       | N.E.            | Move r/m8 to r8.
+        {.type = InstructionType_8BIT, .opcode = 0x8A, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
+        // REX + 8A /r       | MOV r8 , r/m8          | RM    | Valid       | N.E.            | Move r/m8 to r8.
         // 8B /r             | MOV r16, r/m16         | RM    | Valid       | Valid           | Move r/m16 to r16.
+        {.type = InstructionType_16BIT, .opcode = 0x8B, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
         // 8B /r             | MOV r32, r/m32         | RM    | Valid       | Valid           | Move r/m32 to r32.
+        {.type = InstructionType_32BIT, .opcode = 0x8B, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
         // REX.W + 8B /r     | MOV r64, r/m64         | RM    | Valid       | N.E.            | Move r/m64 to r64.
         {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0x8B, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
         
@@ -137,11 +140,26 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         // REX.W + B8+ rd io | MOV r64, imm64         | OI    | Valid       | N.E.            | Move imm64 to r64.
         {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0xB8, .regInOpcode = TRUE, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_IMM64},
         // C6 /0 ib          | MOV r/m8, imm8         | MI    | Valid       | Valid           | Move imm8 to r/m8.
+        {.type = InstructionType_64BIT, .opcode = 0xC6, .modRMType = ModRMType_EXT, .opcodeExtension = 0, .opTypes[0] = OpType_RM, .opTypes[1] = OpType_IMM8},
         // REX + C6 /0 ib    | MOV r/m8, imm8         | MI    | Valid       | N.E.            | Move imm8 to r/m8.
         // C7 /0 iw          | MOV r/m16, imm16       | MI    | Valid       | Valid           | Move imm16 to r/m16.
         // C7 /0 id          | MOV r/m32, imm32       | MI    | Valid       | Valid           | Move imm32 to r/m32.
         // REX.W + C7 /0 id  | MOV r/m64, imm32       | MI    | Valid       | N.E.            | Move imm32 sign extended to 64-bits to r/m64.
         {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0xC7, .modRMType = ModRMType_EXT, .opcodeExtension = 0, .opTypes[0] = OpType_RM, .opTypes[1] = OpType_IMM32},
+    },
+    // TODO: these cannot be generated right now, only once the encodings can differentiate between register sizes
+    [movzx_] = {
+        // Opcode           | Instruction      | Op/En | 64-Bit Mode | Compat/Leg Mode | Description
+        // 0F B6 /r         | MOVZX r16, r/m8  | RM    | Valid       | Valid           | Move byte to word with zero-extension.
+        {.type = InstructionType_16BIT, .opcode = 0x0FB6, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
+        // 0F B6 /r         | MOVZX r32, r/m8  | RM    | Valid       | Valid           | Move byte to doubleword, zero-extension.
+        {.type = InstructionType_32BIT, .opcode = 0x0FB6, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
+        // REX.W + 0F B6 /r | MOVZX r64, r/m8  | RM    | Valid       | N.E.            | Move byte to quadword, zero-extension.
+        {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0x0FB6, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
+        // 0F B7 /r         | MOVZX r32, r/m16 | RM    | Valid       | Valid           | Move word to doubleword, zero-extension.
+        {.type = InstructionType_32BIT, .opcode = 0x0FB7, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
+        // REX.W + 0F B7 /r | MOVZX r64, r/m16 | RM    | Valid       | N.E.            | Move word to quadword, zero-extension.
+        {.type = InstructionType_64BIT, .rexType = RexByte_W, .opcode = 0x0FB7, .modRMType = ModRMType_REG, .opTypes[0] = OpType_REG, .opTypes[1] = OpType_RM},
     },
     [add_] = {
         // Opcode           | Instruction      | Op/En | 64-bit Mode | Compat/Leg Mode | Description

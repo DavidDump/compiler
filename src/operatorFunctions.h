@@ -272,3 +272,19 @@ ConstValue _not_equals(ConstValue lhs, ConstValue rhs) {
 
     return result;
 }
+
+ConstValue _as(ConstValue lhs, ConstValue rhs) {
+    assert(
+        (TypeIsType(rhs.typeInfo)),
+        "can only cast to a type"
+    );
+
+    ConstValue result = lhs;
+    if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.as_type)) {
+        result.typeInfo = rhs.as_type;
+    } else {
+        UNREACHABLE("bla");
+    }
+
+    return result;
+}

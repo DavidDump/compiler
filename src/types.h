@@ -16,6 +16,7 @@ defArray(FunctionArg);
 
 #include "common.h"
 #include "string.h"
+#include "parser.h"
 
 typedef enum Type {
     TYPE_NONE,
@@ -35,8 +36,8 @@ typedef enum Type {
     TYPE_VOID,
     TYPE_FUNCTION,
     TYPE_ARRAY,
+    TYPE_TYPE,
     // TYPE_ANY,
-    // TYPE_TYPE,
     // TYPE_STRUCT,
     // TYPE_ENUM,
     // TYPE_SCOPE,
@@ -49,13 +50,13 @@ extern char* TypeStr[TYPE_COUNT + 1];
 // used when defining arguments during function declaration
 typedef struct FunctionArg {
     String id;
-    TypeInfo* type;
+    Expression* type;
     // Expression* initialValue; // the expression this argument should be initialized with
 } FunctionArg;
 
 typedef struct FunctionInfo {
     Array(FunctionArg) args;
-    TypeInfo* returnType;
+    Expression* returnType;
     bool isExternal;
 } FunctionInfo;
 
@@ -70,7 +71,8 @@ typedef struct TypeInfo {
     bool isPointer;  // flag if the type is a pointer to symbolType type
     bool isConstant; // flag if all the leaves of the expression are constant values, example.: 1 + 1
     ArrayInfo arrayInfo;
-    FunctionInfo functionInfo; // if fuction, contains information about the function
+    FunctionInfo* functionInfo;
+    TypeInfo* typeInfo; // TODO: remove, this makes no sense if the value is not a constant
 } TypeInfo;
 
 TypeInfo* TypeInitSimple(Arena* mem, Type t);
@@ -82,6 +84,7 @@ bool TypeIsFloat(TypeInfo* type);
 bool TypeIsInt(TypeInfo* type);
 bool TypeIsNumber(TypeInfo* type);
 bool TypeIsBool(TypeInfo* type);
+bool TypeIsType(TypeInfo* type);
 bool TypeMatch(TypeInfo* type1, TypeInfo* type2);
 Type TypeDefaultInt();
 Type TypeDefaultFloat();

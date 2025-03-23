@@ -234,7 +234,7 @@ Array(FunctionArg) functionArgs(ParseContext* ctx, Arena* mem) {
 
         FunctionArg arg = {0};
         arg.id = id.value;
-        arg.type = parseType(ctx, mem);
+        arg.type = parseExpression(ctx, mem);
         // arg.initialValue = ; // TODO: currently we dont support value initializer parsing
         ArrayAppend(result, arg);
 
@@ -327,22 +327,32 @@ GenericScope* parseGenericScope(ParseContext* ctx, Arena* mem, Scope parent) {
     return result;
 }
 
+Expression* ExpressionTypeInitSimple(Arena* mem, Type t) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_TYPE;
+    result->expr.TYPE.typeInfo = TypeInitSimple(mem, t);
+    return result;
+}
+
 Expression* makeFunctionLit(ParseContext* ctx, Arena* mem, bool isExtern) {
     Expression* result = arena_alloc(mem, sizeof(Expression));
     result->type = ExpressionType_FUNCTION_LIT;
 
+    FunctionInfo* funcInfo = arena_alloc(mem, sizeof(FunctionInfo));
+    funcInfo->isExternal = isExtern;
+    funcInfo->args = functionArgs(ctx, mem); // NOTE: this does the parsing so the order when this gets called is important
+
     GenericScope* functionScope = parseGenericScopeInit(mem, (Scope){0}); // NOTE: this gets fixed later in parseStatement
     result->expr.FUNCTION_LIT.scope = functionScope;
-    result->expr.FUNCTION_LIT.typeInfo.isExternal = isExtern;
-    result->expr.FUNCTION_LIT.typeInfo.args = functionArgs(ctx, mem);
+    result->expr.FUNCTION_LIT.typeInfo = funcInfo;
 
     // ret type
     Token next = parsePeek(ctx, 0);
     if(next.type == TokenType_RARROW) {
         parseConsume(ctx); // ->
-        result->expr.FUNCTION_LIT.typeInfo.returnType = parseType(ctx, mem);
+        funcInfo->returnType = parseExpression(ctx, mem);
     } else {
-        result->expr.FUNCTION_LIT.typeInfo.returnType = TypeInitSimple(mem, TYPE_VOID);
+        funcInfo->returnType = ExpressionTypeInitSimple(mem, TYPE_VOID);
     }
 
     // scope
@@ -386,6 +396,95 @@ Expression* makeCompInstructionLeaf(ParseContext* ctx, Arena* mem) {
     return 0;
 }
 
+Expression* makeType(ParseContext* ctx, Arena* mem, Token next) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_TYPE;
+    TypeInfo* typeInfo = arena_alloc(mem, sizeof(TypeInfo));
+    result->expr.TYPE.typeInfo = typeInfo;
+
+    // TODO: this could be a hashmap with key `String` value `Type` and just look up the type there
+    Type type = TYPE_NONE;
+    if(StringEqualsCstr(next.value, "u8")) {
+        type = TYPE_U8;
+    } else if(StringEqualsCstr(next.value, "u16")) {
+        type = TYPE_U16;
+    } else if(StringEqualsCstr(next.value, "u32")) {
+        type = TYPE_U32;
+    } else if(StringEqualsCstr(next.value, "u64")) {
+        type = TYPE_U64;
+    } else if(StringEqualsCstr(next.value, "s8")) {
+        type = TYPE_S8;
+    } else if(StringEqualsCstr(next.value, "s16")) {
+        type = TYPE_S16;
+    } else if(StringEqualsCstr(next.value, "s32")) {
+        type = TYPE_S32;
+    } else if(StringEqualsCstr(next.value, "s64")) {
+        type = TYPE_S64;
+    } else if(StringEqualsCstr(next.value, "f32")) {
+        type = TYPE_F32;
+    } else if(StringEqualsCstr(next.value, "f64")) {
+        type = TYPE_F64;
+    } else if(StringEqualsCstr(next.value, "string")) {
+        type = TYPE_STRING;
+    } else if(StringEqualsCstr(next.value, "bool")) {
+        type = TYPE_BOOL;
+    } else if(StringEqualsCstr(next.value, "void")) {
+        type = TYPE_VOID;
+    } else {
+        ERROR_VA(next.loc, "Unknown type: "STR_FMT, STR_PRINT(next.value));
+    }
+
+    bool isPointer = FALSE;
+    next = parsePeek(ctx, 0);
+    if(next.type == TokenType_MUL) {
+        parseConsume(ctx); // *
+        isPointer = TRUE;
+    }
+
+    next = parsePeek(ctx, 0);
+    if(next.type != TokenType_LBRACKET) {
+        typeInfo->symbolType = type;
+        typeInfo->isPointer = isPointer;
+        return result;
+    }
+    parseConsume(ctx); // '['
+
+    ArrayInfo arrayInfo = {0};
+    next = parseConsume(ctx);
+    if(next.type == TokenType_TRIPLEDOT) {
+        arrayInfo.isDynamic = TRUE;
+    } else if(next.type == TokenType_INT_LITERAL) {
+        u64 size = StringToU64(next.value);
+        arrayInfo.arraySize = size;
+    } else {
+        ERROR(next.loc, "Array needs a fixed size or '...' for dynamic size");
+    }
+
+    next = parseConsume(ctx);
+    if(next.type != TokenType_RBRACKET){
+        ERROR(next.loc, "Expected closing pair to square bracket ']'");
+    }
+
+    typeInfo->symbolType = TYPE_ARRAY;
+    typeInfo->arrayInfo = arrayInfo;
+    typeInfo->isPointer = isPointer;
+    return result;
+}
+
+TypeInfo* parseType(ParseContext* ctx, Arena* mem) {
+    u64 indexBeforeParsingType = ctx->index;
+    Expression* expr = parseExpression(ctx, mem);
+    if(expr->type == ExpressionType_TYPE) {
+        return expr->expr.TYPE.typeInfo;
+    }
+
+    Location loc = ctx->tokens.data[indexBeforeParsingType].loc;
+    ERROR_VA(loc, "Expected type, got expression: %s", ExpressionTypeStr[expr->type]);
+
+    // silence warning
+    return 0;
+}
+
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
 
@@ -393,6 +492,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isFunctionCall(ctx, next))           return makeFunctionCall(ctx, mem, next);
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
+    if(next.type == TokenType_TYPE)         return makeType(ctx, mem, next);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
@@ -406,13 +506,13 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
         return result;
     }
 
-    ERROR_VA(next.loc, "Unhandled input: "STR_FMT, STR_PRINT(next.value));
+    ERROR_VA(next.loc, "Expected expression leaf, got: "STR_FMT, STR_PRINT(next.value));
     // NOTE: silencing compiler warning
     return 0;
 }
 
 // TODO: move somewhere more sane
-Operator operators[] = {
+Operator operators[BIN_OPERATORS_COUNT] = {
     {.type = TokenType_LESS,       .presedence = 4},
     {.type = TokenType_LESS_EQ,    .presedence = 4},
     {.type = TokenType_GREATER,    .presedence = 4},
@@ -423,6 +523,7 @@ Operator operators[] = {
     {.type = TokenType_SUB, .presedence = 5},
     {.type = TokenType_MUL, .presedence = 10},
     {.type = TokenType_DIV, .presedence = 10},
+    {.type = TokenType_AS,  .presedence = 15},
 };
 
 bool isOperator(Token token) {
@@ -474,83 +575,6 @@ bool parseCheckSemicolon(ParseContext* ctx) {
         ERROR_VA(next.loc, "Statement needs to end with ; got: %s", TokenTypeStr[next.type]);
     }
     return TRUE;
-}
-
-TypeInfo* parseType(ParseContext* ctx, Arena* mem) {
-    TypeInfo* result = arena_alloc(mem, sizeof(TypeInfo));
-
-    Token tok = parseConsume(ctx);
-    if(tok.type != TokenType_TYPE) {
-        ERROR_VA(tok.loc, "Invalid type: "STR_FMT, STR_PRINT(tok.value));
-    }
-
-    // TODO: this could be a hashmap with key `String` value `Type` and just look up the type there
-    Type type = TYPE_NONE;
-    if(StringEqualsCstr(tok.value, "u8")) {
-        type = TYPE_U8;
-    } else if(StringEqualsCstr(tok.value, "u16")) {
-        type = TYPE_U16;
-    } else if(StringEqualsCstr(tok.value, "u32")) {
-        type = TYPE_U32;
-    } else if(StringEqualsCstr(tok.value, "u64")) {
-        type = TYPE_U64;
-    } else if(StringEqualsCstr(tok.value, "s8")) {
-        type = TYPE_S8;
-    } else if(StringEqualsCstr(tok.value, "s16")) {
-        type = TYPE_S16;
-    } else if(StringEqualsCstr(tok.value, "s32")) {
-        type = TYPE_S32;
-    } else if(StringEqualsCstr(tok.value, "s64")) {
-        type = TYPE_S64;
-    } else if(StringEqualsCstr(tok.value, "f32")) {
-        type = TYPE_F32;
-    } else if(StringEqualsCstr(tok.value, "f64")) {
-        type = TYPE_F64;
-    } else if(StringEqualsCstr(tok.value, "string")) {
-        type = TYPE_STRING;
-    } else if(StringEqualsCstr(tok.value, "bool")) {
-        type = TYPE_BOOL;
-    } else if(StringEqualsCstr(tok.value, "void")) {
-        type = TYPE_VOID;
-    } else {
-        ERROR_VA(tok.loc, "Unknown type: "STR_FMT, STR_PRINT(tok.value));
-    }
-
-    bool isPointer = FALSE;
-    Token next = parsePeek(ctx, 0);
-    if(next.type == TokenType_MUL) {
-        parseConsume(ctx); // *
-        isPointer = TRUE;
-    }
-
-    tok = parsePeek(ctx, 0);
-    if(tok.type != TokenType_LBRACKET) {
-        result->symbolType = type;
-        result->isPointer = isPointer;
-        return result;
-    }
-    parseConsume(ctx); // '['
-
-    ArrayInfo arrayInfo = {0};
-    tok = parseConsume(ctx);
-    if(tok.type == TokenType_TRIPLEDOT) {
-        arrayInfo.isDynamic = TRUE;
-    }else if(tok.type == TokenType_INT_LITERAL) {
-        u64 size = StringToU64(tok.value);
-        arrayInfo.arraySize = size;
-    }else{
-        ERROR(tok.loc, "Array needs a fixed size or '...' for dynamic size");
-    }
-
-    tok = parseConsume(ctx);
-    if(tok.type != TokenType_RBRACKET){
-        ERROR(tok.loc, "Expected closing pair to square bracket ']'");
-    }
-
-    result->symbolType = TYPE_ARRAY;
-    result->arrayInfo = arrayInfo;
-    result->isPointer = isPointer;
-    return result;
 }
 
 bool isFunctionLit(ParseContext* ctx, Token next) {
@@ -681,7 +705,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 result->statement.VAR_DECL_ASSIGN.identifier = t.value;
                 result->statement.VAR_DECL_ASSIGN.expr = parseExpression(ctx, mem);
                 // NOTE: parse inferred during typechecking, void assigned here so we can print the node
-                result->statement.VAR_DECL_ASSIGN.type = TypeInitSimple(mem, TYPE_NONE);
+                result->statement.VAR_DECL_ASSIGN.type = ExpressionTypeInitSimple(mem, TYPE_NONE);
 
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
                 bool checkSemiColon = (result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT);
@@ -693,7 +717,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
                 String identifier = t.value;
-                TypeInfo* type = parseType(ctx, mem);
+                Expression* type = parseExpression(ctx, mem);
 
                 next = parsePeek(ctx, 0);
                 if(next.type == TokenType_ASSIGNMENT) {
@@ -755,6 +779,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
         case TokenType_DIV:
         case TokenType_COMPARISON:
         case TokenType_ASSIGNMENT:
+        case TokenType_AS:
         case TokenType_DOUBLECOLON:
         case TokenType_INITIALIZER:
             printf("[ERROR] Unhandled token type: %s at ("STR_FMT":%i:%i)\n", TokenTypeStr[t.type], STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum);

@@ -19,9 +19,15 @@ char* TypeStr[TYPE_COUNT + 1] = {
     [TYPE_VOID]     = "VOID",
     [TYPE_FUNCTION] = "FUNCTION",
     [TYPE_ARRAY]    = "ARRAY",
+    [TYPE_TYPE]     = "TYPE",
 
     [TYPE_COUNT]    = "COUNT",
 };
+
+TypeInfo* TypeExpressionToType(Expression* expr) {
+    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
+    return expr->expr.TYPE.typeInfo;
+}
 
 String TypeToString(Arena* mem, TypeInfo* typeInfo) {
     String result = {0};
@@ -49,9 +55,9 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             result.length = strlen(TypeStr[typeInfo->symbolType]);
         } break;
         case TYPE_FUNCTION: {
-            Array(FunctionArg) args = typeInfo->functionInfo.args;
-            bool isExternal = typeInfo->functionInfo.isExternal;
-            TypeInfo* returnType = typeInfo->functionInfo.returnType;
+            Array(FunctionArg) args = typeInfo->functionInfo->args;
+            TypeInfo* returnType = TypeExpressionToType(typeInfo->functionInfo->returnType);
+            bool isExternal = typeInfo->functionInfo->isExternal;
             UNUSED(isExternal);
 
             // (arg, arg, arg) -> VOID
@@ -60,7 +66,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             u64 totalLen = 2; // NOTE: start from 2 for the opening and closing parenthesis
             for(u64 i = 0; i < args.size; ++i) {
                 FunctionArg arg = args.data[i];
-                String argStr = TypeToString(mem, arg.type);
+                String argStr = TypeToString(mem, TypeExpressionToType(arg.type));
                 totalLen += argStr.length;
                 ArrayAppend(argTypes, argStr);
             }
@@ -100,6 +106,23 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             }
             result.str = buffer;
             free(argTypes.data);
+        } break;
+        case TYPE_TYPE: {
+            // Type(...)
+            String subType = TypeToString(mem, typeInfo->typeInfo);
+            u8* buffer = arena_alloc(mem, subType.length + 6); // +6 for the `Type()` string
+            result.str = buffer;
+            result.length = subType.length + 6;
+
+            u64 at = 0;
+            buffer[at++] = 'T';
+            buffer[at++] = 'y';
+            buffer[at++] = 'p';
+            buffer[at++] = 'e';
+            buffer[at++] = '(';
+            memcpy(&buffer[at], subType.str, subType.length);
+            at += subType.length;
+            buffer[at++] = ')';
         } break;
         case TYPE_ARRAY: {
             u64 arraySize = typeInfo->arrayInfo.arraySize;
@@ -144,9 +167,6 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
 TypeInfo* TypeInitSimple(Arena* mem, Type t) {
     TypeInfo* result = arena_alloc(mem, sizeof(TypeInfo));
     result->symbolType = t;
-    result->isPointer = FALSE;
-    result->arrayInfo = (ArrayInfo){0};
-    result->functionInfo = (FunctionInfo){0};
     return result;
 }
 
@@ -163,6 +183,8 @@ u64 TypeToByteSize(TypeInfo* type) {
             return 8;
         } break;
 
+        // TODO: type will later have a struct that its stored in if its a value
+        case TYPE_TYPE:
         // NOTE: these are stored in a special way not directly on the stack
         case TYPE_FUNCTION:
         case TYPE_VOID: {
@@ -245,6 +267,11 @@ bool TypeIsBool(TypeInfo* type) {
     return type->symbolType == TYPE_BOOL;
 }
 
+bool TypeIsType(TypeInfo* type) {
+    if(type == NULL) return FALSE;
+    return type->symbolType == TYPE_TYPE;
+}
+
 // TODO: pointers need to be compared
 bool TypeMatch(TypeInfo* type1, TypeInfo* type2) {
     bool result = FALSE;
@@ -256,13 +283,13 @@ bool TypeMatch(TypeInfo* type1, TypeInfo* type2) {
         result = result && type1->arrayInfo.arraySize == type2->arrayInfo.arraySize;
         result = result && type1->arrayInfo.isDynamic == type2->arrayInfo.isDynamic;
     } else if(type1->symbolType == TYPE_FUNCTION) {
-        result = result && TypeMatch(type1->functionInfo.returnType, type2->functionInfo.returnType);
-        result = result && type1->functionInfo.isExternal == type2->functionInfo.isExternal;
-        result = result && type1->functionInfo.args.size == type2->functionInfo.args.size;
-        for(u64 i = 0; i < type1->functionInfo.args.size; ++i) {
-            FunctionArg info1 = type1->functionInfo.args.data[i];
-            FunctionArg info2 = type2->functionInfo.args.data[i];
-            result = result && TypeMatch(info1.type, info2.type);
+        result = result && TypeMatch(TypeExpressionToType(type1->functionInfo->returnType), TypeExpressionToType(type2->functionInfo->returnType));
+        result = result && type1->functionInfo->isExternal == type2->functionInfo->isExternal;
+        result = result && type1->functionInfo->args.size == type2->functionInfo->args.size;
+        for(u64 i = 0; i < type1->functionInfo->args.size; ++i) {
+            FunctionArg info1 = type1->functionInfo->args.data[i];
+            FunctionArg info2 = type2->functionInfo->args.data[i];
+            result = result && TypeMatch(TypeExpressionToType(info1.type), TypeExpressionToType(info2.type));
         }
     }
 

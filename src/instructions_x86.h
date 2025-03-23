@@ -55,6 +55,7 @@ typedef enum Mnemonic {
     call_,
     ret_,
     mov_,
+    movzx_,
     add_,
     sub_,
     mul_,

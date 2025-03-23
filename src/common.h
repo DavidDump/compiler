@@ -12,6 +12,8 @@ typedef int bool;
 #define UNIMPLEMENTED(x) printf("[NOT IMPLEMENTED] %s:%i: %s\n", __FILE__, __LINE__, (x)), exit(EXIT_FAILURE)
 #define UNUSED(x) (void)(x)
 
+#define STATIC_ASSERT(_condition_) typedef char __static_assert_t[(_condition_) != 0]
+
 #ifndef COMP_DEBUG
 #  define assert(...)
 #  define assertf(...)

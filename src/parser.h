@@ -1,6 +1,8 @@
 #ifndef COMP_PARSER_NEW_H
 #define COMP_PARSER_NEW_H
 
+#define BIN_OPERATORS_COUNT 11
+
 typedef struct Scope Scope;
 typedef Scope* ScopePtr;
 
@@ -45,6 +47,7 @@ typedef enum ExpressionType {
     ExpressionType_SYMBOL,            // foo
     ExpressionType_FUNCTION_CALL,     // bar()
     ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
+    ExpressionType_TYPE,              // u8
 } ExpressionType;
 
 extern char* ExpressionTypeStr[];
@@ -82,9 +85,12 @@ typedef struct Expression {
             Array(ExpressionPtr) args;
         } FUNCTION_CALL;
         struct FUNCTION_LIT {
-            FunctionInfo typeInfo;
+            FunctionInfo* typeInfo;
             GenericScope* scope;
         } FUNCTION_LIT;
+        struct TYPE {
+            TypeInfo* typeInfo;
+        } TYPE;
     } expr;
 } Expression;
 
@@ -142,11 +148,11 @@ typedef struct Statement {
     union {
         struct VAR_DECL {
             String identifier;
-            TypeInfo* type;
+            Expression* type;
         } VAR_DECL;
         struct VAR_DECL_ASSIGN {
             String identifier;
-            TypeInfo* type;
+            Expression* type;
             Expression* expr;
         } VAR_DECL_ASSIGN;
         struct VAR_REASSIGN {

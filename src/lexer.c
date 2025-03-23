@@ -40,6 +40,7 @@ char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_ASSIGNMENT]    = "ASSIGNMENT",
     [TokenType_COMPARISON]    = "COMPARISON",
     [TokenType_IDENTIFIER]    = "IDENTIFIER",
+    [TokenType_AS]            = "AS",
     [TokenType_INT_LITERAL]   = "INT_LITERAL",
     [TokenType_STRING_LIT]    = "STRING_LIT",
     [TokenType_BOOL_LITERAL]  = "BOOL_LITERAL",
@@ -121,6 +122,7 @@ Array(Token) Tokenize(Arena* mem, String source, String filename) {
             else if(StringEqualsCstr(value, "loop"))  type = TokenType_LOOP;
             else if(StringEqualsCstr(value, "true"))  type = TokenType_BOOL_LITERAL;
             else if(StringEqualsCstr(value, "false")) type = TokenType_BOOL_LITERAL;
+            else if(StringEqualsCstr(value, "as"))    type = TokenType_AS;
             else if(isType(value))                    type = TokenType_TYPE;
             else type = TokenType_IDENTIFIER;
         } else if(isNumber(c)) {

@@ -115,6 +115,7 @@ typedef struct Operand {
 
 typedef struct Instruction {
     Mnemonic name;
+    InstructionType type;
     Operand ops[INSTRUCTION_MAX_OPERANDS];
 } Instruction;
 
@@ -138,10 +139,15 @@ typedef struct Instruction {
     (Operand){.type = OPERAND_AbsoluteAddr, .displacement = (_displacement_), .isRIPorAbs = TRUE}
 #define OP_IMM8(_immediate_) \
     (Operand){.type = OPERAND_Immediate8, .immediate = (_immediate_), .isImm = TRUE}
+#define OP_IMM16(_immediate_) \
+    (Operand){.type = OPERAND_Immediate16, .immediate = (_immediate_), .isImm = TRUE}
 #define OP_IMM32(_immediate_) \
     (Operand){.type = OPERAND_Immediate32, .immediate = (_immediate_), .isImm = TRUE}
+#define OP_IMM64(_immediate_) \
+    (Operand){.type = OPERAND_Immediate64, .immediate = (_immediate_), .isImm = TRUE}
 
-#define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .ops = {__VA_ARGS__}}
+// NOTE: the default is a 64-bit instruction, if smaller registers need to be used, this needs to be manually overwritten after the instruction is created
+#define INST(_mnemonic_, ...) (Instruction){.name = _mnemonic_##_, .type = InstructionType_64BIT, .ops = {__VA_ARGS__}}
 
 void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, GenScope* genScope);
 void genGenericScope(GenContext* ctx, Arena* mem, TypecheckedScope* scope, GenScope* parentScope);
