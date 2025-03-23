@@ -265,7 +265,6 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
         } break;
         case ExpressionType_TYPE: {
             result.val.typeInfo = TypeInitSimple(mem, TYPE_TYPE);
-            result.val.typeInfo->typeInfo = expr->expr.TYPE.typeInfo;
             result.val.as_type = expr->expr.TYPE.typeInfo;
             // NOTE: this is probably the wrong way to store this, as identical typeInfo gets sotred in two separate places
         } break;
@@ -438,13 +437,16 @@ TypeInfo* ExpressionToType(Expression* expr, Hashmap(String, ConstValue)* consta
         if(!TypeIsType(value.typeInfo)) {
             Arena tmp = {0};
             Location loc = {0}; // TODO: fix loc
-            ERROR_VA(loc, "Trying to use none type symbol as type: "STR_FMT": "STR_FMT, STR_PRINT(id), TypeToString(&tmp, value.typeInfo));
+            ERROR_VA(loc, "Trying to use none type symbol as type: "STR_FMT": "STR_FMT, STR_PRINT(id), STR_PRINT(TypeToString(&tmp, value.typeInfo)));
         }
 
         return value.as_type;
     } else if(expr->type == ExpressionType_TYPE) {
         return expr->expr.TYPE.typeInfo;
     }
+
+    UNREACHABLE("ExpressionToType");
+    return 0; // NOTE: to silence warning
 }
 
 // expected is the type that the expression should be to pass typechecking,
@@ -638,7 +640,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
         } break;
         case ExpressionType_TYPE: {
             result->typeInfo = TypeInitSimple(mem, TYPE_TYPE);
-            result->typeInfo->typeInfo = expr->expr.TYPE.typeInfo;
+            result->expr.TYPE.typeInfo = expr->expr.TYPE.typeInfo;
         } break;
     }
 

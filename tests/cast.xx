@@ -1,0 +1,18 @@
+#library "kernel32.dll";
+ExitProcess :: #extern (code: s64) -> s64;
+
+gas :: 10 as s16;
+
+// Test 1: using types as constants in expressions, with the as operator
+main :: () -> u8 {
+    foo : s64 = 10;
+    bar := foo as u8;
+    return bar;
+}
+
+// Test 2: using types as values in constants
+asd :: u8;
+main2 :: () -> u8 {
+    bar : asd = 10;
+    return bar;
+}

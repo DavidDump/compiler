@@ -72,7 +72,6 @@ typedef struct TypeInfo {
     bool isConstant; // flag if all the leaves of the expression are constant values, example.: 1 + 1
     ArrayInfo arrayInfo;
     FunctionInfo* functionInfo;
-    TypeInfo* typeInfo; // TODO: remove, this makes no sense if the value is not a constant
 } TypeInfo;
 
 TypeInfo* TypeInitSimple(Arena* mem, Type t);

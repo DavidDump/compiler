@@ -50,6 +50,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
         case TYPE_F64:
         case TYPE_STRING:
         case TYPE_BOOL:
+        case TYPE_TYPE:
         case TYPE_VOID: {
             result.str = (u8*)TypeStr[typeInfo->symbolType];
             result.length = strlen(TypeStr[typeInfo->symbolType]);
@@ -106,23 +107,6 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             }
             result.str = buffer;
             free(argTypes.data);
-        } break;
-        case TYPE_TYPE: {
-            // Type(...)
-            String subType = TypeToString(mem, typeInfo->typeInfo);
-            u8* buffer = arena_alloc(mem, subType.length + 6); // +6 for the `Type()` string
-            result.str = buffer;
-            result.length = subType.length + 6;
-
-            u64 at = 0;
-            buffer[at++] = 'T';
-            buffer[at++] = 'y';
-            buffer[at++] = 'p';
-            buffer[at++] = 'e';
-            buffer[at++] = '(';
-            memcpy(&buffer[at], subType.str, subType.length);
-            at += subType.length;
-            buffer[at++] = ')';
         } break;
         case TYPE_ARRAY: {
             u64 arraySize = typeInfo->arrayInfo.arraySize;
