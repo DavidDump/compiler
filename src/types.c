@@ -124,7 +124,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             for(u64 i = 0; i < fields.size; ++i) {
                 FunctionArg field = fields.data[i];
 
-                String typeStr = TypeToString(mem, field.type);
+                String typeStr = TypeToString(mem, TypeExpressionToType(field.type));
                 ArrayAppend(typeStrs, typeStr);
 
                 totalCharCount += field.id.length;
@@ -234,7 +234,7 @@ u64 TypeToByteSize(TypeInfo* type) {
             u64 sizeInBytes = 0;
             for(u64 i = 0; i < fields.size; ++i) {
                 FunctionArg field = fields.data[i];
-                sizeInBytes += TypeToByteSize(field.type);
+                sizeInBytes += TypeToByteSize(TypeExpressionToType(field.type));
             }
             return sizeInBytes;
         } break;

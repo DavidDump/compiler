@@ -1,5 +1,5 @@
 #library "kernel32.dll";
-ExitProcess :: #extern (code: s64) -> s64;
+ExitProcess :: #extern (code: s64);
 
 gas :: 10 as s16;
 

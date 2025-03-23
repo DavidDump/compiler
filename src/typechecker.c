@@ -589,7 +589,11 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 String key = it->key;
                 TypeInfo* typeInfo = it->value;
 
-                FunctionArg field = {.id = key, .type = typeInfo};
+                Expression* typeExpr = arena_alloc(mem, sizeof(Expression));
+                typeExpr->type = ExpressionType_TYPE;
+                typeExpr->expr.TYPE.typeInfo = typeInfo;
+
+                FunctionArg field = {.id = key, .type = typeExpr};
                 ArrayAppend(fields, field);
             }
 
@@ -1065,7 +1069,11 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
             String key = it->key;
             TypeInfo* typeInfo = it->value;
 
-            FunctionArg field = {.id = key, .type = typeInfo};
+            Expression* typeExpr = arena_alloc(mem, sizeof(Expression));
+            typeExpr->type = ExpressionType_TYPE;
+            typeExpr->expr.TYPE.typeInfo = typeInfo;
+
+            FunctionArg field = {.id = key, .type = typeExpr};
             ArrayAppend(fields, field);
         }
         structTypeInfo->structInfo.fields = fields;

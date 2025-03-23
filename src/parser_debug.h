@@ -312,7 +312,7 @@ void GlobalScopePrint(GlobalScope* scope, u64 indent) {
         String id = it->key;
         Statement* value = it->value;
         assertf(value->type == StatementType_VAR_DECL || value->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[value->type]);
-        TypeInfo* type = 0;
+        Expression* type = 0;
         Expression* expr = 0;
         if(value->type == StatementType_VAR_DECL) {
             type = value->statement.VAR_DECL.type;
@@ -321,7 +321,7 @@ void GlobalScopePrint(GlobalScope* scope, u64 indent) {
             expr = value->statement.VAR_DECL_ASSIGN.expr;
         }
 
-        VariablePrint(id, expr, type);
+        VariablePrint(id, expr, DebugExpressionToType(type));
     }
 
     genPrintHelper("Scope constants:\n");
