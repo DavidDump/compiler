@@ -133,6 +133,19 @@ void saveVariable(TypecheckedScope* scope, Hashmap(String, ConstValue)* constant
     }
 }
 
+void saveParam(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, String id, TypeInfo* type) {
+    // check for redefinition
+    if(isSymbolDefined(scope, constants, id)) {
+        Location loc = {0}; // TODO: fix
+        ERROR_VA(loc, "Redefinition of symbol: "STR_FMT, STR_PRINT(id));
+    }
+
+    // save the symbol
+    if(!HashmapSet(String, TypeInfoPtr)(&scope->parameters, id, type)) {
+        UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->parameters.capacity, scope->parameters.size, STR_PRINT(id));
+    }
+}
+
 // containing is the scope that this constant is declared in
 void saveConstant(TypecheckedScope* containing, Hashmap(String, ConstValue)* constants, String id, ConstValue val) {
     // check for redefinition
@@ -181,8 +194,9 @@ void saveFunction(TypecheckedScope* scope, Hashmap(String, ConstValue)* constant
 TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent) {
     TypecheckedScope* result = arena_alloc(mem, sizeof(TypecheckedScope));
     result->parent = parent;
-    HashmapInit(result->functions, 0x100); // TODO: init size
-    HashmapInit(result->variables, 0x100); // TODO: init size
+    HashmapInit(result->functions, 0x100);  // TODO: init size
+    HashmapInit(result->variables, 0x100);  // TODO: init size
+    HashmapInit(result->parameters, 0x100); // TODO: init size
     if(parent) ArrayAppend(parent->children, result);
     return result;
 }
@@ -410,15 +424,10 @@ TypeResult findVariableType(TypecheckedScope* scope, String id) {
     TypecheckedScope* it = scope;
     while(it) {
         if(HashmapGet(String, TypeInfoPtr)(&it->variables, id, &result)) return (TypeResult){.typeInfo = result};
+        if(HashmapGet(String, TypeInfoPtr)(&it->parameters, id, &result)) return (TypeResult){.typeInfo = result};
 
         it = it->parent;
     }
-
-    // TODO: something about params
-    // for(u64 i = 0; i < it->params.size; ++i) {
-    //     StringAndType arg = it->params.data[i];
-    //     if(StringEquals(arg.id, identifier)) return (TypeResult){.typeInfo = arg.type};
-    // }
 
     return (TypeResult){.err = TRUE};
 }
@@ -621,6 +630,8 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 ERROR_VA(op.loc, "Invalid binary operation: %s "STR_FMT" %s", TypeStr[lhsType->typeInfo->symbolType], STR_PRINT(op.value), TypeStr[rhsType->typeInfo->symbolType]);
             }
 
+            result->expr.BINARY_EXPRESSION.lhs = lhsType;
+            result->expr.BINARY_EXPRESSION.rhs = rhsType;
             result->typeInfo->isConstant = lhsType->typeInfo->isConstant && rhsType->typeInfo->isConstant;
         } break;
         case ExpressionType_UNARY_EXPRESSION: {
@@ -636,6 +647,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 result->typeInfo = typeInfo->typeInfo;
             }
 
+            result->expr.UNARY_EXPRESSION.expr = typeInfo;
             result->typeInfo->isConstant = typeInfo->typeInfo->isConstant;
         } break;
         case ExpressionType_TYPE: {
@@ -754,7 +766,16 @@ void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, Type
         TypeInfo* fnTypeInfo = TypeInitSimple(mem, TYPE_FUNCTION);
         fnTypeInfo->functionInfo = expr->expr.FUNCTION_LIT.typeInfo;
 
-        TypecheckedScope* resultScope = typecheckScope(mem, fnScope, parent, constants, returnType);
+        TypecheckedScope* resultScope = TypecheckedScopeInit(mem, parent);
+
+        for(u64 h = 0; h < fnTypeInfo->functionInfo->args.size; ++h) {
+            FunctionArg arg = fnTypeInfo->functionInfo->args.data[h];
+            String argId = arg.id;
+            TypeInfo* argType = ExpressionToType(arg.type, constants);
+            saveParam(resultScope, constants, argId, argType);
+        }
+
+        typecheckScopeInto(mem, fnScope, resultScope, constants, returnType);
 
         ConstValue asd = {0};
         asd.typeInfo = fnTypeInfo;
@@ -772,8 +793,7 @@ void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, Type
 
 // expectedReturnType is used for typechecking return statement
 // constants is a hashmap of evaluated consts that was declared in a parent scope
-TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType) {
-    TypecheckedScope* result = TypecheckedScopeInit(mem, parent);
+void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* result, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType) {
     Hashmap(String, ConstValue) constantsInThisScope = {0}; // these are the constants declared in this scope
     HashmapInit(constantsInThisScope, 0x100); // TODO: better default size
     
@@ -966,6 +986,11 @@ TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedSco
     free(functions.values.data);
 
     free(constantsInThisScope.pairs);
+}
+
+TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType) {
+    TypecheckedScope* result = TypecheckedScopeInit(mem, parent);
+    typecheckScopeInto(mem, scope, result, constants, expectedReturnType);
     return result;
 }
 

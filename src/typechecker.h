@@ -137,6 +137,7 @@ defHashmapFuncs(String, TypecheckedStatement)
 typedef struct TypecheckedScope {
     TypecheckedScope* parent; // NOTE: if the parent is NULL this is the global scope
     Hashmap(String, TypeInfoPtr) variables;
+    Hashmap(String, TypeInfoPtr) parameters; // function paremeters in function scopes
     Hashmap(String, ConstValue)  functions;
     // Hashmap(String, TypeInfoPtr) structs; // TODO: structs not yet implemented
     // Hashmap(String, TypeInfoPtr) enums; // TODO: enums not yet implemented
@@ -146,6 +147,7 @@ typedef struct TypecheckedScope {
 } TypecheckedScope;
 
 TypecheckedScope* typecheckScope(Arena* mem, GenericScope* scope, TypecheckedScope* parent, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType);
+void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* result, Hashmap(String, ConstValue)* constants, TypeInfo* expectedReturnType);
 TypecheckedScope* typecheck(Arena* mem, ParseResult* parseResult);
 
 #endif // TYPECHECKER_H
