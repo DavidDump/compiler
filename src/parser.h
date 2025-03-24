@@ -48,7 +48,7 @@ typedef enum ExpressionType {
     ExpressionType_FUNCTION_CALL,     // bar()
     ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
     ExpressionType_TYPE,              // u8
-    ExpressionType_STRUCT_LIT,        // struct { ... } OR struct (arg: type) { ... }
+    ExpressionType_STRUCT_DEF,        // struct { ... } OR struct (arg: type) { ... }
 } ExpressionType;
 
 extern char* ExpressionTypeStr[];
@@ -92,13 +92,13 @@ typedef struct Expression {
         struct TYPE {
             TypeInfo* typeInfo;
         } TYPE;
-        struct STRUCT_LIT {
+        struct STRUCT_DEF {
             GlobalScope* scope;
 
             // NOTE: only for later once parameterized structs get added
             // Array(FunctionArg) args;
             // bool hasArgs;
-        } STRUCT_LIT;
+        } STRUCT_DEF;
     } expr;
 } Expression;
 

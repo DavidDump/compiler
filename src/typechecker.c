@@ -276,9 +276,9 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
 
             result.val = evaluateUnaryExpression(op, val);
         } break;
-        case ExpressionType_STRUCT_LIT:
+        case ExpressionType_STRUCT_DEF:
         case ExpressionType_FUNCTION_LIT: {
-            UNREACHABLE("invalid type ExpressionType_FUNCTION_LIT and ExpressionType_STRUCT_LIT in evaluateConstant: all functions and structs should be skipped before we get to this part");
+            UNREACHABLE("invalid type ExpressionType_FUNCTION_LIT and ExpressionType_STRUCT_DEF in evaluateConstant: all functions and structs should be skipped before we get to this part");
         } break;
         case ExpressionType_TYPE: {
             result.val.typeInfo = TypeInitSimple(mem, TYPE_TYPE);
@@ -347,10 +347,10 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_TYPE");
         } break;
         case TYPE_STRUCT: {
-            UNIMPLEMENTED("ConstValueToExpression: TYPE_STRUCT");
-            result.type = ExpressionType_STRUCT_LIT;
+            UNIMPLEMENTED("ConstValueToExpression: TYPE_STRUCT_DEF");
+            result.type = ExpressionType_STRUCT_DEF;
 
-            // result.expr.STRUCT_LIT.scope = ;
+            // result.expr.STRUCT_DEF.scope = ;
         } break;
         case TYPE_ARRAY: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_ARRAY");
@@ -580,8 +580,8 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             result->typeInfo->isConstant = TRUE;
             // TODO: this is where the function should be added to global scope for codegen
         } break;
-        case ExpressionType_STRUCT_LIT: {
-            GlobalScope* structScope = expr->expr.STRUCT_LIT.scope;
+        case ExpressionType_STRUCT_DEF: {
+            GlobalScope* structScope = expr->expr.STRUCT_DEF.scope;
             TypecheckedScope* typechecked = typecheckGlobalScope(mem, structScope, constants);
 
             Array(FunctionArg) fields = {0};
@@ -732,7 +732,7 @@ FunctionsInScope typecheckProcessConsts(Arena* mem, Scope scope, Hashmap(String,
             continue;
         }
 
-        if(value->type == ExpressionType_STRUCT_LIT) {
+        if(value->type == ExpressionType_STRUCT_DEF) {
             ArrayAppend(result.structNames, key);
             ArrayAppend(result.structValues, value);
             continue;
@@ -1058,9 +1058,9 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
     for(u64 i = 0; i < functions.structNames.size; ++i) {
         String id = functions.structNames.data[i];
         Expression* expr = functions.structValues.data[i];
-        assert(expr->type == ExpressionType_STRUCT_LIT, "Expected struct lit in typecheckStructs");
+        assert(expr->type == ExpressionType_STRUCT_DEF, "Expected struct def in typecheckStructs");
 
-        GlobalScope* structScope = expr->expr.STRUCT_LIT.scope;
+        GlobalScope* structScope = expr->expr.STRUCT_DEF.scope;
         TypecheckedScope* typechecked = typecheckGlobalScope(mem, structScope, &constantsInThisScope);
 
         TypeInfo* structTypeInfo = TypeInitSimple(mem, TYPE_STRUCT);
@@ -1087,7 +1087,7 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
     // typecheck functions
     // TODO: functions need to be added into the scope.functions hashmap before their scopes are typechecked
     //       or functions that havent beed typechecked yet will report undefined errors,
-    //      potential fix: when constants are resolved the functions have to be added but marked as not typechecked
+    //       potential fix: when constants are resolved the functions have to be added but marked as not typechecked
     typecheckFunctions(mem, &constantsInThisScope, result, functions);
 
     return result;

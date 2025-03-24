@@ -125,10 +125,10 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             TypeInfo* typeInfo = expr->expr.TYPE.typeInfo;
             TypePrint(typeInfo, indent);
         } break;
-        case ExpressionType_STRUCT_LIT: {
-            GlobalScope* scope = expr->expr.STRUCT_LIT.scope;
+        case ExpressionType_STRUCT_DEF: {
+            GlobalScope* scope = expr->expr.STRUCT_DEF.scope;
 
-            genPrintHelper("FUNCTION_CALL: {\n");
+            genPrintHelper("STRUCT_DEF: {\n");
             GlobalScopePrint(scope, indent + 1);
             genPrintHelper("}\n");
         } break;

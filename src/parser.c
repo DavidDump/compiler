@@ -477,13 +477,13 @@ TypeInfo* parseType(ParseContext* ctx, Arena* mem) {
     return 0;
 }
 
-Expression* makeStructLit(ParseContext* ctx, Arena* mem) {
+Expression* makeStructDef(ParseContext* ctx, Arena* mem) {
     Expression* result = arena_alloc(mem, sizeof(Expression));
-    result->type = ExpressionType_STRUCT_LIT;
+    result->type = ExpressionType_STRUCT_DEF;
 
     GlobalScope* structScope = parseGlobalScopeInit(mem, (Scope){0}); // TODO: fix parent scope
-    result->expr.STRUCT_LIT.scope = structScope;
-    // result->expr.STRUCT_LIT.args = functionArgs(ctx, structScope);
+    result->expr.STRUCT_DEF.scope = structScope;
+    // result->expr.STRUCT_DEF.args = functionArgs(ctx, structScope);
 
     Token next = parseConsume(ctx);
     if(next.type != TokenType_LSCOPE) {
@@ -505,7 +505,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
     if(next.type == TokenType_TYPE)         return makeType(ctx, mem, next);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
-    if(next.type == TokenType_STRUCT)       return makeStructLit(ctx, mem);
+    if(next.type == TokenType_STRUCT)       return makeStructDef(ctx, mem);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);
@@ -723,14 +723,14 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
                 bool checkSemiColon = (
                     result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_FUNCTION_LIT &&
-                    result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_STRUCT_LIT
+                    result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_STRUCT_DEF
                 );
                 if(checkSemiColon) parseCheckSemicolon(ctx);
                 // NOTE: this is yet another supid fix for a problem,
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
                 if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_DECL_ASSIGN.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
-                if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_STRUCT_LIT) result->statement.VAR_DECL_ASSIGN.expr->expr.STRUCT_LIT.scope->parent = containingScope;
+                if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_STRUCT_DEF) result->statement.VAR_DECL_ASSIGN.expr->expr.STRUCT_DEF.scope->parent = containingScope;
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
                 String identifier = t.value;
@@ -760,14 +760,14 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
                 bool checkSemiColon = (
                     result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT &&
-                    result->statement.VAR_CONST.expr->type != ExpressionType_STRUCT_LIT
+                    result->statement.VAR_CONST.expr->type != ExpressionType_STRUCT_DEF
                 );
                 if(checkSemiColon) parseCheckSemicolon(ctx);
                 // NOTE: this is yet another supid fix for a problem,
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
                 if(result->statement.VAR_CONST.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_CONST.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
-                if(result->statement.VAR_CONST.expr->type == ExpressionType_STRUCT_LIT) result->statement.VAR_CONST.expr->expr.STRUCT_LIT.scope->parent = containingScope;
+                if(result->statement.VAR_CONST.expr->type == ExpressionType_STRUCT_DEF) result->statement.VAR_CONST.expr->expr.STRUCT_DEF.scope->parent = containingScope;
             } else {
                 ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }
