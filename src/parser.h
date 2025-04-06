@@ -34,6 +34,12 @@ defArray(ConditionalBlock);
 #include "types.h"
 #include "lexer.h"
 
+typedef enum StructInitializerListType {
+    StructInitializerListType_NONE,
+    StructInitializerListType_POSITIONAL,
+    StructInitializerListType_DESIGNATED,
+} StructInitializerListType;
+
 typedef enum ExpressionType {
     // complex nodes
     ExpressionType_BINARY_EXPRESSION, // lsh + rhs
@@ -49,9 +55,16 @@ typedef enum ExpressionType {
     ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
     ExpressionType_TYPE,              // u8
     ExpressionType_STRUCT_DEF,        // struct { ... } OR struct (arg: type) { ... }
+    ExpressionType_STRUCT_LIT,        // Vec2{1, 2} OR Vec2{.x = 1, .y = 2} OR {1, 2} OR {.x = 1, .y = 2}
 } ExpressionType;
 
 extern char* ExpressionTypeStr[];
+
+typedef struct NamedInitializer {
+    String id;
+    Expression* expr;
+} NamedInitializer;
+defArray(NamedInitializer);
 
 typedef struct Expression {
     ExpressionType type;
@@ -99,6 +112,16 @@ typedef struct Expression {
             // Array(FunctionArg) args;
             // bool hasArgs;
         } STRUCT_DEF;
+        struct STRUCT_LIT {
+            Token id;
+            bool idProvided;
+
+            StructInitializerListType type;
+            union {
+                Array(ExpressionPtr) positionalInitializerList;
+                Array(NamedInitializer) namedInitializerList;
+            };
+        } STRUCT_LIT;
     } expr;
 } Expression;
 

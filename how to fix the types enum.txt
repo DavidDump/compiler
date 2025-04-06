@@ -1,0 +1,13 @@
+foo :: struct { ... }; // what is the type of foo?
+// it should be type
+
+bar :: u8;
+// but this is also type
+
+// how do you differentiate between these two cases in TypeInfo??
+
+// TYPE_STRUCT_DEF should be TYPE_USER_DEFINED
+// and have a union with the enum typeInfo and struct typeInfo as those two will probably be the only two i have
+
+
+// TYPE_STRUCT_LIT should be just TYPE_STRUCT this is a struct literal and it stored the type of it

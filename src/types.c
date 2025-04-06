@@ -108,7 +108,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             result.str = buffer;
             free(argTypes.data);
         } break;
-        case TYPE_STRUCT: {
+        case TYPE_STRUCT_DEF: {
             // struct {fieldName: type; ...}
             // struct {  // 8 characters
             // }         // 1 character
@@ -161,6 +161,11 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             result.length = totalCharCount;
 
             free(typeStrs.data);
+        } break;
+        case TYPE_STRUCT_LIT: {
+            UNREACHABLE("TYPE_STRUCT_LIT is not really a valid type, i need to refactor some things");
+            // name{..., ...} 'name' is 4 + '{}' is 2 + ', ' is 2 per initializer count - 1
+            // name{.name = expr, .name = expr} 'name' is 4 + '{}' is 2 + '. = ' is 4 per initializer count + ', ' is 2 per initializer count - 1
         } break;
         case TYPE_ARRAY: {
             u64 arraySize = typeInfo->arrayInfo.arraySize;
@@ -229,7 +234,7 @@ u64 TypeToByteSize(TypeInfo* type) {
             return 0;
         } break;
 
-        case TYPE_STRUCT: {
+        case TYPE_STRUCT_DEF: {
             Array(FunctionArg) fields = type->structInfo.fields;
             u64 sizeInBytes = 0;
             for(u64 i = 0; i < fields.size; ++i) {
@@ -237,6 +242,9 @@ u64 TypeToByteSize(TypeInfo* type) {
                 sizeInBytes += TypeToByteSize(TypeExpressionToType(field.type));
             }
             return sizeInBytes;
+        } break;
+        case TYPE_STRUCT_LIT: {
+            UNREACHABLE("TYPE_STRUCT_LIT is not really a valid type, i need to refactor some things");
         } break;
 
         case TYPE_BOOL:
@@ -320,8 +328,14 @@ bool TypeIsType(TypeInfo* type) {
     return type->symbolType == TYPE_TYPE;
 }
 
+bool TypeIsStructDef(TypeInfo* type) {
+    if(type == NULL) return FALSE;
+    return type->symbolType == TYPE_STRUCT_DEF;
+}
+
 // TODO: pointers need to be compared
 bool TypeMatch(TypeInfo* type1, TypeInfo* type2) {
+    if(type1 == NULL || type2 == NULL) return FALSE;
     bool result = FALSE;
 
     result = type1->symbolType == type2->symbolType;

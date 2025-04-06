@@ -21,7 +21,17 @@ typedef struct ConstValue {
         bool as_bool;
         TypecheckedScope* as_function;
         TypeInfo* as_type;
-        TypecheckedScope* as_struct;
+        TypecheckedScope* as_structDef;
+        struct {
+            Token id;
+            bool idProvided;
+
+            StructInitializerListType type;
+            union {
+                Array(ExpressionPtr) positionalInitializerList;
+                Array(NamedInitializer) namedInitializerList;
+            };
+        } as_structLit;
     };
 } ConstValue;
 defArray(ConstValue);
@@ -92,6 +102,16 @@ typedef struct TypecheckedExpression {
             // NOTE: only for later once parameterized structs get added
             // Array(FunctionArg) args;
             // bool hasArgs;
+        } STRUCT_DEF;
+        struct {
+            Token id;
+            bool idProvided;
+
+            StructInitializerListType type;
+            union {
+                Array(TypecheckedExpressionPtr) positionalInitializerList;
+                Array(NamedInitializer) namedInitializerList;
+            };
         } STRUCT_LIT;
     } expr;
     // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
@@ -139,7 +159,7 @@ typedef struct TypecheckedScope {
     Hashmap(String, TypeInfoPtr) variables;
     Hashmap(String, TypeInfoPtr) parameters; // function paremeters in function scopes
     Hashmap(String, ConstValue)  functions;
-    Hashmap(String, ConstValue) structs; // TODO: structs not yet implemented
+    Hashmap(String, TypeInfoPtr) structs;
     // Hashmap(String, TypeInfoPtr) enums; // TODO: enums not yet implemented
 
     Array(TypecheckedStatement) statements;

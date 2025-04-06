@@ -75,7 +75,8 @@ ConstValue evaluateUnaryExpression(Token operator, ConstValue value) {
             case TYPE_VOID:
             case TYPE_ARRAY:
             case TYPE_TYPE:
-            case TYPE_STRUCT:
+            case TYPE_STRUCT_DEF:
+            case TYPE_STRUCT_LIT:
             case TYPE_FUNCTION: {
                 Location loc = {.filename = STR(""), .collum = 1, .line = 1}; // TODO: fix loc
                 ERROR_VA(loc, "Can not perform - unary operator on: %s", TypeStr[value.typeInfo->symbolType]);
@@ -179,7 +180,7 @@ void saveFunction(TypecheckedScope* scope, Hashmap(String, ConstValue)* constant
     }
 }
 
-void saveStruct(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, String id, ConstValue val) {
+void saveStruct(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, String id, TypeInfo* val) {
     // check for redefinition
     if(isSymbolDefined(scope, constants, id)) {
         Location loc = {0}; // TODO: fix
@@ -187,7 +188,7 @@ void saveStruct(TypecheckedScope* scope, Hashmap(String, ConstValue)* constants,
     }
 
     // save the struct
-    if(!HashmapSet(String, ConstValue)(&scope->structs, id, val)) {
+    if(!HashmapSet(String, TypeInfoPtr)(&scope->structs, id, val)) {
         UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, scope->functions.capacity, scope->functions.size, STR_PRINT(id));
     }
 }
@@ -198,7 +199,7 @@ TypecheckedScope* TypecheckedScopeInit(Arena* mem, TypecheckedScope* parent) {
     HashmapInit(result->functions, 0x100);  // TODO: init size
     HashmapInit(result->variables, 0x100);  // TODO: init size
     HashmapInit(result->parameters, 0x100); // TODO: init size
-    HashmapInit(result->structs, 0x100);   // TODO: init size
+    HashmapInit(result->structs, 0x100);    // TODO: init size
     if(parent) ArrayAppend(parent->children, result);
     return result;
 }
@@ -283,7 +284,45 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
         case ExpressionType_TYPE: {
             result.val.typeInfo = TypeInitSimple(mem, TYPE_TYPE);
             result.val.as_type = expr->expr.TYPE.typeInfo;
-            // NOTE: this is probably the wrong way to store this, as identical typeInfo gets sotred in two separate places
+        } break;
+        case ExpressionType_STRUCT_LIT: {
+            UNIMPLEMENTED("Structure literals in constants, ex.: `UP :: Vec3{0, 1, 0};`");
+
+            if(!expr->expr.STRUCT_LIT.idProvided) {
+                Location loc = {0}; // TODO: fix loc
+                ERROR(loc, "Can only use struct literals with explicit types, in constan symbol declaration");
+            }
+
+            Token id = expr->expr.STRUCT_LIT.id;
+            ConstValue structDefTypeInfo = {0};
+            if(!HashmapGet(String, ConstValue)(evaluatedConstatants, id.value, &structDefTypeInfo)) {
+                ERROR_VA(id.loc, "Undeclared struct: "STR_FMT, STR_PRINT(id.value));
+            }
+
+            TypeInfo* typeInfo = TypeInitSimple(mem, TYPE_STRUCT_LIT);
+            typeInfo->structName = id.value;
+            // switch(expr->expr.STRUCT_LIT.type) {
+            //     case StructInitializerListType_NONE: UNREACHABLE("StructInitializerListType_NONE invalid here"); break;
+
+            //     case StructInitializerListType_POSITIONAL: {
+            //         for(u64 i = 0; i < expr->expr.STRUCT_LIT.positionalInitializerList.size; ++i) {
+            //             // TODO: this should check if the expression types match the field types
+            //             Expression* initExpr = expr->expr.STRUCT_LIT.positionalInitializerList.data[i];
+
+            //             FunctionArg arg = {0};
+            //             arg.
+            //             ArrayAppend(typeInfo->structInfo.fields, );
+            //         }
+            //     } break;
+            //     case StructInitializerListType_DESIGNATED: {
+
+            //     } break;
+            // }
+
+            // NOTE: these two are the same struct, but defined in two separate places
+            STATIC_ASSERT(sizeof(result.val.as_structLit) == sizeof(expr->expr.STRUCT_LIT));
+            memcpy(&result.val.as_structLit, &expr->expr.STRUCT_LIT, sizeof(expr->expr.STRUCT_LIT));
+            result.val.typeInfo = typeInfo;
         } break;
     }
 
@@ -346,11 +385,16 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
         case TYPE_TYPE: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_TYPE");
         } break;
-        case TYPE_STRUCT: {
+        case TYPE_STRUCT_DEF: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_STRUCT_DEF");
             result.type = ExpressionType_STRUCT_DEF;
 
             // result.expr.STRUCT_DEF.scope = ;
+        } break;
+        case TYPE_STRUCT_LIT: {
+            // NOTE: these two are the same struct, but defined in two separate places
+            STATIC_ASSERT(sizeof(value.as_structLit) == sizeof(result.expr.STRUCT_LIT));
+            memcpy(&result.expr.STRUCT_LIT, &value.as_structLit, sizeof(value.as_structLit));
         } break;
         case TYPE_ARRAY: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_ARRAY");
@@ -483,7 +527,6 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 TypeInfo* t = TypeInitSimple(mem, TypeDefaultInt());
                 result->typeInfo = t;
             }
-            result->typeInfo->isConstant = TRUE;
         } break;
         case ExpressionType_FLOAT_LIT: {
             if(TypeIsFloat(expected)) {
@@ -492,17 +535,14 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 TypeInfo* t = TypeInitSimple(mem, TypeDefaultFloat());
                 result->typeInfo = t;
             }
-            result->typeInfo->isConstant = TRUE;
         } break;
         case ExpressionType_STRING_LIT: {
             TypeInfo* t = TypeInitSimple(mem, TYPE_STRING);
             result->typeInfo = t;
-            result->typeInfo->isConstant = TRUE;
         } break;
         case ExpressionType_BOOL_LIT: {
             TypeInfo* t = TypeInitSimple(mem, TYPE_BOOL);
             result->typeInfo = t;
-            result->typeInfo->isConstant = TRUE;
         } break;
         case ExpressionType_SYMBOL: {
             // look up in the constants or symbols and find the type
@@ -563,10 +603,6 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             result->expr.FUNCTION_CALL.args = typecheckedArgs; // NOTE: this needs to be set here becouse the types are different
 
             result->typeInfo = ExpressionToType(funcInfo->functionInfo->returnType, constants);
-            // NOTE: for now all function calls are non constant values, but it really depends on:
-            //       - is the funtion being called a pure funtion
-            //       - are all the funtion parameters constant values
-            result->typeInfo->isConstant = FALSE;
         } break;
         case ExpressionType_FUNCTION_LIT: {
             // NOTE: this is the case of foo := (bar: u8) -> u8 { ... }
@@ -577,7 +613,6 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             // NOTE: typeInfo is NULL here
             result->typeInfo->symbolType = TYPE_FUNCTION;
             result->typeInfo->functionInfo = fnInfo;
-            result->typeInfo->isConstant = TRUE;
             // TODO: this is where the function should be added to global scope for codegen
         } break;
         case ExpressionType_STRUCT_DEF: {
@@ -597,8 +632,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 ArrayAppend(fields, field);
             }
 
-            result->typeInfo->symbolType = TYPE_STRUCT;
-            result->typeInfo->isConstant = TRUE;
+            result->typeInfo->symbolType = TYPE_STRUCT_DEF;
             result->typeInfo->structInfo.fields = fields;
         } break;
         case ExpressionType_BINARY_EXPRESSION: {
@@ -662,7 +696,6 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
 
             result->expr.BINARY_EXPRESSION.lhs = lhsType;
             result->expr.BINARY_EXPRESSION.rhs = rhsType;
-            result->typeInfo->isConstant = lhsType->typeInfo->isConstant && rhsType->typeInfo->isConstant;
         } break;
         case ExpressionType_UNARY_EXPRESSION: {
             // 1. verify the type unary operation can be performed on the type of the value
@@ -680,11 +713,123 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             }
 
             result->expr.UNARY_EXPRESSION.expr = typeInfo;
-            result->typeInfo->isConstant = typeInfo->typeInfo->isConstant;
         } break;
         case ExpressionType_TYPE: {
             result->typeInfo = TypeInitSimple(mem, TYPE_TYPE);
             result->expr.TYPE.typeInfo = expr->expr.TYPE.typeInfo;
+        } break;
+        case ExpressionType_STRUCT_LIT: {
+            if(!TypeIsStructDef(expected)) {
+                Location loc = {0};
+                ERROR_VA(loc, "Cannot assign struct to type: "STR_FMT, STR_PRINT(TypeToString(mem, expected)));
+            }
+
+            if(expr->expr.STRUCT_LIT.idProvided) {
+                // foo := vec2{ ... };
+                Token id = expr->expr.STRUCT_LIT.id;
+                if(!HashmapGet(String, TypeInfoPtr)(&scope->structs, id.value, &result->typeInfo)) {
+                    ERROR_VA(id.loc, "Undeclared struct: "STR_FMT, STR_PRINT(id.value));
+                }
+
+                if(!TypeMatch(expected, result->typeInfo)) {
+                    ERROR_VA(
+                        id.loc,
+                        "Cannot assign struct of type: "STR_FMT" to struct of type: "STR_FMT,
+                        STR_PRINT(TypeToString(mem, result->typeInfo)),
+                        STR_PRINT(TypeToString(mem, expected))
+                    );
+                }
+            } else {
+                // foo : vec2 = { ... };
+                result->typeInfo = expected;
+            }
+
+            assertf(TypeIsStructDef(result->typeInfo), "expected structure definition, got: "STR_FMT, STR_PRINT(TypeToString(mem, result->typeInfo)));
+
+            switch(expr->expr.STRUCT_LIT.type) {
+                case StructInitializerListType_NONE: UNREACHABLE("StructInitializerListType_NONE invalid here"); break;
+
+                case StructInitializerListType_POSITIONAL: {
+                    if(expr->expr.STRUCT_LIT.positionalInitializerList.size != result->typeInfo->structInfo.fields.size) {
+                        Location loc = {0};
+                        if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
+                        ERROR_VA(
+                            loc,
+                            "Incorrect number of initializers in struct literal, got: %llu, expected: %llu",
+                            expr->expr.STRUCT_LIT.positionalInitializerList.size,
+                            result->typeInfo->structInfo.fields.size
+                        );
+                    }
+
+                    for(u64 i = 0; i < expr->expr.STRUCT_LIT.positionalInitializerList.size; ++i) {
+                        Expression* initializerExpr = expr->expr.STRUCT_LIT.positionalInitializerList.data[i];
+                        FunctionArg field = result->typeInfo->structInfo.fields.data[i];
+                        TypecheckedExpression* fieldType = typecheckExpression(mem, field.type, scope, constants, NULL);
+                        TypecheckedExpression* initType = typecheckExpression(mem, initializerExpr, scope, constants, fieldType->typeInfo);
+                        if(!TypeMatch(fieldType->typeInfo, initType->typeInfo)) {
+                            Location loc = {0};
+                            if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
+                            ERROR_VA(
+                                loc,
+                                "Type missmatch in struct initializer, in field `."STR_FMT"`, got type: "STR_FMT", expected: "STR_FMT,
+                                STR_PRINT(field.id),
+                                STR_PRINT(TypeToString(mem, initType->typeInfo)),
+                                STR_PRINT(TypeToString(mem, fieldType->typeInfo))
+                            );
+                        }
+                    }
+                } break;
+                case StructInitializerListType_DESIGNATED: {
+                    if(expr->expr.STRUCT_LIT.namedInitializerList.size != result->typeInfo->structInfo.fields.size) {
+                        Location loc = {0};
+                        if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
+                        ERROR_VA(
+                            loc,
+                            "Incorrect number of initializers in struct literal, got: %llu, expected: %llu",
+                            expr->expr.STRUCT_LIT.namedInitializerList.size,
+                            result->typeInfo->structInfo.fields.size
+                        );
+                    }
+
+                    for(u64 i = 0; i < expr->expr.STRUCT_LIT.namedInitializerList.size; ++i) {
+                        NamedInitializer initializer = expr->expr.STRUCT_LIT.namedInitializerList.data[i];
+                        String initId = initializer.id;
+                        FunctionArg field = {0};
+                        bool found = FALSE;
+                        for(u64 h = 0; h < result->typeInfo->structInfo.fields.size; ++h) {
+                            FunctionArg it = result->typeInfo->structInfo.fields.data[h];
+                            if(StringEquals(it.id, initId)) {
+                                found = TRUE;
+                                field = it;
+                                break;
+                            }
+                        }
+                        if(!found) {
+                            Location loc = {0};
+                            if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
+                            ERROR_VA(
+                                loc,
+                                "Structure doesnt contain a field named: `"STR_FMT"`",
+                                STR_PRINT(initId)
+                            );
+                        }
+
+                        TypecheckedExpression* fieldType = typecheckExpression(mem, field.type, scope, constants, NULL);
+                        TypecheckedExpression* initType = typecheckExpression(mem, initializer.expr, scope, constants, fieldType->typeInfo);
+                        if(!TypeMatch(fieldType->typeInfo, initType->typeInfo)) {
+                            Location loc = {0};
+                            if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
+                            ERROR_VA(
+                                loc,
+                                "Type missmatch in struct initializer, in field `."STR_FMT"`, got type: "STR_FMT", expected: "STR_FMT,
+                                STR_PRINT(field.id),
+                                STR_PRINT(TypeToString(mem, initType->typeInfo)),
+                                STR_PRINT(TypeToString(mem, fieldType->typeInfo))
+                            );
+                        }
+                    }
+                } break;
+            }
         } break;
     }
 
@@ -1063,7 +1208,7 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
         GlobalScope* structScope = expr->expr.STRUCT_DEF.scope;
         TypecheckedScope* typechecked = typecheckGlobalScope(mem, structScope, &constantsInThisScope);
 
-        TypeInfo* structTypeInfo = TypeInitSimple(mem, TYPE_STRUCT);
+        TypeInfo* structTypeInfo = TypeInitSimple(mem, TYPE_STRUCT_DEF);
         Array(FunctionArg) fields = {0};
         HashmapFor(String, TypeInfoPtr, it, &typechecked->variables) {
             String key = it->key;
@@ -1078,10 +1223,7 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
         }
         structTypeInfo->structInfo.fields = fields;
 
-        ConstValue structValue = {0};
-        structValue.typeInfo = structTypeInfo;
-        structValue.as_struct = typechecked;
-        saveStruct(result, &constantsInThisScope, id, structValue);
+        saveStruct(result, &constantsInThisScope, id, structTypeInfo);
     }
 
     // typecheck functions

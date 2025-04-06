@@ -35,7 +35,9 @@ typedef enum Type {
     TYPE_BOOL,
     TYPE_VOID,
     TYPE_FUNCTION,
-    TYPE_STRUCT,
+    // NOTE: i have some thoughts on this, see: "how to fix the types enum.txt"
+    TYPE_STRUCT_DEF,
+    TYPE_STRUCT_LIT,
     TYPE_ARRAY,
     TYPE_TYPE,
     // TYPE_ANY,
@@ -73,10 +75,10 @@ typedef struct ArrayInfo {
 typedef struct TypeInfo {
     Type symbolType;
     bool isPointer;  // flag if the type is a pointer to symbolType type
-    bool isConstant; // flag if all the leaves of the expression are constant values, example.: 1 + 1
     ArrayInfo arrayInfo;
     FunctionInfo* functionInfo;
-    StructInfo structInfo;
+    StructInfo structInfo; // only on struct definitions
+    String structName; // if a struct literal the name of the struct
 } TypeInfo;
 
 TypeInfo* TypeInitSimple(Arena* mem, Type t);
@@ -89,6 +91,7 @@ bool TypeIsInt(TypeInfo* type);
 bool TypeIsNumber(TypeInfo* type);
 bool TypeIsBool(TypeInfo* type);
 bool TypeIsType(TypeInfo* type);
+bool TypeIsStructDef(TypeInfo* type);
 bool TypeMatch(TypeInfo* type1, TypeInfo* type2);
 Type TypeDefaultInt();
 Type TypeDefaultFloat();

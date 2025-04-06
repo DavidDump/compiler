@@ -132,6 +132,38 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             GlobalScopePrint(scope, indent + 1);
             genPrintHelper("}\n");
         } break;
+        case ExpressionType_STRUCT_LIT: {
+            if(expr->expr.STRUCT_LIT.idProvided) {
+                String id = expr->expr.STRUCT_LIT.id.value;
+                printf(STR_FMT, STR_PRINT(id));
+            }
+            printf("{");
+
+            StructInitializerListType type = expr->expr.STRUCT_LIT.type;
+            switch(type) {
+                case StructInitializerListType_NONE: UNREACHABLE("StructInitializerListType_NONE is invalid here"); break;
+
+                case StructInitializerListType_POSITIONAL: {
+                    Array(ExpressionPtr) list = expr->expr.STRUCT_LIT.positionalInitializerList;
+                    for(u64 i = 0; i < list.size; ++i) {
+                        Expression* elem = list.data[i];
+                        ExpressionPrint(elem, indent);
+                        if(i < list.size - 1) printf(", ");
+                    }
+                } break;
+                case StructInitializerListType_DESIGNATED: {
+                    Array(NamedInitializer) list = expr->expr.STRUCT_LIT.namedInitializerList;
+                    for(u64 i = 0; i < list.size; ++i) {
+                        NamedInitializer elem = list.data[i];
+                        printf("."STR_FMT" = ", STR_PRINT(elem.id));
+                        ExpressionPrint(elem.expr, indent);
+                        if(i < list.size - 1) printf(", ");
+                    }
+                } break;
+            }
+
+            printf("}");
+        } break;
     }
 }
 

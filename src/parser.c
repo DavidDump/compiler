@@ -14,6 +14,9 @@ char* ExpressionTypeStr[] = {
     [ExpressionType_SYMBOL]            = "SYMBOL",
     [ExpressionType_FUNCTION_CALL]     = "FUNCTION_CALL",
     [ExpressionType_FUNCTION_LIT]      = "FUNCTION_LIT",
+    [ExpressionType_TYPE]              = "TYPE",
+    [ExpressionType_STRUCT_DEF]        = "STRUCT_DEF",
+    [ExpressionType_STRUCT_LIT]        = "STRUCT_LIT",
 };
 
 char* StatementTypeStr[StatementType_COUNT + 1] = {
@@ -196,6 +199,13 @@ bool parseIsNumber(Token next) {
 // NOTE: for now the only unary prefix operator is: '-'
 bool isUnaryOperator(Token next) {
     return (next.type == TokenType_SUB);
+}
+
+bool isStructLit(ParseContext* ctx, Token next) {
+    Token after = parsePeek(ctx, 0);
+    if(next.type == TokenType_LSCOPE) return TRUE;
+    if(next.type == TokenType_IDENTIFIER && after.type == TokenType_LSCOPE) return TRUE;
+    return FALSE;
 }
 
 // NOTE: untested
@@ -496,6 +506,78 @@ Expression* makeStructDef(ParseContext* ctx, Arena* mem) {
     return result;
 }
 
+StructInitializerListType structGetListType(ParseContext* ctx, Token next) {
+    StructInitializerListType result = 0;
+
+    Token after = parsePeek(ctx, 0);
+    if(next.type == TokenType_DOT && after.type == TokenType_IDENTIFIER) {
+        result = StructInitializerListType_DESIGNATED;
+    } else {
+        result = StructInitializerListType_POSITIONAL;
+    }
+
+    return result;
+}
+
+Expression* makeStructLit(ParseContext* ctx, Arena* mem, Token next) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_STRUCT_LIT;
+
+    if(next.type == TokenType_IDENTIFIER) {
+        result->expr.STRUCT_LIT.id = next;
+        result->expr.STRUCT_LIT.idProvided = TRUE;
+
+        next = parseConsume(ctx); // {
+        assertf(next.type == TokenType_LSCOPE, "LSCOPE `{` should here, but got: %s", ExpressionTypeStr[next.type]);
+    }
+
+    // identify the type of the litializer list
+    next = parsePeek(ctx, 0);
+    Token after = parsePeek(ctx, 1);
+    StructInitializerListType listType = 0;
+    if(next.type == TokenType_DOT && after.type == TokenType_IDENTIFIER) {
+        listType = StructInitializerListType_DESIGNATED;
+    } else {
+        listType = StructInitializerListType_POSITIONAL;
+    }
+    result->expr.STRUCT_LIT.type = listType;
+
+    // parse the initializer list
+    while(next.type != TokenType_RSCOPE) {
+        switch(listType) {
+            case StructInitializerListType_NONE: UNREACHABLE("StructInitializerListType_NONE is invalid here"); break;
+
+            case StructInitializerListType_DESIGNATED: {
+                NamedInitializer initializer = {0};
+                next = parseConsume(ctx); // dot
+                assertf(next.type == TokenType_DOT, "dot should be here, but got: %s", ExpressionTypeStr[next.type]);
+                next = parseConsume(ctx); // identifier
+                assertf(next.type == TokenType_IDENTIFIER, "identifier should be here, but got: %s", ExpressionTypeStr[next.type]);
+                initializer.id = next.value;
+                next = parseConsume(ctx); // equals
+                if(next.type != TokenType_ASSIGNMENT) {
+                    ERROR_VA(next.loc, "equals should be here, but got: %s", ExpressionTypeStr[next.type]);
+                }
+                initializer.expr = parseExpression(ctx, mem);
+
+                ArrayAppend(result->expr.STRUCT_LIT.namedInitializerList, initializer);
+            } break;
+            case StructInitializerListType_POSITIONAL: {
+                Expression* expr = parseExpression(ctx, mem);
+                ArrayAppend(result->expr.STRUCT_LIT.positionalInitializerList, expr);
+            } break;
+        }
+
+        next = parseConsume(ctx); // comma or rscope
+        if(next.type == TokenType_RSCOPE) break;
+        if(next.type != TokenType_COMMA) {
+            ERROR(next.loc, "Elements of a initializer list have to be seperated by a comma");
+        }
+    }
+
+    return result;
+}
+
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
 
@@ -503,6 +585,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isFunctionCall(ctx, next))           return makeFunctionCall(ctx, mem, next);
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
+    if(isStructLit(ctx, next))              return makeStructLit(ctx, mem, next);
     if(next.type == TokenType_TYPE)         return makeType(ctx, mem, next);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
     if(next.type == TokenType_STRUCT)       return makeStructDef(ctx, mem);
