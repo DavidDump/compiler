@@ -164,19 +164,26 @@ void ExpressionPrint(Expression* expr, u64 indent) {
 
             printf("}");
         } break;
+        case ExpressionType_FIELD_ACCESS: {
+            String structName = expr->expr.FIELD_ACCESS.structName.value;
+            String fieldName = expr->expr.FIELD_ACCESS.fieldName.value;
+            printf(STR_FMT"."STR_FMT, STR_PRINT(structName), STR_PRINT(fieldName));
+        } break;
     }
 }
 
 void VariablePrint(String id, Expression* expr, TypeInfo* type) {
     u64 indent = 0;
-    genPrintHelper("VAR_DECL_ASSIGN: {\n");
+    genPrintHelper("VAR_DECL_ASSIGN: (this is accually a lie it may not be decl assign) {\n");
     genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
     genPrintHelper("    type: ");
     TypePrint(type, 0);
     printf(",\n");
-    genPrintHelper("    expr:");
-    ExpressionPrint(expr, 0 + 1);
-    printf(",\n");
+    if(expr) {
+        genPrintHelper("    expr:");
+        ExpressionPrint(expr, 0 + 1);
+        printf(",\n");
+    }
     genPrintHelper("}\n");
 }
 

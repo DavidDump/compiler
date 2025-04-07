@@ -208,6 +208,11 @@ bool isStructLit(ParseContext* ctx, Token next) {
     return FALSE;
 }
 
+bool isStructFieldAccess(ParseContext* ctx, Token next) {
+    Token after = parsePeek(ctx, 0);
+    return (next.type == TokenType_IDENTIFIER && after.type == TokenType_DOT);
+}
+
 // NOTE: untested
 Expression* makeUnary(ParseContext* ctx, Arena* mem, Token next) {
     Expression* result = arena_alloc(mem, sizeof(Expression));
@@ -578,6 +583,24 @@ Expression* makeStructLit(ParseContext* ctx, Arena* mem, Token next) {
     return result;
 }
 
+Expression* makeStructFieldAccess(ParseContext* ctx, Arena* mem, Token next) {
+    assert(next.type == TokenType_IDENTIFIER, "struct field access has to start with a symbol name");
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_FIELD_ACCESS;
+
+    result->expr.FIELD_ACCESS.variableName = next;
+    next = parseConsume(ctx); // .
+    assert(next.type == TokenType_DOT, "the struct name and field name in a struct field access have to be separated with a dot");
+
+    next = parseConsume(ctx); // field name
+    if(next.type != TokenType_IDENTIFIER) {
+        ERROR_VA(next.loc, "Expected the name of a field in a struct, got: "STR_FMT, STR_PRINT(next.value));
+    }
+    result->expr.FIELD_ACCESS.fieldName = next;
+
+    return result;
+}
+
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
 
@@ -586,6 +609,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
     if(isStructLit(ctx, next))              return makeStructLit(ctx, mem, next);
+    if(isStructFieldAccess(ctx, next))      return makeStructFieldAccess(ctx, mem, next);
     if(next.type == TokenType_TYPE)         return makeType(ctx, mem, next);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
     if(next.type == TokenType_STRUCT)       return makeStructDef(ctx, mem);

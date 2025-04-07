@@ -113,6 +113,10 @@ typedef struct TypecheckedExpression {
                 Array(NamedInitializer) namedInitializerList;
             };
         } STRUCT_LIT;
+        struct {
+            Token structName;
+            Token fieldName;
+        } FIELD_ACCESS;
     } expr;
     // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
     TypeInfo* typeInfo;

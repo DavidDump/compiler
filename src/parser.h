@@ -56,6 +56,7 @@ typedef enum ExpressionType {
     ExpressionType_TYPE,              // u8
     ExpressionType_STRUCT_DEF,        // struct { ... } OR struct (arg: type) { ... }
     ExpressionType_STRUCT_LIT,        // Vec2{1, 2} OR Vec2{.x = 1, .y = 2} OR {1, 2} OR {.x = 1, .y = 2}
+    ExpressionType_FIELD_ACCESS,      // vec.x
 } ExpressionType;
 
 extern char* ExpressionTypeStr[];
@@ -122,6 +123,10 @@ typedef struct Expression {
                 Array(NamedInitializer) namedInitializerList;
             };
         } STRUCT_LIT;
+        struct FIELD_ACCESS {
+            Token variableName;
+            Token fieldName;
+        } FIELD_ACCESS;
     } expr;
 } Expression;
 

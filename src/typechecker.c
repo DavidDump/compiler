@@ -324,6 +324,9 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
             memcpy(&result.val.as_structLit, &expr->expr.STRUCT_LIT, sizeof(expr->expr.STRUCT_LIT));
             result.val.typeInfo = typeInfo;
         } break;
+        case ExpressionType_FIELD_ACCESS: {
+            UNIMPLEMENTED("accessing struct literal fields in a constant declaration");
+        } break;
     }
 
     return result;
@@ -418,6 +421,17 @@ ConstResult findConstant(Hashmap(String, ConstValue)* constants, String identifi
     return (ConstResult){.err = TRUE};
 }
 
+TypeResult findStruct(TypecheckedScope* scope, String identifier) {
+    TypecheckedScope* it = scope;
+    while(it) {
+        TypeInfo* val = 0;
+        if(HashmapGet(String, TypeInfoPtr)(&it->structs, identifier, &val)) return (TypeResult){.typeInfo = val};
+        it = it->parent;
+    }
+
+    return (TypeResult){.err = TRUE};
+}
+
 TypeResult typecheckFindFunctionType(TypecheckedScope* scope, String id) {
     TypecheckedScope* it = scope;
     while(it) {
@@ -426,9 +440,7 @@ TypeResult typecheckFindFunctionType(TypecheckedScope* scope, String id) {
         it = it->parent;
     }
 
-    Location loc = {0};
-    ERROR_VA(loc, "Undefined function: "STR_FMT, STR_PRINT(id));
-    return (TypeResult){0}; // remove warning;
+    return (TypeResult){.err = TRUE};
 }
 
 // symbol means both constant and variable
@@ -485,24 +497,30 @@ TypeResult findVariableType(TypecheckedScope* scope, String id) {
     return (TypeResult){.err = TRUE};
 }
 
-TypeInfo* ExpressionToType(Expression* expr, Hashmap(String, ConstValue)* constants) {
+// scope is the scope that has to contain the struct definition in case the type is a struct, it also searches parents
+TypeInfo* ExpressionToType(Expression* expr, Hashmap(String, ConstValue)* constants, TypecheckedScope* scope) {
     assert(expr->type == ExpressionType_TYPE || expr->type == ExpressionType_SYMBOL, "Can only convert type or symbol Expressions to TypeInfo");
     if(expr->type == ExpressionType_SYMBOL) {
         String id = expr->expr.SYMBOL.identifier;
-        ConstResult res = findConstant(constants, id);
-        if(res.err) {
-            Location loc = {0}; // TODO: fix loc
-            ERROR_VA(loc, "Undefined symbol: "STR_FMT, STR_PRINT(id));
-        }
+        ConstResult constRes = findConstant(constants, id);
+        if(constRes.err) {
+            TypeResult structRes = findStruct(scope, id);
+            if(structRes.err) {
+                Location loc = {0}; // TODO: fix loc
+                ERROR_VA(loc, "Undefined symbol: "STR_FMT, STR_PRINT(id));
+            }
 
-        ConstValue value = res.value;
-        if(!TypeIsType(value.typeInfo)) {
-            Arena tmp = {0};
-            Location loc = {0}; // TODO: fix loc
-            ERROR_VA(loc, "Trying to use none type symbol as type: "STR_FMT": "STR_FMT, STR_PRINT(id), STR_PRINT(TypeToString(&tmp, value.typeInfo)));
-        }
+            return structRes.typeInfo;
+        } else {
+            ConstValue value = constRes.value;
+            if(!TypeIsType(value.typeInfo)) {
+                Arena tmp = {0};
+                Location loc = {0}; // TODO: fix loc
+                ERROR_VA(loc, "Trying to use none type symbol as type: "STR_FMT": "STR_FMT, STR_PRINT(id), STR_PRINT(TypeToString(&tmp, value.typeInfo)));
+            }
 
-        return value.as_type;
+            return value.as_type;
+        }
     } else if(expr->type == ExpressionType_TYPE) {
         return expr->expr.TYPE.typeInfo;
     }
@@ -583,7 +601,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             for(u64 i = 0; i < args.size; ++i) {
                 FunctionArg fnArg = funcInfo->functionInfo->args.data[i];
                 Expression* providedArg = args.data[i];
-                TypeInfo* expectedArgType = ExpressionToType(fnArg.type, constants);
+                TypeInfo* expectedArgType = ExpressionToType(fnArg.type, constants, scope);
 
                 TypecheckedExpression* providedArgType = typecheckExpression(mem, providedArg, scope, constants, expectedArgType);
                 if(!TypeMatch(expectedArgType, providedArgType->typeInfo)) {
@@ -602,7 +620,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             }
             result->expr.FUNCTION_CALL.args = typecheckedArgs; // NOTE: this needs to be set here becouse the types are different
 
-            result->typeInfo = ExpressionToType(funcInfo->functionInfo->returnType, constants);
+            result->typeInfo = ExpressionToType(funcInfo->functionInfo->returnType, constants, scope);
         } break;
         case ExpressionType_FUNCTION_LIT: {
             // NOTE: this is the case of foo := (bar: u8) -> u8 { ... }
@@ -719,19 +737,16 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             result->expr.TYPE.typeInfo = expr->expr.TYPE.typeInfo;
         } break;
         case ExpressionType_STRUCT_LIT: {
-            if(!TypeIsStructDef(expected)) {
-                Location loc = {0};
-                ERROR_VA(loc, "Cannot assign struct to type: "STR_FMT, STR_PRINT(TypeToString(mem, expected)));
-            }
-
             if(expr->expr.STRUCT_LIT.idProvided) {
                 // foo := vec2{ ... };
                 Token id = expr->expr.STRUCT_LIT.id;
-                if(!HashmapGet(String, TypeInfoPtr)(&scope->structs, id.value, &result->typeInfo)) {
+                TypeResult res = findStruct(scope, id.value);
+                if(res.err) {
                     ERROR_VA(id.loc, "Undeclared struct: "STR_FMT, STR_PRINT(id.value));
                 }
+                result->typeInfo = res.typeInfo;
 
-                if(!TypeMatch(expected, result->typeInfo)) {
+                if(TypeIsStructDef(expected) && !TypeMatch(expected, result->typeInfo)) {
                     ERROR_VA(
                         id.loc,
                         "Cannot assign struct of type: "STR_FMT" to struct of type: "STR_FMT,
@@ -741,6 +756,11 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 }
             } else {
                 // foo : vec2 = { ... };
+                if(!TypeIsStructDef(expected)) {
+                    Location loc = {0};
+                    ERROR_VA(loc, "Cannot assign struct to type: "STR_FMT, STR_PRINT(TypeToString(mem, expected)));
+                }
+
                 result->typeInfo = expected;
             }
 
@@ -764,9 +784,9 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                     for(u64 i = 0; i < expr->expr.STRUCT_LIT.positionalInitializerList.size; ++i) {
                         Expression* initializerExpr = expr->expr.STRUCT_LIT.positionalInitializerList.data[i];
                         FunctionArg field = result->typeInfo->structInfo.fields.data[i];
-                        TypecheckedExpression* fieldType = typecheckExpression(mem, field.type, scope, constants, NULL);
-                        TypecheckedExpression* initType = typecheckExpression(mem, initializerExpr, scope, constants, fieldType->typeInfo);
-                        if(!TypeMatch(fieldType->typeInfo, initType->typeInfo)) {
+                        TypeInfo* fieldType = ExpressionToType(field.type, constants, scope);
+                        TypecheckedExpression* initType = typecheckExpression(mem, initializerExpr, scope, constants, fieldType);
+                        if(!TypeMatch(fieldType, initType->typeInfo)) {
                             Location loc = {0};
                             if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
                             ERROR_VA(
@@ -774,7 +794,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                                 "Type missmatch in struct initializer, in field `."STR_FMT"`, got type: "STR_FMT", expected: "STR_FMT,
                                 STR_PRINT(field.id),
                                 STR_PRINT(TypeToString(mem, initType->typeInfo)),
-                                STR_PRINT(TypeToString(mem, fieldType->typeInfo))
+                                STR_PRINT(TypeToString(mem, fieldType))
                             );
                         }
                     }
@@ -814,9 +834,9 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                             );
                         }
 
-                        TypecheckedExpression* fieldType = typecheckExpression(mem, field.type, scope, constants, NULL);
-                        TypecheckedExpression* initType = typecheckExpression(mem, initializer.expr, scope, constants, fieldType->typeInfo);
-                        if(!TypeMatch(fieldType->typeInfo, initType->typeInfo)) {
+                        TypeInfo* fieldType = ExpressionToType(field.type, constants, scope);
+                        TypecheckedExpression* initType = typecheckExpression(mem, initializer.expr, scope, constants, fieldType);
+                        if(!TypeMatch(fieldType, initType->typeInfo)) {
                             Location loc = {0};
                             if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
                             ERROR_VA(
@@ -824,12 +844,42 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                                 "Type missmatch in struct initializer, in field `."STR_FMT"`, got type: "STR_FMT", expected: "STR_FMT,
                                 STR_PRINT(field.id),
                                 STR_PRINT(TypeToString(mem, initType->typeInfo)),
-                                STR_PRINT(TypeToString(mem, fieldType->typeInfo))
+                                STR_PRINT(TypeToString(mem, fieldType))
                             );
                         }
                     }
                 } break;
             }
+        } break;
+        case ExpressionType_FIELD_ACCESS: {
+            Token variableName = expr->expr.FIELD_ACCESS.variableName;
+            Token fieldName = expr->expr.FIELD_ACCESS.fieldName;
+
+            TypeResult res = findVariableType(scope, variableName.value);
+            if(res.err) {
+                ERROR_VA(variableName.loc, "Undeclared variable: "STR_FMT, STR_PRINT(variableName.value));
+            }
+            TypeInfo* structType = res.typeInfo;
+
+            s64 foundIndex = -1;
+            for(u64 i = 0; i < structType->structInfo.fields.size; ++i) {
+                FunctionArg field = structType->structInfo.fields.data[i];
+                if(StringEquals(field.id, fieldName.value)) {
+                    foundIndex = i;
+                    break;
+                }
+            }
+
+            if(foundIndex == -1) {
+                ERROR_VA(
+                    fieldName.loc,
+                    "Structure doesnt contain a field named: `"STR_FMT"`",
+                    STR_PRINT(fieldName.value)
+                );
+            }
+
+            FunctionArg field = structType->structInfo.fields.data[foundIndex];
+            result->typeInfo = ExpressionToType(field.type, constants, scope);
         } break;
     }
 
@@ -946,7 +996,9 @@ void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, Type
         assert(expr->type == ExpressionType_FUNCTION_LIT, "Expected function lit in typecheckFunctions");
 
         GenericScope* fnScope = expr->expr.FUNCTION_LIT.scope;
-        TypeInfo* returnType = ExpressionToType(expr->expr.FUNCTION_LIT.typeInfo->returnType, constants);
+        // NOTE: this return type really doesnt have to happen here and can be moved to after the arguments have been typechecked,
+        //       this will probably be needed later once the args can contain types that may be used as return types
+        TypeInfo* returnType = ExpressionToType(expr->expr.FUNCTION_LIT.typeInfo->returnType, constants, parent);
 
         TypeInfo* fnTypeInfo = TypeInitSimple(mem, TYPE_FUNCTION);
         fnTypeInfo->functionInfo = expr->expr.FUNCTION_LIT.typeInfo;
@@ -956,7 +1008,7 @@ void typecheckFunctions(Arena* mem, Hashmap(String, ConstValue)* constants, Type
         for(u64 h = 0; h < fnTypeInfo->functionInfo->args.size; ++h) {
             FunctionArg arg = fnTypeInfo->functionInfo->args.data[h];
             String argId = arg.id;
-            TypeInfo* argType = ExpressionToType(arg.type, constants);
+            TypeInfo* argType = ExpressionToType(arg.type, constants, parent);
             saveParam(resultScope, constants, argId, argType);
         }
 
@@ -1007,14 +1059,14 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
             case StatementType_VAR_CONST: break;
             case StatementType_VAR_DECL: {
                 String id = statement->statement.VAR_DECL.identifier;
-                TypeInfo* type = ExpressionToType(statement->statement.VAR_DECL.type, &constantsInThisScope);
+                TypeInfo* type = ExpressionToType(statement->statement.VAR_DECL.type, &constantsInThisScope, result);
 
                 saveVariable(result, &constantsInThisScope, id, type);
             } break;
             case StatementType_VAR_DECL_ASSIGN: {
                 String id = statement->statement.VAR_DECL_ASSIGN.identifier;
                 Expression* expr = statement->statement.VAR_DECL_ASSIGN.expr;
-                TypeInfo* type = ExpressionToType(statement->statement.VAR_DECL_ASSIGN.type, &constantsInThisScope);
+                TypeInfo* type = ExpressionToType(statement->statement.VAR_DECL_ASSIGN.type, &constantsInThisScope, result);
 
                 TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, type);
                 if(inferedType->typeInfo->symbolType == TYPE_VOID) {
@@ -1207,6 +1259,7 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
 
         GlobalScope* structScope = expr->expr.STRUCT_DEF.scope;
         TypecheckedScope* typechecked = typecheckGlobalScope(mem, structScope, &constantsInThisScope);
+        typechecked->parent = result;
 
         TypeInfo* structTypeInfo = TypeInitSimple(mem, TYPE_STRUCT_DEF);
         Array(FunctionArg) fields = {0};
@@ -1224,6 +1277,24 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
         structTypeInfo->structInfo.fields = fields;
 
         saveStruct(result, &constantsInThisScope, id, structTypeInfo);
+    }
+
+    // typecheck variables
+    HashmapFor(String, StatementPtr, it, &scope->variables) {
+        String id = it->key;
+        Statement* statement = it->value;
+        assert(statement->type == StatementType_VAR_DECL || statement->type == StatementType_VAR_DECL_ASSIGN, "Only declarations are statements");
+        if(statement->type == StatementType_VAR_DECL_ASSIGN) UNIMPLEMENTED("Global initializers");
+
+        if(statement->type == StatementType_VAR_DECL) {
+            Expression* type = statement->statement.VAR_DECL.type;
+            TypeInfo* typeInfo = ExpressionToType(type, &constantsInThisScope, result);
+            if(!HashmapSet(String, TypeInfoPtr)(&result->variables, id, typeInfo)) {
+                UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu, key: "STR_FMT, result->variables.capacity, result->variables.size, STR_PRINT(id));
+            }
+        } else {
+            UNREACHABLE("incorrect statement type");
+        }
     }
 
     // typecheck functions
