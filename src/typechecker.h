@@ -57,6 +57,13 @@ defHashmapFuncs(String, TypeInfoPtr)
 typedef struct TypecheckedExpression TypecheckedExpression;
 typedef TypecheckedExpression* TypecheckedExpressionPtr;
 defArray(TypecheckedExpressionPtr);
+
+typedef struct TypecheckedNamedInitializer {
+    String id;
+    TypecheckedExpression* expr;
+} TypecheckedNamedInitializer;
+defArray(TypecheckedNamedInitializer);
+
 typedef struct TypecheckedExpression {
     ExpressionType type;
     union {
@@ -110,11 +117,11 @@ typedef struct TypecheckedExpression {
             StructInitializerListType type;
             union {
                 Array(TypecheckedExpressionPtr) positionalInitializerList;
-                Array(NamedInitializer) namedInitializerList;
+                Array(TypecheckedNamedInitializer) namedInitializerList;
             };
         } STRUCT_LIT;
         struct {
-            Token structName;
+            Token variableName;
             Token fieldName;
         } FIELD_ACCESS;
     } expr;

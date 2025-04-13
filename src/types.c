@@ -250,18 +250,24 @@ u64 TypeToByteSize(TypeInfo* type) {
         case TYPE_BOOL:
         case TYPE_S8:
         case TYPE_U8: {
-            return 1;
+            // return 1;
+            return 8;
+            // TODO: tmp, the codegen can only generate 64 bit reads and writes, so all variables are 64 bit sized for now
         } break;
 
         case TYPE_S16:
         case TYPE_U16: {
-            return 2;
+            // return 2;
+            return 8;
+            // TODO: tmp, the codegen can only generate 64 bit reads and writes, so all variables are 64 bit sized for now
         } break;
 
         case TYPE_F32:
         case TYPE_S32:
         case TYPE_U32: {
-            return 4;
+            // return 4;
+            return 8;
+            // TODO: tmp, the codegen can only generate 64 bit reads and writes, so all variables are 64 bit sized for now
         } break;
 
         case TYPE_F64:

@@ -165,9 +165,9 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             printf("}");
         } break;
         case ExpressionType_FIELD_ACCESS: {
-            String structName = expr->expr.FIELD_ACCESS.structName.value;
+            String variableName = expr->expr.FIELD_ACCESS.variableName.value;
             String fieldName = expr->expr.FIELD_ACCESS.fieldName.value;
-            printf(STR_FMT"."STR_FMT, STR_PRINT(structName), STR_PRINT(fieldName));
+            printf(STR_FMT"."STR_FMT, STR_PRINT(variableName), STR_PRINT(fieldName));
         } break;
     }
 }

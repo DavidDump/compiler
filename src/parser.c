@@ -17,6 +17,7 @@ char* ExpressionTypeStr[] = {
     [ExpressionType_TYPE]              = "TYPE",
     [ExpressionType_STRUCT_DEF]        = "STRUCT_DEF",
     [ExpressionType_STRUCT_LIT]        = "STRUCT_LIT",
+    [ExpressionType_FIELD_ACCESS]      = "FIELD_ACCESS",
 };
 
 char* StatementTypeStr[StatementType_COUNT + 1] = {

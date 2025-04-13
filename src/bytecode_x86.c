@@ -572,6 +572,66 @@ void gen_x86_64_cast(GenContext* ctx, TypecheckedExpression* lhs, TypecheckedExp
     }
 }
 
+TypeInfo* codegenExpressionToType(Expression* expr) {
+    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
+    return expr->expr.TYPE.typeInfo;
+}
+
+typedef struct StructFieldResult {
+    u64 result;
+    bool error;
+} StructFieldResult;
+
+StructFieldResult getStructFieldOffsetByName(TypeInfo* typeInfo, String fieldName) {
+    assert(typeInfo->symbolType == TYPE_STRUCT_DEF, "TYPE_STRUCT_DEF should be the type of a struct lit");
+
+    StructFieldResult result = {0};
+    Array(FunctionArg) fields = typeInfo->structInfo.fields;
+    for(u64 i = 0; i < fields.size; ++i) {
+        FunctionArg field = fields.data[i];
+        if(StringEquals(field.id, fieldName)) return result;
+        TypeInfo* fieldType = codegenExpressionToType(field.type);
+        result.result += TypeToByteSize(fieldType);
+    }
+
+    result.error = TRUE;
+    return result;
+}
+
+// index is 0 indexed
+StructFieldResult getStructFieldOffsetByPos(TypeInfo* typeInfo, u64 index) {
+    assert(typeInfo->symbolType == TYPE_STRUCT_DEF, "TYPE_STRUCT_DEF should be the type of a struct lit");
+
+    StructFieldResult result = {0};
+    Array(FunctionArg) fields = typeInfo->structInfo.fields;
+    for(u64 i = 0; i < fields.size; ++i) {
+        FunctionArg field = fields.data[i];
+        if(i == index) return result;
+        TypeInfo* fieldType = codegenExpressionToType(field.type);
+        result.result += TypeToByteSize(fieldType);
+    }
+
+    result.error = TRUE;
+    return result;
+}
+
+typedef struct VariableTypeResult {
+    TypeInfo* value;
+    bool error;
+} VariableTypeResult;
+
+VariableTypeResult getVariableType(GenScope* scope, String id) {
+    VariableTypeResult result = {0};
+    GenScope* it = scope;
+    while(it) {
+        if(HashmapGet(String, TypeInfoPtr)(&it->variableTypes, id, &result.value)) return result;
+        it = it->parent;
+    }
+
+    result.error = TRUE;
+    return result;
+}
+
 void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScope* localScope) {
     // TODO: change this to a switch
     if(expr->type == ExpressionType_INT_LIT) {
@@ -581,14 +641,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         if(TypeIsSigned(expr->typeInfo)) intValue = (u64)StringToS64(value);
         else if(TypeIsUnsigned(expr->typeInfo)) intValue = StringToU64(value);
 
-        Instruction inst = {0};
-        Type symbolType = expr->typeInfo->symbolType;
-        if(0);
-        else if(symbolType == TYPE_S8 || symbolType == TYPE_U8) inst = INST(mov, OP_REG(RAX), OP_IMM8(intValue));
-        else if(symbolType == TYPE_S16 || symbolType == TYPE_U16) inst = INST(mov, OP_REG(RAX), OP_IMM16(intValue));
-        else if(symbolType == TYPE_S32 || symbolType == TYPE_U32) inst = INST(mov, OP_REG(RAX), OP_IMM32(intValue));
-        else if(symbolType == TYPE_S64 || symbolType == TYPE_U64) inst = INST(mov, OP_REG(RAX), OP_IMM64(intValue));
-        genInstruction(ctx, inst);
+        genInstruction(ctx, INST(mov, OP_REG(RAX), OP_IMM64(intValue)));
     } else if(expr->type == ExpressionType_FLOAT_LIT) {
         UNIMPLEMENTED("expression generation with floats");
     } else if(expr->type == ExpressionType_STRING_LIT) {
@@ -621,15 +674,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         if(res.inDataSection) {
             gen_DataInReg(ctx, RAX, id);
         } else {
-            Instruction inst = INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value));
-
-            Type symbolType = expr->typeInfo->symbolType;
-            if(0);
-            else if(symbolType == TYPE_S8 || symbolType == TYPE_U8) inst.type = InstructionType_8BIT;
-            else if(symbolType == TYPE_S16 || symbolType == TYPE_U16) inst.type = InstructionType_16BIT;
-            else if(symbolType == TYPE_S32 || symbolType == TYPE_U32) inst.type = InstructionType_32BIT;
-            else if(symbolType == TYPE_S64 || symbolType == TYPE_U64) inst.type = InstructionType_64BIT;
-            genInstruction(ctx, inst);
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value)));
         }
     } else if(expr->type == ExpressionType_FUNCTION_CALL) {
         String id = expr->expr.FUNCTION_CALL.identifier;
@@ -704,6 +749,8 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         } else if(StringEqualsCstr(operator, "as")) {
             // UNIMPLEMENTED("codegen for cast");
             printf("[WARNING] as op not accually finished\n");
+        } else {
+            UNREACHABLE_VA("Unkown operator: "STR_FMT, STR_PRINT(operator));
         }
     } else if(expr->type == ExpressionType_UNARY_EXPRESSION) {
         Token operator = expr->expr.UNARY_EXPRESSION.operator;
@@ -713,8 +760,29 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             gen_x86_64_expression(ctx, expr2, localScope);
             genInstruction(ctx, INST(neg, OP_REG(RAX)));
         }
+    } else if(expr->type == ExpressionType_STRUCT_LIT) {
+        UNIMPLEMENTED("ExpressionType_STRUCT_LIT should not get here");
+    } else if(expr->type == ExpressionType_FIELD_ACCESS) {
+        String variableName = expr->expr.FIELD_ACCESS.variableName.value;
+        String fieldName = expr->expr.FIELD_ACCESS.fieldName.value;
+
+        SymbolLocationResult varLocationRes = findSymbolLocation(localScope, variableName);
+        if(varLocationRes.err) UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(variableName));
+
+        VariableTypeResult varTypeRes = getVariableType(localScope, variableName);
+        if(varTypeRes.error) UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(variableName));
+
+        TypeInfo* structTypeDef = varTypeRes.value;
+        StructFieldResult structFieldOffsetRes = getStructFieldOffsetByName(structTypeDef, fieldName);
+        if(structFieldOffsetRes.error) UNREACHABLE_VA("Structure has no field: "STR_FMT, STR_PRINT(fieldName));
+
+        if(varLocationRes.inDataSection) {
+            gen_DataInReg(ctx, RAX, variableName);
+        } else {
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, varLocationRes.value + structFieldOffsetRes.result)));
+        }
     } else {
-        UNREACHABLE_VA("Unknown StatementType in expression generator: %s\n", ExpressionTypeStr[expr->type]);
+        UNREACHABLE_VA("Unknown StatementType in expression generator: %s", ExpressionTypeStr[expr->type]);
     }
 }
 
@@ -769,8 +837,8 @@ void gen_patchAddress(GenContext* ctx, u64 patchTarget, u64 targetAddress) {
 GenScope* genScopeInit(Arena* mem, TypecheckedScope* from, GenScope* parent) {
     GenScope* scope = arena_alloc(mem, sizeof(GenScope));
     scope->parent = parent;
-    HashmapInit(scope->localVars, 0x10); // TODO: some reasonable limit for local vars
-    // HashmapInit(scope->functions, 0x10); // TODO: some reasonable limit for local vars
+    HashmapInit(scope->localVars, 0x10);     // TODO: some reasonable limit
+    HashmapInit(scope->variableTypes, 0x10); // TODO: some reasonable limit
     scope->functionsDefinedInThisScope = &from->functions;
     return scope;
 }
@@ -807,10 +875,54 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
             SymbolLocationResult res = findSymbolLocation(genScope, id);
             if(res.err) UNREACHABLE_VA("local variable not defined: "STR_FMT, STR_PRINT(id));
 
-            gen_x86_64_expression(ctx, expr, genScope);
             if(res.inDataSection) {
                 UNIMPLEMENTED("writing to values in data section not implemented");
+            } else if(expr->type == ExpressionType_STRUCT_LIT) {
+                // TODO: this is a temporary fix
+                //       after typechecking an expression like:
+                //       `foo := vec2{1, 2};`
+                //       should be rewritten to look like this
+                //       ```
+                //       ; foo: vec2;
+                //       ; foo.x = 1;
+                //       mov rax, 1
+                //       mov [rpb - 8 + 0], rax
+                //       ; foo.y = 2;
+                //       mov rax, 2
+                //       mov [rpb - 8 + 0], rax
+                //       ```
+                //       codegen currently stores the result of the expression in `rax`,
+                //       so literals that are larger than a 64-bit register cannot work with this scheme
+                TypeInfo* structType = expr->typeInfo;
+                assert(structType->symbolType == TYPE_STRUCT_DEF, "TYPE_STRUCT_DEF should be the type of a struct lit");
+                switch(expr->expr.STRUCT_LIT.type) {
+                    case StructInitializerListType_NONE: UNREACHABLE("StructInitializerListType_NONE is invalid here"); break;
+
+                    case StructInitializerListType_POSITIONAL: {
+                        Array(TypecheckedExpressionPtr) list = expr->expr.STRUCT_LIT.positionalInitializerList;
+                        for(u64 i = 0; i < list.size; ++i) {
+                            TypecheckedExpression* initializer = list.data[i];
+                            StructFieldResult offset = getStructFieldOffsetByPos(structType, i);
+                            if(offset.error) UNREACHABLE("Struct doesnt have the specified field");
+
+                            gen_x86_64_expression(ctx, initializer, genScope);
+                            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value + offset.result), OP_REG(RAX)));
+                        }
+                    } break;
+                    case StructInitializerListType_DESIGNATED: {
+                        Array(TypecheckedNamedInitializer) list = expr->expr.STRUCT_LIT.namedInitializerList;
+                        for(u64 i = 0; i < list.size; ++i) {
+                            TypecheckedNamedInitializer initializer = list.data[i];
+                            StructFieldResult offset = getStructFieldOffsetByName(structType, initializer.id);
+                            if(offset.error) UNREACHABLE_VA("Struct doesnt have the specified field, named: "STR_FMT, STR_PRINT(initializer.id));
+
+                            gen_x86_64_expression(ctx, initializer.expr, genScope);
+                            genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value + offset.result), OP_REG(RAX)));
+                        }
+                    } break;
+                }
             } else {
+                gen_x86_64_expression(ctx, expr, genScope);
                 genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
             }
         } break;
@@ -949,17 +1061,16 @@ void calculateSpaceForVariables(GenScope* genScope, TypecheckedScope* scope) {
         if(!HashmapSet(String, s64)(&genScope->localVars, key, -genScope->stackSpaceForLocalVars)) {
             UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", genScope->localVars.capacity, genScope->localVars.size);
         }
+
+        if(!HashmapSet(String, TypeInfoPtr)(&genScope->variableTypes, key, value)) {
+            UNREACHABLE_VA("failed to insert into hashmap, cap: %llu, count: %llu", genScope->localVars.capacity, genScope->localVars.size);
+        }
     }
 
     for(u64 i = 0; i < scope->children.size; ++i) {
         TypecheckedScope* child = scope->children.data[i];
         calculateSpaceForVariables(genScope, child);
     }
-}
-
-TypeInfo* codegenExpressionToType(Expression* expr) {
-    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
-    return expr->expr.TYPE.typeInfo;
 }
 
 GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope, GenScope* parent) {
@@ -990,7 +1101,8 @@ GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope
     printf("Function "STR_FMT"\n", STR_PRINT(id));
     HashmapFor(String, s64 , it, &genScope->localVars) {
         String key = it->key;
-        printf("  local var: "STR_FMT"\n", STR_PRINT(key));
+        s64 value = it->value;
+        printf("  local var: "STR_FMT" at %lli\n", STR_PRINT(key), value);
     }
     #endif
 

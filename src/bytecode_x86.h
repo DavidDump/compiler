@@ -64,6 +64,7 @@ typedef struct GenContext {
 typedef struct GenScope {
     struct GenScope* parent;
     Hashmap(String, s64) localVars; // key: name of variable, value: position on the stack in the stackframe
+    Hashmap(String, TypeInfoPtr) variableTypes; // this is currently only needed to find the offset of a field during FIELD_ACCESS expression
     u64 stackPointer;
     bool isMainScope; // indicates if the return instruction should generate a regular return or a ExitProcess()
     u64 stackSpaceForLocalVars; // stores the number of bytes reserved at the begining of the scope for the local variables that get declared in the scope

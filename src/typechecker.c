@@ -535,6 +535,7 @@ TypeInfo* ExpressionToType(Expression* expr, Hashmap(String, ConstValue)* consta
 TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, TypecheckedScope* scope, Hashmap(String, ConstValue)* constants, TypeInfo* expected) {
     TypecheckedExpression* result = arena_alloc(mem, sizeof(TypecheckedExpression));
     memcpy(result, expr, sizeof(Expression));
+    STATIC_ASSERT(sizeof(TypecheckedExpression) - sizeof(TypeInfoPtr) == sizeof(Expression));
     // NOTE: this has a high likelyhood of fucking me in the ass later on
 
     switch(expr->type) {
@@ -770,20 +771,24 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 case StructInitializerListType_NONE: UNREACHABLE("StructInitializerListType_NONE invalid here"); break;
 
                 case StructInitializerListType_POSITIONAL: {
-                    if(expr->expr.STRUCT_LIT.positionalInitializerList.size != result->typeInfo->structInfo.fields.size) {
+                    Array(ExpressionPtr) list = expr->expr.STRUCT_LIT.positionalInitializerList;
+                    Array(FunctionArg) fields = result->typeInfo->structInfo.fields;
+
+                    if(list.size != fields.size) {
                         Location loc = {0};
                         if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
                         ERROR_VA(
                             loc,
                             "Incorrect number of initializers in struct literal, got: %llu, expected: %llu",
-                            expr->expr.STRUCT_LIT.positionalInitializerList.size,
-                            result->typeInfo->structInfo.fields.size
+                            list.size,
+                            fields.size
                         );
                     }
 
-                    for(u64 i = 0; i < expr->expr.STRUCT_LIT.positionalInitializerList.size; ++i) {
-                        Expression* initializerExpr = expr->expr.STRUCT_LIT.positionalInitializerList.data[i];
-                        FunctionArg field = result->typeInfo->structInfo.fields.data[i];
+                    Array(TypecheckedExpressionPtr) initializerList = {0};
+                    for(u64 i = 0; i < list.size; ++i) {
+                        Expression* initializerExpr = list.data[i];
+                        FunctionArg field = fields.data[i];
                         TypeInfo* fieldType = ExpressionToType(field.type, constants, scope);
                         TypecheckedExpression* initType = typecheckExpression(mem, initializerExpr, scope, constants, fieldType);
                         if(!TypeMatch(fieldType, initType->typeInfo)) {
@@ -797,27 +802,33 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                                 STR_PRINT(TypeToString(mem, fieldType))
                             );
                         }
+                        ArrayAppend(initializerList, initType);
                     }
+                    result->expr.STRUCT_LIT.positionalInitializerList = initializerList;
                 } break;
                 case StructInitializerListType_DESIGNATED: {
-                    if(expr->expr.STRUCT_LIT.namedInitializerList.size != result->typeInfo->structInfo.fields.size) {
+                    Array(NamedInitializer) list = expr->expr.STRUCT_LIT.namedInitializerList;
+                    Array(FunctionArg) fields = result->typeInfo->structInfo.fields;
+
+                    if(list.size != fields.size) {
                         Location loc = {0};
                         if(expr->expr.STRUCT_LIT.idProvided) loc = expr->expr.STRUCT_LIT.id.loc;
                         ERROR_VA(
                             loc,
                             "Incorrect number of initializers in struct literal, got: %llu, expected: %llu",
-                            expr->expr.STRUCT_LIT.namedInitializerList.size,
-                            result->typeInfo->structInfo.fields.size
+                            list.size,
+                            fields.size
                         );
                     }
 
-                    for(u64 i = 0; i < expr->expr.STRUCT_LIT.namedInitializerList.size; ++i) {
-                        NamedInitializer initializer = expr->expr.STRUCT_LIT.namedInitializerList.data[i];
+                    Array(TypecheckedNamedInitializer) initializerList = {0};
+                    for(u64 i = 0; i < list.size; ++i) {
+                        NamedInitializer initializer = list.data[i];
                         String initId = initializer.id;
                         FunctionArg field = {0};
                         bool found = FALSE;
-                        for(u64 h = 0; h < result->typeInfo->structInfo.fields.size; ++h) {
-                            FunctionArg it = result->typeInfo->structInfo.fields.data[h];
+                        for(u64 h = 0; h < fields.size; ++h) {
+                            FunctionArg it = fields.data[h];
                             if(StringEquals(it.id, initId)) {
                                 found = TRUE;
                                 field = it;
@@ -847,7 +858,14 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                                 STR_PRINT(TypeToString(mem, fieldType))
                             );
                         }
+
+                        TypecheckedNamedInitializer tmp = {
+                            .id = initId,
+                            .expr = initType,
+                        };
+                        ArrayAppend(initializerList, tmp);
                     }
+                    result->expr.STRUCT_LIT.namedInitializerList = initializerList;
                 } break;
             }
         } break;
@@ -1279,7 +1297,7 @@ TypecheckedScope* typecheckGlobalScope(Arena* mem, GlobalScope* scope, Hashmap(S
         saveStruct(result, &constantsInThisScope, id, structTypeInfo);
     }
 
-    // typecheck variables
+    // typecheck global variables
     HashmapFor(String, StatementPtr, it, &scope->variables) {
         String id = it->key;
         Statement* statement = it->value;
