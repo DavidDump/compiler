@@ -523,7 +523,12 @@ TypeInfo* findFunctionType(GenScope* localScope, String id) {
 }
 
 void gen_x86_64_cast(GenContext* ctx, TypecheckedExpression* lhs, TypecheckedExpression* rhs, GenScope* localScope) {
+    UNUSED(ctx);
+    UNUSED(lhs);
+    UNUSED(rhs);
+    UNUSED(localScope);
     UNIMPLEMENTED("gen_x86_64_cast");
+    #if 0
     assert(lhs->type == ExpressionType_INT_LIT || lhs->type == ExpressionType_SYMBOL, "Can only cast integers");
     assert(rhs->type == ExpressionType_TYPE, "Can only cast to a type");
 
@@ -570,11 +575,12 @@ void gen_x86_64_cast(GenContext* ctx, TypecheckedExpression* lhs, TypecheckedExp
             genInstruction(ctx, inst);
         }
     }
+    #endif
 }
 
-TypeInfo* codegenExpressionToType(Expression* expr) {
-    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
-    return expr->expr.TYPE.typeInfo;
+TypeInfo* genParsedTypeToTypeInfo(ParsedType* type) {
+    assert(type->type == ParsedTypeType_SIMPLE, "Can only convert ParsedTypeType_SIMPLE to TypeInfo");
+    return type->as_simple.typeInfo;
 }
 
 typedef struct StructFieldResult {
@@ -586,11 +592,11 @@ StructFieldResult getStructFieldOffsetByName(TypeInfo* typeInfo, String fieldNam
     assert(typeInfo->symbolType == TYPE_STRUCT_DEF, "TYPE_STRUCT_DEF should be the type of a struct lit");
 
     StructFieldResult result = {0};
-    Array(FunctionArg) fields = typeInfo->structInfo.fields;
+    Array(TypecheckedField) fields = typeInfo->structInfo.fields;
     for(u64 i = 0; i < fields.size; ++i) {
-        FunctionArg field = fields.data[i];
+        TypecheckedField field = fields.data[i];
         if(StringEquals(field.id, fieldName)) return result;
-        TypeInfo* fieldType = codegenExpressionToType(field.type);
+        TypeInfo* fieldType = field.type;
         result.result += TypeToByteSize(fieldType);
     }
 
@@ -603,11 +609,11 @@ StructFieldResult getStructFieldOffsetByPos(TypeInfo* typeInfo, u64 index) {
     assert(typeInfo->symbolType == TYPE_STRUCT_DEF, "TYPE_STRUCT_DEF should be the type of a struct lit");
 
     StructFieldResult result = {0};
-    Array(FunctionArg) fields = typeInfo->structInfo.fields;
+    Array(TypecheckedField) fields = typeInfo->structInfo.fields;
     for(u64 i = 0; i < fields.size; ++i) {
-        FunctionArg field = fields.data[i];
+        TypecheckedField field = fields.data[i];
         if(i == index) return result;
-        TypeInfo* fieldType = codegenExpressionToType(field.type);
+        TypeInfo* fieldType = field.type;
         result.result += TypeToByteSize(fieldType);
     }
 
@@ -1110,7 +1116,7 @@ GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope
     for(u64 i = 0; i < typeInfo->functionInfo->args.size; ++i) {
         FunctionArg fnArg = typeInfo->functionInfo->args.data[i];
         String argId = fnArg.id;
-        TypeInfo* argType = codegenExpressionToType(fnArg.type);
+        TypeInfo* argType = genParsedTypeToTypeInfo(fnArg.type);
         // Expression* argValue = fnArg.initialValue;
         // UNUSED(argValue);
 

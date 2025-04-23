@@ -1,0 +1,17 @@
+#library "kernel32.dll";
+ExitProcess :: #extern (code: s64);
+
+vec2 :: struct {
+    x: u8;
+    y: u8;
+}
+
+vecOne :: () -> vec2 {
+    result: vec2 = {1, 1};
+    return result;
+}
+
+main :: () -> u8 {
+    foo := vecOne();
+    return foo.x;
+}

@@ -8,11 +8,13 @@ typedef struct FunctionInfo FunctionInfo;
 typedef struct ArrayInfo ArrayInfo;
 
 typedef struct FunctionArg FunctionArg;
+typedef struct TypecheckedField TypecheckedField;
 
 #include "dataStructures.h"
 
 defArray(TypeInfoPtr);
 defArray(FunctionArg);
+defArray(TypecheckedField);
 
 #include "common.h"
 #include "string.h"
@@ -52,18 +54,23 @@ extern char* TypeStr[TYPE_COUNT + 1];
 // used when defining arguments during function declaration
 typedef struct FunctionArg {
     String id;
-    Expression* type;
+    ParsedType* type;
     // Expression* initialValue; // the expression this argument should be initialized with
 } FunctionArg;
 
 typedef struct FunctionInfo {
     Array(FunctionArg) args;
-    Expression* returnType;
+    ParsedType* returnType;
     bool isExternal;
 } FunctionInfo;
 
+typedef struct TypecheckedField {
+    String id;
+    TypeInfo* type;
+} TypecheckedField;
+
 typedef struct StructInfo {
-    Array(FunctionArg) fields;
+    Array(TypecheckedField) fields;
 } StructInfo;
 
 typedef struct ArrayInfo {

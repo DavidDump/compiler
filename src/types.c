@@ -24,9 +24,9 @@ char* TypeStr[TYPE_COUNT + 1] = {
     [TYPE_COUNT]    = "COUNT",
 };
 
-TypeInfo* TypeExpressionToType(Expression* expr) {
-    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
-    return expr->expr.TYPE.typeInfo;
+TypeInfo* TypeExpressionToType(ParsedType* type) {
+    assert(type->type == ParsedTypeType_SIMPLE, "Can only convert ParsedTypeType_SIMPLE to TypeInfo");
+    return type->as_simple.typeInfo;
 }
 
 String TypeToString(Arena* mem, TypeInfo* typeInfo) {
@@ -116,15 +116,15 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             // '; '      // 2 characters per field - 1
             // fieldName // length characters
             // type      // length characters
-            Array(FunctionArg) fields = typeInfo->structInfo.fields;
+            Array(TypecheckedField) fields = typeInfo->structInfo.fields;
 
-            u64 totalCharCount = 8 + 1 + (2 * fields.size) + 2* (fields.size - 1);
+            u64 totalCharCount = 8 + 1 + (2 * fields.size) + 2 * (fields.size - 1);
 
             Array(String) typeStrs = {0};
             for(u64 i = 0; i < fields.size; ++i) {
-                FunctionArg field = fields.data[i];
+                TypecheckedField field = fields.data[i];
 
-                String typeStr = TypeToString(mem, TypeExpressionToType(field.type));
+                String typeStr = TypeToString(mem, field.type);
                 ArrayAppend(typeStrs, typeStr);
 
                 totalCharCount += field.id.length;
@@ -139,7 +139,7 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             at += tmpStrLen;
 
             for(u64 i = 0; i < fields.size; ++i) {
-                FunctionArg field = fields.data[i];
+                TypecheckedField field = fields.data[i];
                 String typeStr = typeStrs.data[i];
 
                 memcpy(&buffer[at], field.id.str, field.id.length);
@@ -235,11 +235,11 @@ u64 TypeToByteSize(TypeInfo* type) {
         } break;
 
         case TYPE_STRUCT_DEF: {
-            Array(FunctionArg) fields = type->structInfo.fields;
+            Array(TypecheckedField) fields = type->structInfo.fields;
             u64 sizeInBytes = 0;
             for(u64 i = 0; i < fields.size; ++i) {
-                FunctionArg field = fields.data[i];
-                sizeInBytes += TypeToByteSize(TypeExpressionToType(field.type));
+                TypecheckedField field = fields.data[i];
+                sizeInBytes += TypeToByteSize(field.type);
             }
             return sizeInBytes;
         } break;

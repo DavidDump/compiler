@@ -9,6 +9,8 @@ typedef Scope* ScopePtr;
 typedef struct GenericScope GenericScope;
 typedef struct GlobalScope GlobalScope;
 
+typedef struct ParsedType ParsedType;
+
 typedef struct Expression Expression;
 typedef Expression* ExpressionPtr;
 
@@ -34,6 +36,32 @@ defArray(ConditionalBlock);
 #include "types.h"
 #include "lexer.h"
 
+typedef enum ParsedTypeType {
+    ParsedTypeType_NONE,
+    ParsedTypeType_SIMPLE,
+    ParsedTypeType_STRUCT,
+    ParsedTypeType_SYMBOL,
+} ParsedTypeType;
+
+typedef struct ParsedType {
+    ParsedTypeType type;
+    union {
+        struct {
+            TypeInfo* typeInfo;
+        } as_simple;
+        struct {
+            GlobalScope* scope;
+
+            // NOTE: only for later once parameterized structs get added
+            // Array(FunctionArg) args;
+            // bool hasArgs;
+        } as_struct;
+        struct {
+            Token identifier;
+        } as_symbol;
+    };
+} ParsedType;
+
 typedef enum StructInitializerListType {
     StructInitializerListType_NONE,
     StructInitializerListType_POSITIONAL,
@@ -53,8 +81,7 @@ typedef enum ExpressionType {
     ExpressionType_SYMBOL,            // foo
     ExpressionType_FUNCTION_CALL,     // bar()
     ExpressionType_FUNCTION_LIT,      // (arg: u64) -> u8 { ... }
-    ExpressionType_TYPE,              // u8
-    ExpressionType_STRUCT_DEF,        // struct { ... } OR struct (arg: type) { ... }
+    ExpressionType_TYPE,              // u8 OR struct { ... } OR symbol
     ExpressionType_STRUCT_LIT,        // Vec2{1, 2} OR Vec2{.x = 1, .y = 2} OR {1, 2} OR {.x = 1, .y = 2}
     ExpressionType_FIELD_ACCESS,      // vec.x
 } ExpressionType;
@@ -104,15 +131,8 @@ typedef struct Expression {
             GenericScope* scope;
         } FUNCTION_LIT;
         struct TYPE {
-            TypeInfo* typeInfo;
+            ParsedType* type;
         } TYPE;
-        struct STRUCT_DEF {
-            GlobalScope* scope;
-
-            // NOTE: only for later once parameterized structs get added
-            // Array(FunctionArg) args;
-            // bool hasArgs;
-        } STRUCT_DEF;
         struct STRUCT_LIT {
             Token id;
             bool idProvided;
@@ -185,11 +205,11 @@ typedef struct Statement {
     union {
         struct VAR_DECL {
             String identifier;
-            Expression* type;
+            ParsedType* type;
         } VAR_DECL;
         struct VAR_DECL_ASSIGN {
             String identifier;
-            Expression* type;
+            ParsedType* type;
             Expression* expr;
         } VAR_DECL_ASSIGN;
         struct VAR_REASSIGN {
@@ -241,7 +261,7 @@ Expression* parseDecreasingPresedence(ParseContext* ctx, Arena* mem, s64 minPrec
 Expression* parseLeaf(ParseContext* ctx, Arena* mem);
 ParseResult Parse(Array(Token) tokens, Arena* mem);
 Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope);
-TypeInfo* parseType(ParseContext* ctx, Arena* mem);
+ParsedType* parseType(ParseContext* ctx, Arena* mem);
 bool isFunctionLit(ParseContext* ctx, Token next);
 Scope makeScopeFromGlobal(GlobalScope* scope);
 Scope makeScopeFromGeneric(GenericScope* scope);

@@ -19,9 +19,9 @@ void TypePrint(TypeInfo* type, u64 indent) {
     genPrintHelper(" "STR_FMT, STR_PRINT(typeStr));
 }
 
-TypeInfo* DebugExpressionToType(Expression* expr) {
-    assert(expr->type == ExpressionType_TYPE, "Can only convert type Expressions to TypeInfo");
-    return expr->expr.TYPE.typeInfo;
+TypeInfo* DebugParsedTypeToType(ParsedType* type) {
+    assert(type->type == ParsedTypeType_SIMPLE, "Can only convert ParsedTypeType_SIMPLE to TypeInfo");
+    return type->as_simple.typeInfo;
 }
 
 void ExpressionPrint(Expression* expr, u64 indent) {
@@ -62,7 +62,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
         } break;
         case ExpressionType_FUNCTION_LIT: {
             // String id = expr->expr.FUNCTION_LIT.identifier;
-            TypeInfo* retType = DebugExpressionToType(expr->expr.FUNCTION_LIT.typeInfo->returnType);
+            TypeInfo* retType = DebugParsedTypeToType(expr->expr.FUNCTION_LIT.typeInfo->returnType);
             Array(FunctionArg) args = expr->expr.FUNCTION_LIT.typeInfo->args;
             GenericScope* scope = expr->expr.FUNCTION_LIT.scope;
 
@@ -77,7 +77,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
                 genPrintHelper("    args: [\n");
                 for(u64 i = 0; i < args.size; ++i) {
                     String argId = args.data[i].id;
-                    TypeInfo* argType = DebugExpressionToType(args.data[i].type);
+                    TypeInfo* argType = DebugParsedTypeToType(args.data[i].type);
 
                     genPrintHelper("        {id: "STR_FMT", type: ", STR_PRINT(argId));
                     TypePrint(argType, indent);
@@ -122,15 +122,9 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             genPrintHelper("}\n");
         } break;
         case ExpressionType_TYPE: {
-            TypeInfo* typeInfo = expr->expr.TYPE.typeInfo;
+            ParsedType* type = expr->expr.TYPE.type;
+            TypeInfo* typeInfo = DebugParsedTypeToType(type);
             TypePrint(typeInfo, indent);
-        } break;
-        case ExpressionType_STRUCT_DEF: {
-            GlobalScope* scope = expr->expr.STRUCT_DEF.scope;
-
-            genPrintHelper("STRUCT_DEF: {\n");
-            GlobalScopePrint(scope, indent + 1);
-            genPrintHelper("}\n");
         } break;
         case ExpressionType_STRUCT_LIT: {
             if(expr->expr.STRUCT_LIT.idProvided) {
@@ -194,7 +188,7 @@ void StatementPrint(Statement* node, u64 indent) {
 
         case StatementType_VAR_DECL: {
             String id = node->statement.VAR_DECL.identifier;
-            TypeInfo* type = DebugExpressionToType(node->statement.VAR_DECL.type);
+            TypeInfo* type = DebugParsedTypeToType(node->statement.VAR_DECL.type);
 
             genPrintHelper("VAR_DECL: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
@@ -205,7 +199,7 @@ void StatementPrint(Statement* node, u64 indent) {
         } break;
         case StatementType_VAR_DECL_ASSIGN: {
             String id = node->statement.VAR_DECL_ASSIGN.identifier;
-            TypeInfo* type = DebugExpressionToType(node->statement.VAR_DECL_ASSIGN.type);
+            TypeInfo* type = DebugParsedTypeToType(node->statement.VAR_DECL_ASSIGN.type);
             Expression* expr = node->statement.VAR_DECL_ASSIGN.expr;
 
             genPrintHelper("VAR_DECL_ASSIGN: {\n");
@@ -351,7 +345,7 @@ void GlobalScopePrint(GlobalScope* scope, u64 indent) {
         String id = it->key;
         Statement* value = it->value;
         assertf(value->type == StatementType_VAR_DECL || value->type == StatementType_VAR_DECL_ASSIGN, "Expected variable, got: %s", StatementTypeStr[value->type]);
-        Expression* type = 0;
+        ParsedType* type = 0;
         Expression* expr = 0;
         if(value->type == StatementType_VAR_DECL) {
             type = value->statement.VAR_DECL.type;
@@ -360,7 +354,7 @@ void GlobalScopePrint(GlobalScope* scope, u64 indent) {
             expr = value->statement.VAR_DECL_ASSIGN.expr;
         }
 
-        VariablePrint(id, expr, DebugExpressionToType(type));
+        VariablePrint(id, expr, DebugParsedTypeToType(type));
     }
 
     genPrintHelper("Scope constants:\n");

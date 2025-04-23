@@ -101,15 +101,8 @@ typedef struct TypecheckedExpression {
             GenericScope* scope;
         } FUNCTION_LIT;
         struct {
-            TypeInfo* typeInfo;
+            ParsedType* typeInfo;
         } TYPE;
-        struct {
-            GlobalScope* scope;
-
-            // NOTE: only for later once parameterized structs get added
-            // Array(FunctionArg) args;
-            // bool hasArgs;
-        } STRUCT_DEF;
         struct {
             Token id;
             bool idProvided;

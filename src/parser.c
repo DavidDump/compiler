@@ -15,7 +15,6 @@ char* ExpressionTypeStr[] = {
     [ExpressionType_FUNCTION_CALL]     = "FUNCTION_CALL",
     [ExpressionType_FUNCTION_LIT]      = "FUNCTION_LIT",
     [ExpressionType_TYPE]              = "TYPE",
-    [ExpressionType_STRUCT_DEF]        = "STRUCT_DEF",
     [ExpressionType_STRUCT_LIT]        = "STRUCT_LIT",
     [ExpressionType_FIELD_ACCESS]      = "FIELD_ACCESS",
 };
@@ -241,7 +240,7 @@ Array(FunctionArg) functionArgs(ParseContext* ctx, Arena* mem) {
 
         FunctionArg arg = {0};
         arg.id = id.value;
-        arg.type = parseExpression(ctx, mem);
+        arg.type = parseType(ctx, mem);
         // arg.initialValue = ; // TODO: currently we dont support value initializer parsing
         ArrayAppend(result, arg);
 
@@ -335,10 +334,10 @@ GenericScope* parseGenericScope(ParseContext* ctx, Arena* mem, Scope parent) {
     return result;
 }
 
-Expression* ExpressionTypeInitSimple(Arena* mem, Type t) {
-    Expression* result = arena_alloc(mem, sizeof(Expression));
-    result->type = ExpressionType_TYPE;
-    result->expr.TYPE.typeInfo = TypeInitSimple(mem, t);
+ParsedType* ExpressionTypeInitSimple(Arena* mem, Type t) {
+    ParsedType* result = arena_alloc(mem, sizeof(ParsedType));
+    result->type = ParsedTypeType_SIMPLE;
+    result->as_simple.typeInfo = TypeInitSimple(mem, t);
     return result;
 }
 
@@ -358,7 +357,7 @@ Expression* makeFunctionLit(ParseContext* ctx, Arena* mem, bool isExtern) {
     Token next = parsePeek(ctx, 0);
     if(next.type == TokenType_RARROW) {
         parseConsume(ctx); // ->
-        funcInfo->returnType = parseExpression(ctx, mem);
+        funcInfo->returnType = parseType(ctx, mem);
     } else {
         funcInfo->returnType = ExpressionTypeInitSimple(mem, TYPE_VOID);
     }
@@ -404,110 +403,114 @@ Expression* makeCompInstructionLeaf(ParseContext* ctx, Arena* mem) {
     return 0;
 }
 
-Expression* makeType(ParseContext* ctx, Arena* mem, Token next) {
-    Expression* result = arena_alloc(mem, sizeof(Expression));
-    result->type = ExpressionType_TYPE;
-    TypeInfo* typeInfo = arena_alloc(mem, sizeof(TypeInfo));
-    result->expr.TYPE.typeInfo = typeInfo;
+ParsedType* parseType(ParseContext* ctx, Arena* mem) {
+    ParsedType* result = arena_alloc(mem, sizeof(ParsedType));
 
-    // TODO: this could be a hashmap with key `String` value `Type` and just look up the type there
-    Type type = TYPE_NONE;
-    if(StringEqualsCstr(next.value, "u8")) {
-        type = TYPE_U8;
-    } else if(StringEqualsCstr(next.value, "u16")) {
-        type = TYPE_U16;
-    } else if(StringEqualsCstr(next.value, "u32")) {
-        type = TYPE_U32;
-    } else if(StringEqualsCstr(next.value, "u64")) {
-        type = TYPE_U64;
-    } else if(StringEqualsCstr(next.value, "s8")) {
-        type = TYPE_S8;
-    } else if(StringEqualsCstr(next.value, "s16")) {
-        type = TYPE_S16;
-    } else if(StringEqualsCstr(next.value, "s32")) {
-        type = TYPE_S32;
-    } else if(StringEqualsCstr(next.value, "s64")) {
-        type = TYPE_S64;
-    } else if(StringEqualsCstr(next.value, "f32")) {
-        type = TYPE_F32;
-    } else if(StringEqualsCstr(next.value, "f64")) {
-        type = TYPE_F64;
-    } else if(StringEqualsCstr(next.value, "string")) {
-        type = TYPE_STRING;
-    } else if(StringEqualsCstr(next.value, "bool")) {
-        type = TYPE_BOOL;
-    } else if(StringEqualsCstr(next.value, "void")) {
-        type = TYPE_VOID;
-    } else {
-        ERROR_VA(next.loc, "Unknown type: "STR_FMT, STR_PRINT(next.value));
-    }
+    Token next = parseConsume(ctx);
+    if(next.type == TokenType_STRUCT) {
+        GlobalScope* structScope = parseGlobalScopeInit(mem, (Scope){0}); // TODO: fix parent scope
+        // result->as_struct.args = functionArgs(ctx, structScope);
 
-    bool isPointer = FALSE;
-    next = parsePeek(ctx, 0);
-    if(next.type == TokenType_MUL) {
-        parseConsume(ctx); // *
-        isPointer = TRUE;
-    }
+        next = parseConsume(ctx); // {
+        if(next.type != TokenType_LSCOPE) {
+            ERROR_VA(next.loc, "Struct keyword needs to be followed by a scope, expected: '{', got: '"STR_FMT"'", STR_PRINT(next.value));
+        }
 
-    next = parsePeek(ctx, 0);
-    if(next.type != TokenType_LBRACKET) {
-        typeInfo->symbolType = type;
+        // scope
+        parseGlobalScopeInto(ctx, mem, structScope);
+
+        result->type = ParsedTypeType_STRUCT;
+        result->as_struct.scope = structScope;
+    } else if(next.type == TokenType_IDENTIFIER) {
+        result->type = ParsedTypeType_SYMBOL;
+        result->as_symbol.identifier = next;
+    } else if(next.type == TokenType_TYPE) {
+        TypeInfo* typeInfo = arena_alloc(mem, sizeof(TypeInfo));
+
+        // TODO: this could be a hashmap with key `String` value `Type` and just look up the type there
+        Type type = TYPE_NONE;
+        if(StringEqualsCstr(next.value, "u8")) {
+            type = TYPE_U8;
+        } else if(StringEqualsCstr(next.value, "u16")) {
+            type = TYPE_U16;
+        } else if(StringEqualsCstr(next.value, "u32")) {
+            type = TYPE_U32;
+        } else if(StringEqualsCstr(next.value, "u64")) {
+            type = TYPE_U64;
+        } else if(StringEqualsCstr(next.value, "s8")) {
+            type = TYPE_S8;
+        } else if(StringEqualsCstr(next.value, "s16")) {
+            type = TYPE_S16;
+        } else if(StringEqualsCstr(next.value, "s32")) {
+            type = TYPE_S32;
+        } else if(StringEqualsCstr(next.value, "s64")) {
+            type = TYPE_S64;
+        } else if(StringEqualsCstr(next.value, "f32")) {
+            type = TYPE_F32;
+        } else if(StringEqualsCstr(next.value, "f64")) {
+            type = TYPE_F64;
+        } else if(StringEqualsCstr(next.value, "string")) {
+            type = TYPE_STRING;
+        } else if(StringEqualsCstr(next.value, "bool")) {
+            type = TYPE_BOOL;
+        } else if(StringEqualsCstr(next.value, "void")) {
+            type = TYPE_VOID;
+        } else {
+            ERROR_VA(next.loc, "Unknown type: "STR_FMT, STR_PRINT(next.value));
+        }
+
+        // Determine if type is a pointer
+        bool isPointer = FALSE;
+        next = parsePeek(ctx, 0);
+        if(next.type == TokenType_MUL) {
+            parseConsume(ctx); // *
+            isPointer = TRUE;
+        }
         typeInfo->isPointer = isPointer;
-        return result;
-    }
-    parseConsume(ctx); // '['
 
-    ArrayInfo arrayInfo = {0};
-    next = parseConsume(ctx);
-    if(next.type == TokenType_TRIPLEDOT) {
-        arrayInfo.isDynamic = TRUE;
-    } else if(next.type == TokenType_INT_LITERAL) {
-        u64 size = StringToU64(next.value);
-        arrayInfo.arraySize = size;
+        // Determine if type is a array
+        next = parsePeek(ctx, 0);
+        if(next.type == TokenType_LBRACKET) {
+            parseConsume(ctx); // '['
+
+            ArrayInfo arrayInfo = {0};
+            next = parseConsume(ctx);
+            if(next.type == TokenType_TRIPLEDOT) {
+                arrayInfo.isDynamic = TRUE;
+            } else if(next.type == TokenType_INT_LITERAL) {
+                u64 size = StringToU64(next.value);
+                arrayInfo.arraySize = size;
+            } else {
+                ERROR(next.loc, "Array needs a fixed size or '...' for dynamic size");
+            }
+
+            next = parseConsume(ctx);
+            if(next.type != TokenType_RBRACKET) {
+                ERROR(next.loc, "Expected closing pair to square bracket ']'");
+            }
+
+            typeInfo->symbolType = TYPE_ARRAY;
+            typeInfo->arrayInfo = arrayInfo;
+            // TODO: this is not done, the element type is unknown to the array
+        } else {
+            typeInfo->symbolType = type;
+        }
+
+        result->type = ParsedTypeType_SIMPLE;
+        result->as_simple.typeInfo = typeInfo;
     } else {
-        ERROR(next.loc, "Array needs a fixed size or '...' for dynamic size");
+        ERROR_VA(next.loc, "Expected a type, got: %s", TokenTypeStr[next.type]);
     }
 
-    next = parseConsume(ctx);
-    if(next.type != TokenType_RBRACKET){
-        ERROR(next.loc, "Expected closing pair to square bracket ']'");
-    }
-
-    typeInfo->symbolType = TYPE_ARRAY;
-    typeInfo->arrayInfo = arrayInfo;
-    typeInfo->isPointer = isPointer;
     return result;
 }
 
-TypeInfo* parseType(ParseContext* ctx, Arena* mem) {
-    u64 indexBeforeParsingType = ctx->index;
-    Expression* expr = parseExpression(ctx, mem);
-    if(expr->type == ExpressionType_TYPE) {
-        return expr->expr.TYPE.typeInfo;
-    }
-
-    Location loc = ctx->tokens.data[indexBeforeParsingType].loc;
-    ERROR_VA(loc, "Expected type, got expression: %s", ExpressionTypeStr[expr->type]);
-
-    // silence warning
-    return 0;
-}
-
-Expression* makeStructDef(ParseContext* ctx, Arena* mem) {
+Expression* makeType(ParseContext* ctx, Arena* mem) {
     Expression* result = arena_alloc(mem, sizeof(Expression));
-    result->type = ExpressionType_STRUCT_DEF;
+    result->type = ExpressionType_TYPE;
 
-    GlobalScope* structScope = parseGlobalScopeInit(mem, (Scope){0}); // TODO: fix parent scope
-    result->expr.STRUCT_DEF.scope = structScope;
-    // result->expr.STRUCT_DEF.args = functionArgs(ctx, structScope);
-
-    Token next = parseConsume(ctx);
-    if(next.type != TokenType_LSCOPE) {
-        ERROR_VA(next.loc, "Struct keyword needs to be followed by a scope, expected: '{', got: '"STR_FMT"'", STR_PRINT(next.value));
-    }
-
-    // scope
-    parseGlobalScopeInto(ctx, mem, structScope);
+    ctx->index--; // NOTE: rewind, to "uncomsume" the next token;
+    result->expr.TYPE.type = parseType(ctx, mem);
 
     return result;
 }
@@ -602,6 +605,10 @@ Expression* makeStructFieldAccess(ParseContext* ctx, Arena* mem, Token next) {
     return result;
 }
 
+bool isTypeLit(Token next) {
+    return (next.type == TokenType_TYPE || next.type == TokenType_STRUCT);
+}
+
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
 
@@ -611,9 +618,8 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
     if(isStructLit(ctx, next))              return makeStructLit(ctx, mem, next);
     if(isStructFieldAccess(ctx, next))      return makeStructFieldAccess(ctx, mem, next);
-    if(next.type == TokenType_TYPE)         return makeType(ctx, mem, next);
+    if(isTypeLit(next))                     return makeType(ctx, mem);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
-    if(next.type == TokenType_STRUCT)       return makeStructDef(ctx, mem);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
     if(next.type == TokenType_IDENTIFIER)   return makeVariable(mem, next);
@@ -828,21 +834,22 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 // NOTE: parse inferred during typechecking, void assigned here so we can print the node
                 result->statement.VAR_DECL_ASSIGN.type = ExpressionTypeInitSimple(mem, TYPE_NONE);
 
+                assert(result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_TYPE, "Types during runtime not implemented yet");
+
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
                 bool checkSemiColon = (
                     result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_FUNCTION_LIT &&
-                    result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_STRUCT_DEF
+                    (result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_TYPE && result->statement.VAR_DECL_ASSIGN.expr->expr.TYPE.type->type != ParsedTypeType_STRUCT)
                 );
                 if(checkSemiColon) parseCheckSemicolon(ctx);
                 // NOTE: this is yet another supid fix for a problem,
-                // the parent of the function scope never gets set because we dont have acess to it in expression parsing
-                // maybe add to context as an easy fix
+                //       the parent of the function scope never gets set because we dont have acess to it in expression parsing
+                //       maybe add to context as an easy fix
                 if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_DECL_ASSIGN.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
-                if(result->statement.VAR_DECL_ASSIGN.expr->type == ExpressionType_STRUCT_DEF) result->statement.VAR_DECL_ASSIGN.expr->expr.STRUCT_DEF.scope->parent = containingScope;
             } else if(next.type == TokenType_COLON) {
                 parseConsume(ctx); // :
                 String identifier = t.value;
-                Expression* type = parseExpression(ctx, mem);
+                ParsedType* type = parseType(ctx, mem);
 
                 next = parsePeek(ctx, 0);
                 if(next.type == TokenType_ASSIGNMENT) {
@@ -868,14 +875,13 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
                 bool checkSemiColon = (
                     result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT &&
-                    result->statement.VAR_CONST.expr->type != ExpressionType_STRUCT_DEF
+                    (result->statement.VAR_CONST.expr->type != ExpressionType_TYPE && result->statement.VAR_CONST.expr->expr.TYPE.type->type != ParsedTypeType_STRUCT)
                 );
                 if(checkSemiColon) parseCheckSemicolon(ctx);
                 // NOTE: this is yet another supid fix for a problem,
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
                 if(result->statement.VAR_CONST.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_CONST.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
-                if(result->statement.VAR_CONST.expr->type == ExpressionType_STRUCT_DEF) result->statement.VAR_CONST.expr->expr.STRUCT_DEF.scope->parent = containingScope;
             } else {
                 ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }

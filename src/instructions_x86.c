@@ -1,5 +1,6 @@
 #include "instructions_x86.h"
 
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 const char* MnemonicStr[Mnemonic_COUNT] = {
     [push_] = "push",
@@ -374,3 +375,4 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         {.type = InstructionType_64BIT, .opcode = 0xF7, .rexType = RexByte_W, .modRMType = ModRMType_EXT, .opcodeExtension = 3, .opTypes[0] = OpType_RM},
     },
 };
+#pragma GCC diagnostic pop
