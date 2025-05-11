@@ -12,12 +12,6 @@ typedef int bool;
 #define UNIMPLEMENTED(x) printf("[NOT IMPLEMENTED] %s:%i: %s\n", __FILE__, __LINE__, (x)), exit(EXIT_FAILURE)
 #define UNUSED(x) (void)(x)
 
-#define STATIC_ASSERT(_condition_) \
-    _Pragma("GCC diagnostic push"); \
-    _Pragma("GCC diagnostic ignored \"-Wshadow\""); \
-    typedef char __static_assert_t[(_condition_) != 0]; \
-    _Pragma("GCC diagnostic pop")
-
 #ifndef COMP_DEBUG
 #  define assert(...)
 #  define assertf(...)
@@ -25,6 +19,7 @@ typedef int bool;
 #  define ERROR_VA(loc, msg, ...) printf("[ERROR] "STR_FMT":%i:%i "msg"\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, __VA_ARGS__), exit(EXIT_FAILURE)
 #  define UNREACHABLE(_msg_) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (_msg_)), exit(EXIT_FAILURE)
 #  define UNREACHABLE_VA(_msg_, ...) printf("[UNREACHABLE] %s:%i: "_msg_"\n", __FILE__, __LINE__, __VA_ARGS__), exit(EXIT_FAILURE)
+#  define STATIC_ASSERT(_condition_)
 #else
 #  define assert(_condition_, _msg_) !(_condition_) ? (void)(printf("[ASSERT] %s:%i: %s\n", __FILE__, __LINE__, _msg_), *(int*)(0) = 0) : (void)0
 #  define assertf(_condition_, _fmt_, ...) !(_condition_) ? (void)(printf("[ASSERT] %s:%i: "_fmt_"\n", __FILE__, __LINE__, __VA_ARGS__), *(int*)(0) = 0) : (void)0
@@ -32,6 +27,11 @@ typedef int bool;
 #  define ERROR_VA(loc, msg, ...) printf("[ERROR] "STR_FMT":%i:%i "msg"\n", STR_PRINT((loc).filename), (loc).line, (loc).collum, __VA_ARGS__), assert(0, "")
 #  define UNREACHABLE(_msg_) printf("[UNREACHABLE] %s:%i: %s\n", __FILE__, __LINE__, (_msg_)), assert(0, "")
 #  define UNREACHABLE_VA(_msg_, ...) printf("[UNREACHABLE] %s:%i: "_msg_"\n", __FILE__, __LINE__, __VA_ARGS__), assert(0, "")
+#  define STATIC_ASSERT(_condition_) \
+      _Pragma("GCC diagnostic push"); \
+      _Pragma("GCC diagnostic ignored \"-Wshadow\""); \
+      typedef char __static_assert_t[(_condition_) != 0]; \
+      _Pragma("GCC diagnostic pop")
 #endif
 
 // NOTE: assert used in arena.h is redefined here, so its only in one place
