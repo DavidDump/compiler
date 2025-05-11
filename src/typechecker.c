@@ -518,7 +518,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
     TypecheckedExpression* result = arena_alloc(mem, sizeof(TypecheckedExpression));
     memcpy(result, expr, sizeof(Expression));
     STATIC_ASSERT(sizeof(TypecheckedExpression) - sizeof(TypeInfoPtr) == sizeof(Expression));
-    // NOTE: this has a high likelyhood of fucking me in the ass later on
+    // NOTE: this has a high likelyhood of ******* me in the *** later on
 
     switch(expr->type) {
         case ExpressionType_INT_LIT: {

@@ -4,7 +4,7 @@
 // NOTE: the existance of this file is solely the reason of microsoft
 //       one of the windows.h headers has a type named TokenType
 //       if all the headers are included in the peWriter.c compilation unit
-//       if shits out errors, because of this the peWriter.c compilation unit
+//       if ***** out errors, because of this the peWriter.c compilation unit
 //       need to be as small as possible, quarantined from the rest of the world
 
 #include "common.h"
