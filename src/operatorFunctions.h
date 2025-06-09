@@ -108,6 +108,50 @@ ConstValue _div(ConstValue lhs, ConstValue rhs) {
     return result;
 }
 
+ConstValue _bin_and(ConstValue lhs, ConstValue rhs) {
+    assert(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo), "bitwise and operation can only be performed on numbers");
+    ConstValue result = {0};
+
+    if(!TypeMatch(lhs.typeInfo, rhs.typeInfo)) {
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to bitwise and types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
+    }
+
+    result.typeInfo = lhs.typeInfo;
+    bool isSigned = TypeIsSigned(lhs.typeInfo);
+
+    if(TypeIsFloat(lhs.typeInfo)) UNREACHABLE("cannot bitwise and float types");
+    if(isSigned) {
+        result.as_s64 = lhs.as_s64 & rhs.as_s64;
+    } else {
+        result.as_u64 = lhs.as_u64 & rhs.as_u64;
+    }
+
+    return result;
+}
+
+ConstValue _bin_or(ConstValue lhs, ConstValue rhs) {
+    assert(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo), "bitwise or operation can only be performed on numbers");
+    ConstValue result = {0};
+
+    if(!TypeMatch(lhs.typeInfo, rhs.typeInfo)) {
+        Arena tmp = {0};
+        UNREACHABLE_VA("trying to bitwise or types: "STR_FMT", "STR_FMT, STR_PRINT(TypeToString(&tmp, lhs.typeInfo)), STR_PRINT(TypeToString(&tmp, rhs.typeInfo)));
+    }
+
+    result.typeInfo = lhs.typeInfo;
+    bool isSigned = TypeIsSigned(lhs.typeInfo);
+
+    if(TypeIsFloat(lhs.typeInfo)) UNREACHABLE("cannot bitwise or float types");
+    if(isSigned) {
+        result.as_s64 = lhs.as_s64 | rhs.as_s64;
+    } else {
+        result.as_u64 = lhs.as_u64 | rhs.as_u64;
+    }
+
+    return result;
+}
+
 ConstValue _less(ConstValue lhs, ConstValue rhs) {
     assert(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo), "less than operation can only be performed on numbers");
     ConstValue result = {0};

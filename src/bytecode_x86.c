@@ -723,7 +723,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         TypecheckedExpression* rhs = expr->expr.BINARY_EXPRESSION.rhs;
 
         // NOTE: maybe not the best to hardcode the operators, but then again what do i know
-        STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
+        STATIC_ASSERT(BIN_OPERATORS_COUNT == 13); // binary operator count has changed
         if(StringEqualsCstr(operator, "+")) {
             gen_x86_64_expression(ctx, lhs, localScope);
             genPush(ctx, localScope, RAX);
@@ -755,6 +755,18 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         } else if(StringEqualsCstr(operator, "as")) {
             // UNIMPLEMENTED("codegen for cast");
             printf("[WARNING] as op not accually finished\n");
+        } else if(StringEqualsCstr(operator, "&")) {
+            gen_x86_64_expression(ctx, rhs, localScope);
+            genPush(ctx, localScope, RAX);
+            gen_x86_64_expression(ctx, lhs, localScope);
+            genPop(ctx, localScope, RCX);
+            genInstruction(ctx, INST(and, OP_REG(RAX), OP_REG(RCX)));
+        } else if(StringEqualsCstr(operator, "|")) {
+            gen_x86_64_expression(ctx, rhs, localScope);
+            genPush(ctx, localScope, RAX);
+            gen_x86_64_expression(ctx, lhs, localScope);
+            genPop(ctx, localScope, RCX);
+            genInstruction(ctx, INST(or, OP_REG(RAX), OP_REG(RCX)));
         } else {
             UNREACHABLE_VA("Unkown operator: "STR_FMT, STR_PRINT(operator));
         }

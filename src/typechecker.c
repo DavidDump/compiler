@@ -5,7 +5,7 @@
 #include <math.h>
 
 ConstValue evaluateBinaryExpression(ConstValue lhs, Token operator, ConstValue rhs) {
-    STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
+    STATIC_ASSERT(BIN_OPERATORS_COUNT == 13); // binary operator count has changed
     if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_ADD) {
         return _add(lhs, rhs);
     } else if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_SUB) {
@@ -22,6 +22,10 @@ ConstValue evaluateBinaryExpression(ConstValue lhs, Token operator, ConstValue r
         return _less_eq(lhs, rhs);
     } else if(TypeIsNumber(lhs.typeInfo) && TypeIsNumber(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_GREATER_EQ) {
         return _greater_eq(lhs, rhs);
+    } else if(TypeIsInt(lhs.typeInfo) && TypeIsInt(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_AND) {
+        return _bin_and(lhs, rhs);
+    } else if(TypeIsInt(lhs.typeInfo) && TypeIsInt(rhs.typeInfo) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_OR) {
+        return _bin_or(lhs, rhs);
     } else if(((TypeIsBool(lhs.typeInfo) && TypeIsBool(rhs.typeInfo)) || (TypeIsNumber(rhs.typeInfo) && TypeIsNumber(lhs.typeInfo))) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_COMPARISON) {
         return _equals(lhs, rhs);
     } else if(((TypeIsBool(lhs.typeInfo) && TypeIsBool(rhs.typeInfo)) || (TypeIsNumber(rhs.typeInfo) && TypeIsNumber(lhs.typeInfo))) && TypeMatch(lhs.typeInfo, rhs.typeInfo) && operator.type == TokenType_NOT_EQUALS) {
@@ -667,8 +671,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 rhsType = typecheckExpression(mem, rhs, scope, constants, expected);
             }
 
-            STATIC_ASSERT(BIN_OPERATORS_COUNT == 11); // binary operator count has changed
-            // TODO: static assert on the number of operators
+            STATIC_ASSERT(BIN_OPERATORS_COUNT == 13); // binary operator count has changed
             TypeInfo* typeBool = TypeInitSimple(mem, TYPE_BOOL);
             if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_ADD) {
                 result->typeInfo = lhsType->typeInfo;
@@ -686,6 +689,10 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 result->typeInfo = typeBool;
             } else if(TypeIsNumber(lhsType->typeInfo) && TypeIsNumber(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_GREATER_EQ) {
                 result->typeInfo = typeBool;
+            } else if(TypeIsInt(lhsType->typeInfo) && TypeIsInt(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_AND) {
+                result->typeInfo = lhsType->typeInfo;
+            } else if(TypeIsInt(lhsType->typeInfo) && TypeIsInt(rhsType->typeInfo) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_OR) {
+                result->typeInfo = lhsType->typeInfo;
             } else if(((TypeIsBool(lhsType->typeInfo) && TypeIsBool(rhsType->typeInfo)) || (TypeIsNumber(rhsType->typeInfo) && TypeIsNumber(lhsType->typeInfo))) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_COMPARISON) {
                 result->typeInfo = typeBool;
             } else if(((TypeIsBool(lhsType->typeInfo) && TypeIsBool(rhsType->typeInfo)) || (TypeIsNumber(rhsType->typeInfo) && TypeIsNumber(lhsType->typeInfo))) && TypeMatch(lhsType->typeInfo, rhsType->typeInfo) && op.type == TokenType_NOT_EQUALS) {

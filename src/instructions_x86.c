@@ -24,6 +24,8 @@ const char* MnemonicStr[Mnemonic_COUNT] = {
     [jle_]  = "jle",
     [jge_]  = "jge",
     [neg_]  = "neg",
+    [and_]  = "and",
+    [or_]  = "or",
 };
 
 // NOTE: when needing to iterate all the encodings for one instruction,
@@ -373,6 +375,58 @@ InstructionEncoding encodings[][MAX_ENCODING_FOR_INSTRUCTION] = {
         // F7 /3         | NEG r/m32   | M     | Valid       | Valid           | Two's complement negate r/m32.
         // REX.W + F7 /3 | NEG r/m64   | M     | Valid       | N.E.            | Two's complement negate r/m64.
         {.type = InstructionType_64BIT, .opcode = 0xF7, .rexType = RexByte_W, .modRMType = ModRMType_EXT, .opcodeExtension = 3, .opTypes[0] = OpType_RM},
+    },
+    [and_] = {
+        // Opcode           | Instruction      | Op/En | 64-bit Mode | Compat/Leg Mode | Description
+        // 24 ib            | AND AL, imm8     | I     | Valid       | Valid           | AL AND imm8.
+        // 25 iw            | AND AX, imm16    | I     | Valid       | Valid           | AX AND imm16.
+        // 25 id            | AND EAX, imm32   | I     | Valid       | Valid           | EAX AND imm32.
+        // REX.W + 25 id    | AND RAX, imm32   | I     | Valid       | N.E.            | RAX AND imm32 sign-extended to 64-bits.
+        // 80 /4 ib         | AND r/m8, imm8   | MI    | Valid       | Valid           | r/m8 AND imm8.
+        // REX + 80 /4 ib   | AND r/m8*, imm8  | MI    | Valid       | N.E.            | r/m8 AND imm8.
+        // 81 /4 iw         | AND r/m16, imm16 | MI    | Valid       | Valid           | r/m16 AND imm16.
+        // 81 /4 id         | AND r/m32, imm32 | MI    | Valid       | Valid           | r/m32 AND imm32.
+        // REX.W + 81 /4 id | AND r/m64, imm32 | MI    | Valid       | N.E.            | r/m64 AND imm32 sign extended to 64-bits.
+        // 83 /4 ib         | AND r/m16, imm8  | MI    | Valid       | Valid           | r/m16 AND imm8 (sign-extended).
+        // 83 /4 ib         | AND r/m32, imm8  | MI    | Valid       | Valid           | r/m32 AND imm8 (sign-extended).
+        // REX.W + 83 /4 ib | AND r/m64, imm8  | MI    | Valid       | N.E.            | r/m64 AND imm8 (sign-extended).
+        // 20 /r            | AND r/m8, r8     | MR    | Valid       | Valid           | r/m8 AND r8.
+        // REX + 20 /r      | AND r/m8*, r8*   | MR    | Valid       | N.E.            | r/m64 AND r8 (sign-extended).
+        // 21 /r            | AND r/m16, r16   | MR    | Valid       | Valid           | r/m16 AND r16.
+        // 21 /r            | AND r/m32, r32   | MR    | Valid       | Valid           | r/m32 AND r32.
+        // REX.W + 21 /r    | AND r/m64, r64   | MR    | Valid       | N.E.            | r/m64 AND r32.
+        {.type = InstructionType_64BIT, .opcode = 0x21, .rexType = RexByte_W, .modRMType = ModRMType_REG, .opTypes[0] = OpType_RM, .opTypes[1] = OpType_REG},
+        // 22 /r            | AND r8, r/m8     | RM    | Valid       | Valid           | r8 AND r/m8.
+        // REX + 22 /r      | AND r8*, r/m8*   | RM    | Valid       | N.E.            | r/m64 AND r8 (sign-extended).
+        // 23 /r            | AND r16, r/m16   | RM    | Valid       | Valid           | r16 AND r/m16.
+        // 23 /r            | AND r32, r/m32   | RM    | Valid       | Valid           | r32 AND r/m32.
+        // REX.W + 23 /r    | AND r64, r/m64   | RM    | Valid       | N.E.            | r64 AND r/m64.
+    },
+    [or_] = {
+        // Opcode           | Instruction     | Op/En  | 64-Bit Mode | Compat/Leg Mode | Description
+        // 0C ib            | OR AL, imm8     | I      | Valid       | Valid           | AL OR imm8.
+        // 0D iw            | OR AX, imm16    | I      | Valid       | Valid           | AX OR imm16.
+        // 0D id            | OR EAX, imm32   | I      | Valid       | Valid           | EAX OR imm32.
+        // REX.W + 0D id    | OR RAX, imm32   | I      | Valid       | N.E.            | RAX OR imm32 (sign-extended).
+        // 80 /1 ib         | OR r/m8, imm8   | MI     | Valid       | Valid           | r/m8 OR imm8.
+        // REX + 80 /1 ib   | OR r/m81, imm8  | MI     | Valid       | N.E.            | r/m8 OR imm8.
+        // 81 /1 iw         | OR r/m16, imm16 | MI     | Valid       | Valid           | r/m16 OR imm16.
+        // 81 /1 id         | OR r/m32, imm32 | MI     | Valid       | Valid           | r/m32 OR imm32.
+        // REX.W + 81 /1 id | OR r/m64, imm32 | MI     | Valid       | N.E.            | r/m64 OR imm32 (sign-extended).
+        // 83 /1 ib         | OR r/m16, imm8  | MI     | Valid       | Valid           | r/m16 OR imm8 (sign-extended).
+        // 83 /1 ib         | OR r/m32, imm8  | MI     | Valid       | Valid           | r/m32 OR imm8 (sign-extended).
+        // REX.W + 83 /1 ib | OR r/m64, imm8  | MI     | Valid       | N.E.            | r/m64 OR imm8 (sign-extended).
+        // 08 /r            | OR r/m8, r8     | MR     | Valid       | Valid           | r/m8 OR r8.
+        // REX + 08 /r      | OR r/m81, r81   | MR     | Valid       | N.E.            | r/m8 OR r8.
+        // 09 /r            | OR r/m16, r16   | MR     | Valid       | Valid           | r/m16 OR r16.
+        // 09 /r            | OR r/m32, r32   | MR     | Valid       | Valid           | r/m32 OR r32.
+        // REX.W + 09 /r    | OR r/m64, r64   | MR     | Valid       | N.E.            | r/m64 OR r64.
+        {.type = InstructionType_64BIT, .opcode = 0x09, .rexType = RexByte_W, .modRMType = ModRMType_REG, .opTypes[0] = OpType_RM, .opTypes[1] = OpType_REG},
+        // 0A /r            | OR r8, r/m8     | RM     | Valid       | Valid           | r8 OR r/m8.
+        // REX + 0A /r      | OR r81, r/m81   | RM     | Valid       | N.E.            | r8 OR r/m8.
+        // 0B /r            | OR r16, r/m16   | RM     | Valid       | Valid           | r16 OR r/m16.
+        // 0B /r            | OR r32, r/m32   | RM     | Valid       | Valid           | r32 OR r/m32.
+        // REX.W + 0B /r    | OR r64, r/m64   | RM     | Valid       | N.E.            | r64 OR r/m64.
     },
 };
 #pragma GCC diagnostic pop

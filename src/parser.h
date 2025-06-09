@@ -1,7 +1,7 @@
 #ifndef COMP_PARSER_NEW_H
 #define COMP_PARSER_NEW_H
 
-#define BIN_OPERATORS_COUNT 11
+#define BIN_OPERATORS_COUNT 13
 
 typedef struct Scope Scope;
 typedef Scope* ScopePtr;
@@ -244,6 +244,13 @@ typedef struct ParseContext {
     Hashmap(String, LibName) importLibraries;
     String currentImportLibraryName;
     String currentSymbolName; // TODO: scuffed solution, so i dont have to pass the symbol name to `parseExpression()`
+
+    // NOTE: this is a hack,
+    //       Some expressions dont need a semicolon at the end, but the check happens outside of `parseExpression`,
+    //       so we dont know what the expression type is. So we set this flag in the `parseLeaf` function,
+    //       to indicate that once we return from `parseExpression`, we should skip the check.
+    //       After the check should be cleared to false.
+    bool skipSemicolon;
 } ParseContext;
 
 typedef struct Operator {

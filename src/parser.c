@@ -162,8 +162,7 @@ Expression* makeFunctionCall(ParseContext* ctx, Arena* mem, Token next) {
         token = parseConsume(ctx);
         if(token.type == TokenType_RPAREN) break;
         if(token.type != TokenType_COMMA) {
-            printf("[ERROR] Failed in function parsing, expected comma or closing parenthesis, got: \"%s\"\n", TokenTypeStr[token.type]);
-            exit(EXIT_FAILURE);
+            ERROR_VA(token.loc, "[ERROR] Failed in function parsing, expected comma or closing parenthesis, got: \"%s\"\n", TokenTypeStr[token.type]);
         }
     }
     result->expr.FUNCTION_CALL.args = args;
@@ -365,9 +364,9 @@ Expression* makeFunctionLit(ParseContext* ctx, Arena* mem, bool isExtern) {
     // scope
     if(!isExtern) {
         parseGenericScopeInto(ctx, mem, functionScope);
+        ctx->skipSemicolon = TRUE;
     } else {
-        // NOTE: this is kind of a hack but if it works it twerks
-        parseCheckSemicolon(ctx);
+        ctx->skipSemicolon = FALSE;
     }
 
     return result;
@@ -584,6 +583,7 @@ Expression* makeStructLit(ParseContext* ctx, Arena* mem, Token next) {
         }
     }
 
+    ctx->skipSemicolon = TRUE;
     return result;
 }
 
@@ -649,6 +649,8 @@ Operator operators[BIN_OPERATORS_COUNT] = {
     {.type = TokenType_SUB, .presedence = 5},
     {.type = TokenType_MUL, .presedence = 10},
     {.type = TokenType_DIV, .presedence = 10},
+    {.type = TokenType_OR,  .presedence = 14},
+    {.type = TokenType_AND, .presedence = 14},
     {.type = TokenType_AS,  .presedence = 15},
 };
 
@@ -836,12 +838,8 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
 
                 assert(result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_TYPE, "Types during runtime not implemented yet");
 
-                // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
-                bool checkSemiColon = (
-                    result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_FUNCTION_LIT &&
-                    (result->statement.VAR_DECL_ASSIGN.expr->type != ExpressionType_TYPE && result->statement.VAR_DECL_ASSIGN.expr->expr.TYPE.type->type != ParsedTypeType_STRUCT)
-                );
-                if(checkSemiColon) parseCheckSemicolon(ctx);
+                if(!ctx->skipSemicolon) parseCheckSemicolon(ctx);
+                else ctx->skipSemicolon = FALSE;
                 // NOTE: this is yet another supid fix for a problem,
                 //       the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 //       maybe add to context as an easy fix
@@ -872,12 +870,8 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 result->statement.VAR_CONST.identifier = t.value;
                 result->statement.VAR_CONST.expr = parseExpression(ctx, mem);
 
-                // TODO: kinda nasty, some better way to indicate if semicolon needs to be checked
-                bool checkSemiColon = (
-                    result->statement.VAR_CONST.expr->type != ExpressionType_FUNCTION_LIT &&
-                    (result->statement.VAR_CONST.expr->type != ExpressionType_TYPE && result->statement.VAR_CONST.expr->expr.TYPE.type->type != ParsedTypeType_STRUCT)
-                );
-                if(checkSemiColon) parseCheckSemicolon(ctx);
+                if(!ctx->skipSemicolon) parseCheckSemicolon(ctx);
+                else ctx->skipSemicolon = FALSE;
                 // NOTE: this is yet another supid fix for a problem,
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
@@ -912,6 +906,8 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
         case TokenType_ADD:
         case TokenType_MUL:
         case TokenType_DIV:
+        case TokenType_AND:
+        case TokenType_OR:
         case TokenType_COMPARISON:
         case TokenType_ASSIGNMENT:
         case TokenType_AS:

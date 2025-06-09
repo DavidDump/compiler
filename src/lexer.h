@@ -22,6 +22,8 @@ typedef enum TokenType{
     TokenType_STRUCT,        // struct
 
     TokenType_TYPE,          // like u8
+
+    // punctuation
     TokenType_SEMICOLON,     // ;
     TokenType_COLON,         // :
     TokenType_RARROW,        // ->
@@ -52,6 +54,8 @@ typedef enum TokenType{
     TokenType_DOUBLECOLON,   // ::
     TokenType_INITIALIZER,   // :=
     TokenType_AS,            // as
+    TokenType_OR,            // |
+    TokenType_AND,           // &
 
     TokenType_IDENTIFIER,    // any string that is not a keyword
     TokenType_INT_LITERAL,   // 69

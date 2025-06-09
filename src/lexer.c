@@ -42,6 +42,8 @@ char* TokenTypeStr[TokenType_COUNT + 1] = {
     [TokenType_COMPARISON]    = "COMPARISON",
     [TokenType_IDENTIFIER]    = "IDENTIFIER",
     [TokenType_AS]            = "AS",
+    [TokenType_OR]            = "OR",
+    [TokenType_AND]           = "AND",
     [TokenType_INT_LITERAL]   = "INT_LITERAL",
     [TokenType_STRING_LIT]    = "STRING_LIT",
     [TokenType_BOOL_LITERAL]  = "BOOL_LITERAL",
@@ -204,6 +206,14 @@ Array(Token) Tokenize(Arena* mem, String source, String filename) {
             value.str = &source.str[i];
             value.length = 1;
             type  = TokenType_DIV;
+        } else if(c == '|') {
+            value.str = &source.str[i];
+            value.length = 1;
+            type  = TokenType_OR;
+        } else if(c == '&') {
+            value.str = &source.str[i];
+            value.length = 1;
+            type  = TokenType_AND;
         } else if(c == ';') {
             value.str = &source.str[i];
             value.length = 1;
