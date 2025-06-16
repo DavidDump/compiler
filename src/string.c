@@ -135,9 +135,9 @@ String StringFromU64(Arena* mem, u64 value) {
     result.str = arena_alloc(mem, digits.size);
     result.length = digits.size;
 
-    for(s64 i = (s64)digits.size; i >= 0; --i) {
+    for(u64 i = 0; i < digits.size; ++i) {
         u8 digit = digits.data[i];
-        result.str[digits.size - i] = digit;
+        result.str[digits.size - i - 1] = digit;
     }
 
     free(digits.data);

@@ -172,12 +172,12 @@ String TypeToString(Arena* mem, TypeInfo* typeInfo) {
             TypeInfo* elementType = typeInfo->arrayInfo.elementType;
             bool isDynamic = typeInfo->arrayInfo.isDynamic;
 
-            // u64[12]
+            // u64[12] elementStr.length + 2 + sizeDigitsCount
             // u64[...]
 
             String elementStr = TypeToString(mem, elementType);
             String arraySizeStr = {0};
-            u64 totalLen = 2; // NOTE: opening and closing square bracket chracters
+            u64 totalLen = elementStr.length + 2; // NOTE: opening and closing square bracket characters, plus elementLenght
             if(isDynamic) {
                 totalLen += 3; // NOTE: three dots, '...' characters
             } else {
