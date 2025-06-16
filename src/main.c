@@ -155,6 +155,7 @@ int main(int argc, char** argv){
         printf("[ERROR] unsupported target format: "STR_FMT"\n", STR_PRINT(format));
         exit(EXIT_FAILURE);
     }
+    printf("Finished writing: "STR_FMT"\n", STR_PRINT(outFilepath));
 
     arena_free(&readFileMem);
     exit(EXIT_SUCCESS);

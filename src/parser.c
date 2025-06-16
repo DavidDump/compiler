@@ -597,7 +597,7 @@ Expression* makeStructLit(ParseContext* ctx, Arena* mem, Token next) {
                 initializer.id = next.value;
                 next = parseConsume(ctx); // equals
                 if(next.type != TokenType_ASSIGNMENT) {
-                    ERROR_VA(next.loc, "equals should be here, but got: %s", ExpressionTypeStr[next.type]);
+                    ERROR_VA(next.loc, "Equals should be here, but got: %s", ExpressionTypeStr[next.type]);
                 }
                 initializer.expr = parseExpression(ctx, mem);
 
@@ -924,7 +924,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
 
                 next = parseConsume(ctx); // int
                 if(next.type != TokenType_INT_LITERAL) {
-                    ERROR_VA(next.loc, "array has to be indexed with a integer, found: "STR_FMT, STR_PRINT(next.value));
+                    ERROR_VA(next.loc, "Array has to be indexed with a integer, found: "STR_FMT, STR_PRINT(next.value));
                 }
 
                 u64 index = StringToU64(next.value);
@@ -932,12 +932,12 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
 
                 next = parseConsume(ctx); // ]
                 if(next.type != TokenType_RBRACKET) {
-                    ERROR_VA(next.loc, "opening square bracket needs a closing pair, found: "STR_FMT, STR_PRINT(next.value));
+                    ERROR_VA(next.loc, "Opening square bracket needs a closing pair, found: "STR_FMT, STR_PRINT(next.value));
                 }
 
                 next = parseConsume(ctx); // =
                 if(next.type != TokenType_ASSIGNMENT) {
-                    ERROR_VA(next.loc, "array access needs to be followed by an assignment, found: "STR_FMT, STR_PRINT(next.value));
+                    ERROR_VA(next.loc, "Array access needs to be followed by an assignment, found: "STR_FMT, STR_PRINT(next.value));
                 }
 
                 result->statement.ARRAY_REASSIGN.expr = parseExpression(ctx, mem);
@@ -945,7 +945,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 // TODO: all the complicated logic from `VAR_DECL_ASSIGN` and `VAR_CONST` sould also be here but CBA right now
                 parseCheckSemicolon(ctx);
             } else {
-                ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
+                ERROR(next.loc, "Identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }
         } break;
         // NOTE: later when added `using` and `struct` this will be a valid statement begin token

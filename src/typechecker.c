@@ -598,7 +598,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                     Location loc = {0}; // TODO: fix loc
                     ERROR_VA(
                         loc,
-                        "provided argument number %llu, of function "STR_FMT" has incompatible type \""STR_FMT"\", with expected type \""STR_FMT"\"",
+                        "Provided argument number %llu, of function \""STR_FMT"\" has incompatible type \""STR_FMT"\", with expected type \""STR_FMT"\"",
                         i + 1,
                         STR_PRINT(id),
                         STR_PRINT(TypeToString(mem, providedArgType->typeInfo)),
