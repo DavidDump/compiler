@@ -1,0 +1,16 @@
+#library "kernel32.dll";
+ExitProcess :: #extern (code: s64);
+
+foo :: (a: u64, b: u64) -> u64 {
+    tmp : u64 = 10;
+    a = a + tmp;
+    b = b + tmp;
+    return a + b;
+}
+
+main :: () -> u8 {
+    buffer: u8[255];
+    buffer[0] = 1;
+    buffer[1] = 2;
+    return foo(buffer[0], buffer[1]) as u8;
+}
