@@ -1,5 +1,5 @@
 // Example code for printing hello world using win32 API
-STD_HANDLE_STDOUT :: -12;
+STD_HANDLE_STDOUT :: -11;
 
 bar :: (name: s64) -> u64 {
     go := name + 1;
