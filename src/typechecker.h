@@ -117,6 +117,10 @@ typedef struct TypecheckedExpression {
             Token variableName;
             Token fieldName;
         } FIELD_ACCESS;
+        struct {
+            Token id;
+            u64 index; // TODO: make this into and Expression, so that you can do more complicated indexing
+        } ARRAY_ACCESS;
     } expr;
     // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
     TypeInfo* typeInfo;
@@ -132,10 +136,12 @@ defArray(TypechekedConditionalBlock);
 typedef struct TypecheckedStatement {
     StatementType type;
     union {
-        // NOTE: VAR_DECL_ASSIGN and VAR_REASSIGN got combined into VAR_ACCESS
+        // NOTE: VAR_DECL_ASSIGN, VAR_REASSIGN and ARRAY_REASSIGN got combined into VAR_ACCESS
         struct {
             String identifier;
             TypecheckedExpression* expr;
+            bool isArray;
+            u64 index;
         } VAR_ACCESS;
         struct {
             TypecheckedExpression* expr;

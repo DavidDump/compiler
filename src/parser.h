@@ -84,6 +84,7 @@ typedef enum ExpressionType {
     ExpressionType_TYPE,              // u8 OR struct { ... } OR symbol
     ExpressionType_STRUCT_LIT,        // Vec2{1, 2} OR Vec2{.x = 1, .y = 2} OR {1, 2} OR {.x = 1, .y = 2}
     ExpressionType_FIELD_ACCESS,      // vec.x
+    ExpressionType_ARRAY_ACCESS,      // arr[0]
 } ExpressionType;
 
 extern char* ExpressionTypeStr[];
@@ -147,6 +148,10 @@ typedef struct Expression {
             Token variableName;
             Token fieldName;
         } FIELD_ACCESS;
+        struct ARRAY_ACCESS {
+            Token id;
+            u64 index; // TODO: make this into and Expression, so that you can do more complicated indexing
+        } ARRAY_ACCESS;
     } expr;
 } Expression;
 
@@ -156,6 +161,7 @@ typedef enum StatementType {
     StatementType_VAR_DECL,
     StatementType_VAR_DECL_ASSIGN,
     StatementType_VAR_REASSIGN,
+    StatementType_ARRAY_REASSIGN,
     StatementType_VAR_CONST,
     StatementType_RET,
     StatementType_IF,
@@ -199,7 +205,6 @@ typedef struct ConditionalBlock {
     GenericScope* scope;
 } ConditionalBlock;
 
-// not really an Statement anymore, should be renamed to Statement
 typedef struct Statement {
     StatementType type;
     union {
@@ -216,6 +221,11 @@ typedef struct Statement {
             String identifier;
             Expression* expr;
         } VAR_REASSIGN;
+        struct ARRAY_REASSIGN {
+            String identifier;
+            u64 index;
+            Expression* expr;
+        } ARRAY_REASSIGN;
         struct VAR_CONST {
             String identifier;
             Expression* expr;

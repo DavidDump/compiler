@@ -17,6 +17,7 @@ char* ExpressionTypeStr[] = {
     [ExpressionType_TYPE]              = "TYPE",
     [ExpressionType_STRUCT_LIT]        = "STRUCT_LIT",
     [ExpressionType_FIELD_ACCESS]      = "FIELD_ACCESS",
+    [ExpressionType_ARRAY_ACCESS]      = "ARRAY_ACCESS",
 };
 
 char* StatementTypeStr[StatementType_COUNT + 1] = {
@@ -162,7 +163,7 @@ Expression* makeFunctionCall(ParseContext* ctx, Arena* mem, Token next) {
         token = parseConsume(ctx);
         if(token.type == TokenType_RPAREN) break;
         if(token.type != TokenType_COMMA) {
-            ERROR_VA(token.loc, "[ERROR] Failed in function parsing, expected comma or closing parenthesis, got: \"%s\"\n", TokenTypeStr[token.type]);
+            ERROR_VA(token.loc, "Failed in function parsing, expected comma or closing parenthesis, got: \"%s\"", TokenTypeStr[token.type]);
         }
     }
     result->expr.FUNCTION_CALL.args = args;
@@ -465,7 +466,6 @@ ParsedType* parseType(ParseContext* ctx, Arena* mem) {
             parseConsume(ctx); // *
             isPointer = TRUE;
         }
-        typeInfo->isPointer = isPointer;
 
         // Determine if type is a array
         next = parsePeek(ctx, 0);
@@ -488,11 +488,17 @@ ParsedType* parseType(ParseContext* ctx, Arena* mem) {
                 ERROR(next.loc, "Expected closing pair to square bracket ']'");
             }
 
-            typeInfo->symbolType = TYPE_ARRAY;
+            TypeInfo* elementType = arena_alloc(mem, sizeof(TypeInfo));
+            elementType->symbolType = type;
+            elementType->isPointer = isPointer;
+
+            arrayInfo.elementType = elementType;
             typeInfo->arrayInfo = arrayInfo;
-            // TODO: this is not done, the element type is unknown to the array
+            typeInfo->symbolType = TYPE_ARRAY;
+            // TODO: we dont support pointers to arrays, that would need to be parsed here
         } else {
             typeInfo->symbolType = type;
+            typeInfo->isPointer = isPointer;
         }
 
         result->type = ParsedTypeType_SIMPLE;
@@ -510,6 +516,33 @@ Expression* makeType(ParseContext* ctx, Arena* mem) {
 
     ctx->index--; // NOTE: rewind, to "uncomsume" the next token;
     result->expr.TYPE.type = parseType(ctx, mem);
+
+    return result;
+}
+
+Expression* makeArrayAccess(ParseContext* ctx, Arena* mem, Token next) {
+    Expression* result = arena_alloc(mem, sizeof(Expression));
+    result->type = ExpressionType_ARRAY_ACCESS;
+    result->expr.ARRAY_ACCESS.id = next;
+
+    // NOTE: this check is kind of redundant, as the caller of this function already checked the syntax up to here
+    next = parseConsume(ctx);
+    if(next.type != TokenType_LBRACKET) {
+        ERROR_VA(next.loc, "Array indexing needs to begin with opening bracket `[`, found: "STR_FMT, STR_PRINT(next.value));
+    }
+
+    next = parseConsume(ctx);
+    if(next.type != TokenType_INT_LITERAL) {
+        printf("[NOTE] Binary operations in array index not supported for now, will be added in the future.\n");
+        ERROR_VA(next.loc, "Array need to be indexed using integers, found: "STR_FMT, STR_PRINT(next.value));
+    }
+    u64 index = StringToU64(next.value);
+    result->expr.ARRAY_ACCESS.index = index;
+
+    next = parseConsume(ctx);
+    if(next.type != TokenType_RBRACKET) {
+        ERROR_VA(next.loc, "Array indexing needs to end with closing bracket `]`, found: "STR_FMT, STR_PRINT(next.value));
+    }
 
     return result;
 }
@@ -609,6 +642,11 @@ bool isTypeLit(Token next) {
     return (next.type == TokenType_TYPE || next.type == TokenType_STRUCT);
 }
 
+bool isArrayAccess(ParseContext* ctx, Token next) {
+    Token after = parsePeek(ctx, 0);
+    return (next.type == TokenType_IDENTIFIER && after.type == TokenType_LBRACKET);
+}
+
 Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     Token next = parseConsume(ctx);
 
@@ -619,6 +657,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isStructLit(ctx, next))              return makeStructLit(ctx, mem, next);
     if(isStructFieldAccess(ctx, next))      return makeStructFieldAccess(ctx, mem, next);
     if(isTypeLit(next))                     return makeType(ctx, mem);
+    if(isArrayAccess(ctx, next))            return makeArrayAccess(ctx, mem, next);
     if(next.type == TokenType_HASHTAG)      return makeCompInstructionLeaf(ctx, mem);
     if(next.type == TokenType_BOOL_LITERAL) return makeBool(mem, next);
     if(next.type == TokenType_STRING_LIT)   return makeString(mem, next);
@@ -827,6 +866,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 result->statement.VAR_REASSIGN.identifier = t.value;
                 result->statement.VAR_REASSIGN.expr = parseExpression(ctx, mem);
 
+                // TODO: all the complicated logic from `VAR_DECL_ASSIGN` and `VAR_CONST` sould also be here but CBA right now
                 parseCheckSemicolon(ctx);
             } else if(next.type == TokenType_INITIALIZER) {
                 parseConsume(ctx); // :=
@@ -876,6 +916,34 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
                 // the parent of the function scope never gets set because we dont have acess to it in expression parsing
                 // maybe add to context as an easy fix
                 if(result->statement.VAR_CONST.expr->type == ExpressionType_FUNCTION_LIT) result->statement.VAR_CONST.expr->expr.FUNCTION_LIT.scope->parent = containingScope;
+            } else if(next.type == TokenType_LBRACKET) {
+                parseConsume(ctx); // [
+
+                result->type = StatementType_ARRAY_REASSIGN;
+                result->statement.ARRAY_REASSIGN.identifier = t.value;
+
+                next = parseConsume(ctx); // int
+                if(next.type != TokenType_INT_LITERAL) {
+                    ERROR_VA(next.loc, "array has to be indexed with a integer, found: "STR_FMT, STR_PRINT(next.value));
+                }
+
+                u64 index = StringToU64(next.value);
+                result->statement.ARRAY_REASSIGN.index = index;
+
+                next = parseConsume(ctx); // ]
+                if(next.type != TokenType_RBRACKET) {
+                    ERROR_VA(next.loc, "opening square bracket needs a closing pair, found: "STR_FMT, STR_PRINT(next.value));
+                }
+
+                next = parseConsume(ctx); // =
+                if(next.type != TokenType_ASSIGNMENT) {
+                    ERROR_VA(next.loc, "array access needs to be followed by an assignment, found: "STR_FMT, STR_PRINT(next.value));
+                }
+
+                result->statement.ARRAY_REASSIGN.expr = parseExpression(ctx, mem);
+
+                // TODO: all the complicated logic from `VAR_DECL_ASSIGN` and `VAR_CONST` sould also be here but CBA right now
+                parseCheckSemicolon(ctx);
             } else {
                 ERROR(next.loc, "identifier can only be followed by one of the following: `:`, `::`, `:=`, `=`");
             }

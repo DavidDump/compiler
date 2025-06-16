@@ -14,9 +14,9 @@ void StatementPrint(Statement* node, u64 indent);
 
 static Arena debugArena = {0};
 
-void TypePrint(TypeInfo* type, u64 indent) {
+void TypePrint(TypeInfo* type) {
     String typeStr = TypeToString(&debugArena, type);
-    genPrintHelper(" "STR_FMT, STR_PRINT(typeStr));
+    printf(" "STR_FMT, STR_PRINT(typeStr));
 }
 
 TypeInfo* DebugParsedTypeToType(ParsedType* type) {
@@ -69,7 +69,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             genPrintHelper("FUNCTION_LIT: {\n");
             // genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    type: ");
-            TypePrint(retType, indent);
+            TypePrint(retType);
             printf(",\n");
 
             // args
@@ -80,7 +80,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
                     TypeInfo* argType = DebugParsedTypeToType(args.data[i].type);
 
                     genPrintHelper("        {id: "STR_FMT", type: ", STR_PRINT(argId));
-                    TypePrint(argType, indent);
+                    TypePrint(argType);
                     printf("},\n");
                 }
                 genPrintHelper("    ],\n");
@@ -124,7 +124,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
         case ExpressionType_TYPE: {
             ParsedType* type = expr->expr.TYPE.type;
             TypeInfo* typeInfo = DebugParsedTypeToType(type);
-            TypePrint(typeInfo, indent);
+            TypePrint(typeInfo);
         } break;
         case ExpressionType_STRUCT_LIT: {
             if(expr->expr.STRUCT_LIT.idProvided) {
@@ -163,6 +163,11 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             String fieldName = expr->expr.FIELD_ACCESS.fieldName.value;
             printf(STR_FMT"."STR_FMT, STR_PRINT(variableName), STR_PRINT(fieldName));
         } break;
+        case ExpressionType_ARRAY_ACCESS: {
+            String id = expr->expr.ARRAY_ACCESS.id.value;
+            u64 index = expr->expr.ARRAY_ACCESS.index;
+            printf(STR_FMT"[%llu]", STR_PRINT(id), index);
+        } break;
     }
 }
 
@@ -171,7 +176,7 @@ void VariablePrint(String id, Expression* expr, TypeInfo* type) {
     genPrintHelper("VAR_DECL_ASSIGN: (this is accually a lie it may not be decl assign) {\n");
     genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
     genPrintHelper("    type: ");
-    TypePrint(type, 0);
+    TypePrint(type);
     printf(",\n");
     if(expr) {
         genPrintHelper("    expr:");
@@ -193,7 +198,7 @@ void StatementPrint(Statement* node, u64 indent) {
             genPrintHelper("VAR_DECL: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    type: ");
-            TypePrint(type, indent);
+            TypePrint(type);
             printf(",\n");
             genPrintHelper("}\n");
         } break;
@@ -205,7 +210,7 @@ void StatementPrint(Statement* node, u64 indent) {
             genPrintHelper("VAR_DECL_ASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    type: ");
-            TypePrint(type, indent);
+            TypePrint(type);
             printf(",\n");
             genPrintHelper("    expr:");
             ExpressionPrint(expr, indent + 1);
@@ -218,6 +223,19 @@ void StatementPrint(Statement* node, u64 indent) {
 
             genPrintHelper("VAR_REASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    expr:");
+            ExpressionPrint(expr, indent + 1);
+            printf(",\n");
+            genPrintHelper("}\n");
+        } break;
+        case StatementType_ARRAY_REASSIGN: {
+            String id = node->statement.ARRAY_REASSIGN.identifier;
+            Expression* expr = node->statement.ARRAY_REASSIGN.expr;
+            u64 index = node->statement.ARRAY_REASSIGN.index;
+
+            genPrintHelper("VAR_REASSIGN: {\n");
+            genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            genPrintHelper("    index: %llu,\n", index);
             genPrintHelper("    expr:");
             ExpressionPrint(expr, indent + 1);
             printf(",\n");

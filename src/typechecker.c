@@ -387,6 +387,9 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
         case ExpressionType_FIELD_ACCESS: {
             UNIMPLEMENTED("accessing struct literal fields in a constant declaration");
         } break;
+        case ExpressionType_ARRAY_ACCESS: {
+            UNIMPLEMENTED("indexing arrays in a constant declaration");
+        } break;
     }
 
     return result;
@@ -900,6 +903,25 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
             TypecheckedField field = structType->structInfo.fields.data[foundIndex];
             result->typeInfo = field.type;
         } break;
+        case ExpressionType_ARRAY_ACCESS: {
+            Token id = expr->expr.ARRAY_ACCESS.id;
+            // u64 index = expr->expr.ARRAY_ACCESS.index;
+
+            TypeResult res = findVariableType(scope, id.value);
+            if(res.err) ERROR_VA(id.loc, "Undeclared variable: "STR_FMT, STR_PRINT(id.value));
+            TypeInfo* arrayType = res.typeInfo;
+            assertf(arrayType->symbolType == TYPE_ARRAY, "Expected type of array here, got: "STR_FMT, STR_PRINT(TypeToString(mem, arrayType)));
+
+            TypeInfo* elementType = arrayType->arrayInfo.elementType;
+            if(
+                (TypeIsInt(expected) && TypeIsInt(elementType)) ||
+                (TypeIsFloat(expected) && TypeIsFloat(elementType))
+            ) {
+                result->typeInfo = expected;
+            } else {
+                result->typeInfo = elementType;
+            }
+        } break;
     }
 
     return result;
@@ -1116,6 +1138,7 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
                 typechecked.type = statement->type;
                 typechecked.node.VAR_ACCESS.identifier = id;
                 typechecked.node.VAR_ACCESS.expr = inferedType;
+                typechecked.node.VAR_ACCESS.isArray = FALSE;
                 ArrayAppend(result->statements, typechecked);
             } break;
             case StatementType_VAR_REASSIGN: {
@@ -1129,7 +1152,7 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
                     ERROR_VA(loc, "Trying to assign to an undefined variable: "STR_FMT, STR_PRINT(id));
                 }
                 TypeInfo* expectedType = expectedRes.typeInfo;
-                TypecheckedExpression* inferedType  = typecheckExpression(mem, expr, result, &constantsInThisScope, expectedType);
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, expectedType);
 
                 if(!TypeMatch(expectedType, inferedType->typeInfo)) {
                     Location loc = {0}; // TODO: fix loc
@@ -1145,7 +1168,44 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
                 typechecked.type = statement->type;
                 typechecked.node.VAR_ACCESS.identifier = id;
                 typechecked.node.VAR_ACCESS.expr = inferedType;
+                typechecked.node.VAR_ACCESS.isArray = FALSE;
                 ArrayAppend(result->statements, typechecked);
+                // TODO: StatementType_ARRAY_REASSIGN and StatementType_VAR_REASSIGN can probably be collapsed into one case eventually
+            } break;
+            case StatementType_ARRAY_REASSIGN: {
+                String id = statement->statement.ARRAY_REASSIGN.identifier;
+                Expression* expr = statement->statement.ARRAY_REASSIGN.expr;
+                u64 index = statement->statement.ARRAY_REASSIGN.index;
+
+                // find variable
+                TypeResult expectedRes = findVariableType(result, id);
+                if(expectedRes.err) {
+                    Location loc = {0}; // TODO: fix loc
+                    ERROR_VA(loc, "Trying to assign to an undefined variable: "STR_FMT, STR_PRINT(id));
+                }
+                TypeInfo* varType = expectedRes.typeInfo;
+                assertf(varType->symbolType == TYPE_ARRAY, "can only index array types, found: "STR_FMT, STR_PRINT(TypeToString(mem, varType)));
+                TypeInfo* expectedType = varType->arrayInfo.elementType;
+                TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, expectedType);
+            
+                if(!TypeMatch(expectedType, inferedType->typeInfo)) {
+                    Location loc = {0}; // TODO: fix loc
+                    ERROR_VA(
+                        loc,
+                        "Type mismatch in assignment, expected: "STR_FMT", but got: "STR_FMT,
+                        STR_PRINT(TypeToString(mem, expectedType)),
+                        STR_PRINT(TypeToString(mem, inferedType->typeInfo))
+                    );
+                }
+
+                TypecheckedStatement typechecked = {0};
+                typechecked.type = statement->type;
+                typechecked.node.VAR_ACCESS.identifier = id;
+                typechecked.node.VAR_ACCESS.expr = inferedType;
+                typechecked.node.VAR_ACCESS.isArray = TRUE;
+                typechecked.node.VAR_ACCESS.index = index;
+                ArrayAppend(result->statements, typechecked);
+                // TODO: StatementType_ARRAY_REASSIGN and StatementType_VAR_REASSIGN can probably be collapsed into one case eventually
             } break;
             case StatementType_RET: {
                 Expression* expr = statement->statement.RET.expr;

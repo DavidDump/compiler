@@ -755,6 +755,7 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         } else if(StringEqualsCstr(operator, "as")) {
             // UNIMPLEMENTED("codegen for cast");
             printf("[WARNING] as op not accually finished\n");
+            gen_x86_64_expression(ctx, lhs, localScope);
         } else if(StringEqualsCstr(operator, "&")) {
             gen_x86_64_expression(ctx, rhs, localScope);
             genPush(ctx, localScope, RAX);
@@ -798,6 +799,24 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
             gen_DataInReg(ctx, RAX, variableName);
         } else {
             genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, varLocationRes.value + structFieldOffsetRes.result)));
+        }
+    } else if(expr->type == ExpressionType_ARRAY_ACCESS) {
+        String id = expr->expr.ARRAY_ACCESS.id.value;
+        u64 index = expr->expr.ARRAY_ACCESS.index;
+
+        SymbolLocationResult res = findSymbolLocation(localScope, id);
+        if(res.err) UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(id));
+
+        // NOTE: expr->typeInfo should not be used to figure out the element type of the array,
+        //       as it doesnt store the true type, only the type that was used for coercing during typechecking
+        //       there should be a function to get the TypeInfo of the array by the id
+        //       so that we have access to all the true type info
+        u64 elementSize = TypeToByteSize(expr->typeInfo);
+        if(res.inDataSection) {
+            UNIMPLEMENTED("Array in the data section not implemented");
+        } else {
+            // mov rax, [rbp + res.value + elementSize * index]
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value + elementSize * index)));
         }
     } else {
         UNREACHABLE_VA("Unknown StatementType in expression generator: %s", ExpressionTypeStr[expr->type]);
@@ -886,9 +905,12 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
         } break;
 
         case StatementType_VAR_REASSIGN:
+        case StatementType_ARRAY_REASSIGN:
         case StatementType_VAR_DECL_ASSIGN: {
             String id = statement.node.VAR_ACCESS.identifier;
             TypecheckedExpression* expr = statement.node.VAR_ACCESS.expr;
+            bool isArray = statement.node.VAR_ACCESS.isArray;
+            u64 index = statement.node.VAR_ACCESS.index;
 
             SymbolLocationResult res = findSymbolLocation(genScope, id);
             if(res.err) UNREACHABLE_VA("local variable not defined: "STR_FMT, STR_PRINT(id));
@@ -900,14 +922,15 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
                 //       after typechecking an expression like:
                 //       `foo := vec2{1, 2};`
                 //       should be rewritten to look like this
-                //       ```
+                //       ```asm
                 //       ; foo: vec2;
+                //       sub rsp, sizeof(vec2) ; the size of all the variables gets added up ans subtracted all at once at the begining of the function
                 //       ; foo.x = 1;
                 //       mov rax, 1
-                //       mov [rpb - 8 + 0], rax
+                //       mov [rpb - sizeof(vec2) + offset(vec2, x)], rax
                 //       ; foo.y = 2;
                 //       mov rax, 2
-                //       mov [rpb - 8 + 0], rax
+                //       mov [rpb - sizeof(vec2) + offset(vec2, y)], rax
                 //       ```
                 //       codegen currently stores the result of the expression in `rax`,
                 //       so literals that are larger than a 64-bit register cannot work with this scheme
@@ -941,7 +964,14 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
                 }
             } else {
                 gen_x86_64_expression(ctx, expr, genScope);
-                genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
+                if(isArray) {
+                    u64 elementSize = TypeToByteSize(expr->typeInfo);
+                    // mov [rbp + res.value + elementSize * index], rax
+                    genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value + elementSize * index), OP_REG(RAX)));
+                } else {
+                    // mov [rbp + res.value], rax
+                    genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));
+                }
             }
         } break;
         case StatementType_RET: {
@@ -1215,10 +1245,10 @@ GenContext gen_x86_64_bytecode(Arena* mem, TypecheckedScope* scope) {
 
         u32 nextInstructonAddr = offset + 4;
         u8* targetAddr = &ctx.code.data[offset];
-        *(u32*)targetAddr += addr - nextInstructonAddr;
+        *(u32*)targetAddr = addr - nextInstructonAddr;
     }
 
     return ctx;
 }
 
-// TODO: make sure to preserve non volitile register when entering a function
+// TODO: make sure to preserve non volitile registers when entering a function
