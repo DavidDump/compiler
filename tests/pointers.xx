@@ -1,0 +1,64 @@
+STD_HANDLE_STDIN  :: -10;
+STD_HANDLE_STDOUT :: -11;
+STD_HANDLE_STDERR :: -12;
+
+// allocation type flags
+MEM_COMMIT      :: 4096;
+MEM_RESERVE     :: 8192;
+MEM_RESET       :: 524288;
+MEM_RESET_UNDO  :: 16777216;
+MEM_LARGE_PAGES :: 536870912;
+MEM_PHYSICAL    :: 4194304;
+MEM_TOP_DOWN    :: 1048576;
+MEM_WRITE_WATCH :: 2097152;
+
+// permissions flags
+PAGE_EXECUTE           :: 16;
+PAGE_EXECUTE_READ      :: 32;
+PAGE_EXECUTE_READWRITE :: 64;
+PAGE_EXECUTE_WRITECOPY :: 128;
+PAGE_NOACCESS          :: 1;
+PAGE_READONLY          :: 2;
+PAGE_READWRITE         :: 4;
+PAGE_WRITECOPY         :: 8;
+PAGE_TARGETS_INVALID   :: 1073741824; // This flag is not supported by the VirtualProtect or CreateFileMapping functions.
+PAGE_TARGETS_NO_UPDATE :: 1073741824;
+PAGE_GUARD             :: 256;
+PAGE_NOCACHE           :: 512;
+PAGE_WRITECOMBINE      :: 1024;
+
+#library "kernel32.dll";
+GetStdHandle :: #extern (handle: s64) -> s64;
+WriteFile    :: #extern (handle: s64, data: string, dataLen: u64, bytesRead: u64*, overlapped: s64);
+ExitProcess  :: #extern (code: s64);
+VirtualAlloc :: #extern (base: u64, size_bytes: u64, allocationType: u32, permissions: u32) -> u8*;
+
+foo :: (number: u8) -> u8 {
+    buffer: u8[255];
+
+    buffer[37] = number;
+    return buffer[37];
+}
+
+main :: () -> u8 {
+    NULL : u64 = 0;
+    buffer := VirtualAlloc(NULL, 255, (MEM_COMMIT | MEM_RESERVE) as u32, PAGE_READWRITE as u32);
+
+    // @(buffer + 0) = 0;
+    // @(buffer + 1) = 1;
+    // @(buffer + 2) = 2;
+    // @(buffer + 3) = 3;
+
+    buffer[10] = 11;
+    buffer[buffer[10]] = 12;
+    buffer[buffer[buffer[10]]] = foo(100);
+
+    return buffer[12];
+}
+
+// memset :: (target: $T*, value: T, size: u64) {
+//     loop size {
+//         @target = value;
+//         target += sizeof(T);
+//     }
+// }
