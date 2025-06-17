@@ -649,7 +649,7 @@ Expression* parseLeaf(ParseContext* ctx, Arena* mem) {
     if(isFunctionCall(ctx, next))           return makeFunctionCall(ctx, mem, next);
     if(parseIsNumber(next))                 return makeNumber(ctx, mem, next);
     if(isUnaryOperator(next))               return makeUnary(ctx, mem, next);
-    if(isStructLit(ctx, next))              return makeStructLit(ctx, mem, next);
+    // if(isStructLit(ctx, next))              return makeStructLit(ctx, mem, next);
     if(isStructFieldAccess(ctx, next))      return makeStructFieldAccess(ctx, mem, next);
     if(isTypeLit(next))                     return makeType(ctx, mem);
     if(isArrayAccess(ctx, next))            return makeArrayAccess(ctx, mem, next);
