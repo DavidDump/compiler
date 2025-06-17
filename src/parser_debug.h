@@ -15,8 +15,12 @@ void StatementPrint(Statement* node, u64 indent);
 static Arena debugArena = {0};
 
 void TypePrint(TypeInfo* type) {
-    String typeStr = TypeToString(&debugArena, type);
-    printf(" "STR_FMT, STR_PRINT(typeStr));
+    if(type == NULL || type->symbolType == TYPE_NONE) {
+        printf(" INFERRED");
+    } else {
+        String typeStr = TypeToString(&debugArena, type);
+        printf(" "STR_FMT, STR_PRINT(typeStr));
+    }
 }
 
 TypeInfo* DebugParsedTypeToType(ParsedType* type) {
@@ -66,8 +70,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             Array(FunctionArg) args = expr->expr.FUNCTION_LIT.typeInfo->args;
             GenericScope* scope = expr->expr.FUNCTION_LIT.scope;
 
-            genPrintHelper("FUNCTION_LIT: {\n");
-            // genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
+            printf("FUNCTION_LIT: {\n");
             genPrintHelper("    type: ");
             TypePrint(retType);
             printf(",\n");
@@ -98,7 +101,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             } else {
                 genPrintHelper("    statements: [],\n");
             }
-            genPrintHelper("}\n");
+            genPrintHelper("}");
         } break;
         case ExpressionType_FUNCTION_CALL: {
             String id = expr->expr.FUNCTION_CALL.identifier;
@@ -119,7 +122,7 @@ void ExpressionPrint(Expression* expr, u64 indent) {
             } else {
                 genPrintHelper("    args: [],\n");
             }
-            genPrintHelper("}\n");
+            genPrintHelper("}");
         } break;
         case ExpressionType_TYPE: {
             ParsedType* type = expr->expr.TYPE.type;
@@ -235,10 +238,11 @@ void StatementPrint(Statement* node, u64 indent) {
             Expression* expr = node->statement.ARRAY_REASSIGN.expr;
             Expression* index = node->statement.ARRAY_REASSIGN.index;
 
-            genPrintHelper("VAR_REASSIGN: {\n");
+            genPrintHelper("ARRAY_REASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
             genPrintHelper("    index:");
             ExpressionPrint(index, indent + 1);
+            printf(",\n");
             genPrintHelper("    expr:");
             ExpressionPrint(expr, indent + 1);
             printf(",\n");
@@ -290,8 +294,11 @@ void StatementPrint(Statement* node, u64 indent) {
                 } else {
                     genPrintHelper("    statements: [],\n");
                 }
-                genPrintHelper("}\n");
+                genPrintHelper("}");
             }
+
+            if(blocks.size == 0) printf("\n");
+            else printf(" ");
 
             // else if blocks
             for(u64 i = 1; i < blocks.size; ++i) {
@@ -299,7 +306,7 @@ void StatementPrint(Statement* node, u64 indent) {
                 Expression* expr = block.expr;
                 GenericScope* scope = block.scope;
 
-                genPrintHelper("ELSE IF: {\n");
+                printf("ELSE IF: {\n");
                 genPrintHelper("    expr:");
                 ExpressionPrint(expr, indent + 1);
                 printf(",\n");
@@ -314,11 +321,15 @@ void StatementPrint(Statement* node, u64 indent) {
                 } else {
                     genPrintHelper("    statements: [],\n");
                 }
-                genPrintHelper("}\n");
+                genPrintHelper("}");
             }
+
+            if(!hasElse) printf("\n");
+            else printf(" ");
 
             if(hasElse) {
                 // statements
+                printf("ELSE: {\n");
                 if(elze->statements.size > 0) {
                     genPrintHelper("    statements: [\n");
                     for(u64 i = 0; i < elze->statements.size; ++i) {
@@ -355,6 +366,7 @@ void StatementPrint(Statement* node, u64 indent) {
         case StatementType_EXPRESSION: {
             Expression* expr = node->statement.EXPRESSION.expr;
             ExpressionPrint(expr, indent);
+            printf("\n");
         } break;
         case StatementType_DIRECTIVE: break;
     }
@@ -382,8 +394,12 @@ void GlobalScopePrint(GlobalScope* scope, u64 indent) {
     HashmapFor(String, ExpressionPtr, it, &scope->constants) {
         String id = it->key;
         Expression* expr = it->value;
-        genPrintHelper("VAR_CONST: "STR_FMT, STR_PRINT(id));
+        genPrintHelper("VAR_CONST: {\n");
+        genPrintHelper("    name: "STR_FMT",\n", STR_PRINT(id));
+        genPrintHelper("    expr: ");
         ExpressionPrint(expr, indent + 1);
+        printf(",\n");
+        genPrintHelper("}\n");
     }
 }
 
@@ -394,6 +410,7 @@ void GenericScopePrint(GenericScope* scope, u64 indent) {
         Expression* expr = it->value;
         genPrintHelper("VAR_CONST: "STR_FMT, STR_PRINT(id));
         ExpressionPrint(expr, indent + 1);
+        printf(",\n");
     }
 
     genPrintHelper("Scope statements:\n");
