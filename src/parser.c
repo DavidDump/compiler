@@ -531,12 +531,7 @@ Expression* makeArrayAccess(ParseContext* ctx, Arena* mem, Token next) {
         ERROR_VA(next.loc, "Array indexing needs to begin with opening bracket `[`, found: "STR_FMT, STR_PRINT(next.value));
     }
 
-    next = parseConsume(ctx);
-    if(next.type != TokenType_INT_LITERAL) {
-        printf("[NOTE] Binary operations in array index not supported for now, will be added in the future.\n");
-        ERROR_VA(next.loc, "Array need to be indexed using integers, found: "STR_FMT, STR_PRINT(next.value));
-    }
-    u64 index = StringToU64(next.value);
+    Expression* index = parseExpression(ctx, mem);
     result->expr.ARRAY_ACCESS.index = index;
 
     next = parseConsume(ctx);
@@ -921,13 +916,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
 
                 result->type = StatementType_ARRAY_REASSIGN;
                 result->statement.ARRAY_REASSIGN.identifier = t.value;
-
-                next = parseConsume(ctx); // int
-                if(next.type != TokenType_INT_LITERAL) {
-                    ERROR_VA(next.loc, "Array has to be indexed with a integer, found: "STR_FMT, STR_PRINT(next.value));
-                }
-
-                u64 index = StringToU64(next.value);
+                Expression* index = parseExpression(ctx, mem);
                 result->statement.ARRAY_REASSIGN.index = index;
 
                 next = parseConsume(ctx); // ]
@@ -981,7 +970,7 @@ Statement* parseStatement(ParseContext* ctx, Arena* mem, Scope containingScope) 
         case TokenType_AS:
         case TokenType_DOUBLECOLON:
         case TokenType_INITIALIZER:
-            printf("[ERROR] Unhandled token type: %s at ("STR_FMT":%i:%i)\n", TokenTypeStr[t.type], STR_PRINT(t.loc.filename), t.loc.line, t.loc.collum);
+            ERROR_VA(t.loc, "Unhandled token type: %s", TokenTypeStr[t.type]);
             break;
     }
 

@@ -802,21 +802,29 @@ void gen_x86_64_expression(GenContext* ctx, TypecheckedExpression* expr, GenScop
         }
     } else if(expr->type == ExpressionType_ARRAY_ACCESS) {
         String id = expr->expr.ARRAY_ACCESS.id.value;
-        u64 index = expr->expr.ARRAY_ACCESS.index;
+        TypecheckedExpression* index = expr->expr.ARRAY_ACCESS.index;
 
         SymbolLocationResult res = findSymbolLocation(localScope, id);
         if(res.err) UNREACHABLE_VA("Symbol not defined: "STR_FMT, STR_PRINT(id));
 
-        // NOTE: expr->typeInfo should not be used to figure out the element type of the array,
-        //       as it doesnt store the true type, only the type that was used for coercing during typechecking
-        //       there should be a function to get the TypeInfo of the array by the id
-        //       so that we have access to all the true type info
-        u64 elementSize = TypeToByteSize(expr->typeInfo);
         if(res.inDataSection) {
             UNIMPLEMENTED("Array in the data section not implemented");
         } else {
-            // mov rax, [rbp + res.value + elementSize * index]
-            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_OFFSET32(RBP, res.value + elementSize * index)));
+            // NOTE: expr->typeInfo should not be used to figure out the element type of the array,
+            //       as it doesnt store the true type, only the type that was used for coercing during typechecking
+            //       there should be a function to get the TypeInfo of the array by the id
+            //       so that we have access to all the true type info
+            u64 elementSize = TypeToByteSize(expr->typeInfo);
+            Scale elementScale = 0;
+            if(FALSE);
+            else if(elementSize == 1) elementScale = X0;
+            else if(elementSize == 2) elementScale = X2;
+            else if(elementSize == 4) elementScale = X4;
+            else if(elementSize == 8) elementScale = X8;
+            else UNREACHABLE("can only index elements that are of size 1, 2, 4 or 8 bytes, so far");
+
+            gen_x86_64_expression(ctx, index, localScope); // rax = index
+            genInstruction(ctx, INST(mov, OP_REG(RAX), OP_INDIRECT_SIB_OFFSET32(RBP, elementScale, RAX, res.value)));
         }
     } else {
         UNREACHABLE_VA("Unknown StatementType in expression generator: %s", ExpressionTypeStr[expr->type]);
@@ -910,7 +918,7 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
             String id = statement.node.VAR_ACCESS.identifier;
             TypecheckedExpression* expr = statement.node.VAR_ACCESS.expr;
             bool isArray = statement.node.VAR_ACCESS.isArray;
-            u64 index = statement.node.VAR_ACCESS.index;
+            TypecheckedExpression* index = statement.node.VAR_ACCESS.index;
 
             SymbolLocationResult res = findSymbolLocation(genScope, id);
             if(res.err) UNREACHABLE_VA("local variable not defined: "STR_FMT, STR_PRINT(id));
@@ -966,8 +974,20 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
                 gen_x86_64_expression(ctx, expr, genScope);
                 if(isArray) {
                     u64 elementSize = TypeToByteSize(expr->typeInfo);
-                    // mov [rbp + res.value + elementSize * index], rax
-                    genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value + elementSize * index), OP_REG(RAX)));
+                    Scale elementScale = 0;
+                    if(FALSE);
+                    else if(elementSize == 1) elementScale = X0;
+                    else if(elementSize == 2) elementScale = X2;
+                    else if(elementSize == 4) elementScale = X4;
+                    else if(elementSize == 8) elementScale = X8;
+                    else UNREACHABLE("can only index elements that are of size 1, 2, 4 or 8 bytes, so far");
+
+                    // mov rcx, rax
+                    genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
+                    // mov rax, index
+                    gen_x86_64_expression(ctx, index, genScope);
+                    // mov [rbp + rax * scale + res.value], rcx
+                    genInstruction(ctx, INST(mov, OP_INDIRECT_SIB_OFFSET32(RBP, elementScale, RAX, res.value), OP_REG(RCX)));
                 } else {
                     // mov [rbp + res.value], rax
                     genInstruction(ctx, INST(mov, OP_INDIRECT_OFFSET32(RBP, res.value), OP_REG(RAX)));

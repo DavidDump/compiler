@@ -905,14 +905,29 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
         } break;
         case ExpressionType_ARRAY_ACCESS: {
             Token id = expr->expr.ARRAY_ACCESS.id;
-            // u64 index = expr->expr.ARRAY_ACCESS.index;
+            Expression* index = expr->expr.ARRAY_ACCESS.index;
 
             TypeResult res = findVariableType(scope, id.value);
             if(res.err) ERROR_VA(id.loc, "Undeclared variable: "STR_FMT, STR_PRINT(id.value));
             TypeInfo* arrayType = res.typeInfo;
-            assertf(arrayType->symbolType == TYPE_ARRAY, "Expected type of array here, got: "STR_FMT, STR_PRINT(TypeToString(mem, arrayType)));
 
-            TypeInfo* elementType = arrayType->arrayInfo.elementType;
+            TypeInfo* elementType = 0;
+            if(arrayType->symbolType == TYPE_ARRAY) {
+                elementType = arrayType->arrayInfo.elementType;
+            } else if(arrayType->isPointer) {
+                elementType = arrayType;
+            } else {
+                Location loc = {0}; // TODO: fix loc
+                ERROR_VA(loc, "Can only index array types or pointers, got: "STR_FMT, STR_PRINT(TypeToString(mem, arrayType)));
+            }
+
+            TypecheckedExpression* typecheckedIndex = typecheckExpression(mem, index, scope, constants, NULL);
+            if(!TypeIsInt(typecheckedIndex->typeInfo)) {
+                Location loc = {0}; // TODO: fix loc
+                ERROR_VA(loc, "Can only index arrays using integer types, found: "STR_FMT, STR_PRINT(TypeToString(mem, typecheckedIndex->typeInfo)));
+            }
+            result->expr.ARRAY_ACCESS.index = typecheckedIndex;
+
             if(
                 (TypeIsInt(expected) && TypeIsInt(elementType)) ||
                 (TypeIsFloat(expected) && TypeIsFloat(elementType))
@@ -1175,7 +1190,7 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
             case StatementType_ARRAY_REASSIGN: {
                 String id = statement->statement.ARRAY_REASSIGN.identifier;
                 Expression* expr = statement->statement.ARRAY_REASSIGN.expr;
-                u64 index = statement->statement.ARRAY_REASSIGN.index;
+                Expression* index = statement->statement.ARRAY_REASSIGN.index;
 
                 // find variable
                 TypeResult expectedRes = findVariableType(result, id);
@@ -1184,10 +1199,17 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
                     ERROR_VA(loc, "Trying to assign to an undefined variable: "STR_FMT, STR_PRINT(id));
                 }
                 TypeInfo* varType = expectedRes.typeInfo;
-                assertf(varType->symbolType == TYPE_ARRAY, "can only index array types, found: "STR_FMT, STR_PRINT(TypeToString(mem, varType)));
-                TypeInfo* expectedType = varType->arrayInfo.elementType;
+                TypeInfo* expectedType = 0;
+                if(varType->symbolType == TYPE_ARRAY) {
+                    expectedType = varType->arrayInfo.elementType;
+                } else if(varType->isPointer) {
+                    expectedType = varType;
+                } else {
+                    Location loc = {0}; // TODO: fix loc
+                    ERROR_VA(loc, "Can only index array types or pointers, found: "STR_FMT, STR_PRINT(TypeToString(mem, varType)));
+                }
+
                 TypecheckedExpression* inferedType = typecheckExpression(mem, expr, result, &constantsInThisScope, expectedType);
-            
                 if(!TypeMatch(expectedType, inferedType->typeInfo)) {
                     Location loc = {0}; // TODO: fix loc
                     ERROR_VA(
@@ -1198,12 +1220,18 @@ void typecheckScopeInto(Arena* mem, GenericScope* scope, TypecheckedScope* resul
                     );
                 }
 
+                TypecheckedExpression* typecheckedIndex = typecheckExpression(mem, index, result, &constantsInThisScope, NULL);
+                if(!TypeIsInt(typecheckedIndex->typeInfo)) {
+                    Location loc = {0}; // TODO: fix loc
+                    ERROR_VA(loc, "Can only index arrays using integer types, found: "STR_FMT, STR_PRINT(TypeToString(mem, typecheckedIndex->typeInfo)));
+                }
+
                 TypecheckedStatement typechecked = {0};
                 typechecked.type = statement->type;
                 typechecked.node.VAR_ACCESS.identifier = id;
                 typechecked.node.VAR_ACCESS.expr = inferedType;
                 typechecked.node.VAR_ACCESS.isArray = TRUE;
-                typechecked.node.VAR_ACCESS.index = index;
+                typechecked.node.VAR_ACCESS.index = typecheckedIndex;
                 ArrayAppend(result->statements, typechecked);
                 // TODO: StatementType_ARRAY_REASSIGN and StatementType_VAR_REASSIGN can probably be collapsed into one case eventually
             } break;

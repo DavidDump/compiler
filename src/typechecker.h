@@ -119,7 +119,7 @@ typedef struct TypecheckedExpression {
         } FIELD_ACCESS;
         struct {
             Token id;
-            u64 index; // TODO: make this into and Expression, so that you can do more complicated indexing
+            TypecheckedExpression* index;
         } ARRAY_ACCESS;
     } expr;
     // NOTE: this needs to stay here so that the rest of the stuct can just be `memcpy`ed from Expression struct
@@ -141,7 +141,7 @@ typedef struct TypecheckedStatement {
             String identifier;
             TypecheckedExpression* expr;
             bool isArray;
-            u64 index;
+            TypecheckedExpression* index;
         } VAR_ACCESS;
         struct {
             TypecheckedExpression* expr;

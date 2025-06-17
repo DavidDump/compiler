@@ -165,8 +165,10 @@ void ExpressionPrint(Expression* expr, u64 indent) {
         } break;
         case ExpressionType_ARRAY_ACCESS: {
             String id = expr->expr.ARRAY_ACCESS.id.value;
-            u64 index = expr->expr.ARRAY_ACCESS.index;
-            printf(STR_FMT"[%llu]", STR_PRINT(id), index);
+            Expression* index = expr->expr.ARRAY_ACCESS.index;
+            printf(STR_FMT"[", STR_PRINT(id));
+            ExpressionPrint(index, indent);
+            printf("]");
         } break;
     }
 }
@@ -231,11 +233,12 @@ void StatementPrint(Statement* node, u64 indent) {
         case StatementType_ARRAY_REASSIGN: {
             String id = node->statement.ARRAY_REASSIGN.identifier;
             Expression* expr = node->statement.ARRAY_REASSIGN.expr;
-            u64 index = node->statement.ARRAY_REASSIGN.index;
+            Expression* index = node->statement.ARRAY_REASSIGN.index;
 
             genPrintHelper("VAR_REASSIGN: {\n");
             genPrintHelper("    id: "STR_FMT",\n", STR_PRINT(id));
-            genPrintHelper("    index: %llu,\n", index);
+            genPrintHelper("    index:");
+            ExpressionPrint(index, indent + 1);
             genPrintHelper("    expr:");
             ExpressionPrint(expr, indent + 1);
             printf(",\n");

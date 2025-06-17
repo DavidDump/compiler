@@ -10,7 +10,8 @@ foo :: (a: u64, b: u64) -> u64 {
 
 main :: () -> u8 {
     buffer: u8[255];
-    buffer[0] = 1;
-    buffer[1] = 2;
+    index := 0;
+    buffer[index] = 1; index = index + 1;
+    buffer[index] = 2; index = index + 1;
     return foo(buffer[0], buffer[1]) as u8;
 }

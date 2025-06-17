@@ -150,7 +150,7 @@ typedef struct Expression {
         } FIELD_ACCESS;
         struct ARRAY_ACCESS {
             Token id;
-            u64 index; // TODO: make this into and Expression, so that you can do more complicated indexing
+            Expression* index;
         } ARRAY_ACCESS;
     } expr;
 } Expression;
@@ -223,7 +223,7 @@ typedef struct Statement {
         } VAR_REASSIGN;
         struct ARRAY_REASSIGN {
             String identifier;
-            u64 index;
+            Expression* index;
             Expression* expr;
         } ARRAY_REASSIGN;
         struct VAR_CONST {

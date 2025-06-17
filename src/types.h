@@ -85,7 +85,7 @@ typedef struct TypeInfo {
     ArrayInfo arrayInfo;
     FunctionInfo* functionInfo;
     StructInfo structInfo; // only on struct definitions
-    String structName; // if a struct literal the name of the struct
+    String structName; // if a struct literal, the name of the struct
 } TypeInfo;
 
 TypeInfo* TypeInitSimple(Arena* mem, Type t);
