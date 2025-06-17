@@ -1,0 +1,14 @@
+// Example code for printing hello world using win32 API
+STD_HANDLE_STDOUT :: -11;
+
+#library "kernel32.dll";
+WriteFile    :: #extern (handle: s64, data: string, dataLen: u64, bytesRead: u64*, overlapped: s64);
+GetStdHandle :: #extern (handle: s64) -> s64;
+ExitProcess  :: #extern (code: s64);
+
+main :: () -> u8 {
+    stdout := GetStdHandle(STD_HANDLE_STDOUT);
+    foo := "Hello world";
+    WriteFile(stdout, foo, 11, 0, 0);
+    return 0;
+}
