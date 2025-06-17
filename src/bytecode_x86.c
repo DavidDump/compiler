@@ -982,10 +982,12 @@ void genStatement(GenContext* ctx, Arena* mem, TypecheckedStatement statement, G
                     else if(elementSize == 8) elementScale = X8;
                     else UNREACHABLE("can only index elements that are of size 1, 2, 4 or 8 bytes, so far");
 
-                    // mov rcx, rax
-                    genInstruction(ctx, INST(mov, OP_REG(RCX), OP_REG(RAX)));
+                    // push rax
+                    genPush(ctx, genScope, RAX);
                     // mov rax, index
                     gen_x86_64_expression(ctx, index, genScope);
+                    // pop rcx
+                    genPop(ctx, genScope, RCX);
                     // mov [rbp + rax * scale + res.value], rcx
                     genInstruction(ctx, INST(mov, OP_INDIRECT_SIB_OFFSET32(RBP, elementScale, RAX, res.value), OP_REG(RCX)));
                 } else {
@@ -1166,12 +1168,18 @@ GenScope* genFunction(GenContext* ctx, Arena* mem, String id, ConstValue fnScope
 
     // print the local variables define in this function
     #if 0
+    u64 prev = 0;
+    u64 totalSize = 0;
     printf("Function "STR_FMT"\n", STR_PRINT(id));
     HashmapFor(String, s64 , it, &genScope->localVars) {
         String key = it->key;
         s64 value = it->value;
-        printf("  local var: "STR_FMT" at %lli\n", STR_PRINT(key), value);
+
+        printf("  local var: "STR_FMT" at -0x%llX (size: %llu bytes)\n", STR_PRINT(key), -value, prev - value);
+        totalSize += prev - value;
+        prev = value;
     }
+    printf("  Total bytes reserved on the stack: 0x%llX\n", totalSize);
     #endif
 
     // function arguments
