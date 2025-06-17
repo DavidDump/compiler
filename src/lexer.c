@@ -87,6 +87,40 @@ bool isType(String value) {
     );
 }
 
+// TODO: what a fucking name
+String StringConvertToSpecialChars(Arena* mem, u8* start, u64 len) {
+    Array(u8) escaped = {0};
+
+    for(u64 i = 0; i < len; ++i) {
+        u8 c = start[i];
+        if(c == '\\') {
+            if(i + 1 < len) {
+                u8 special = start[i + 1];
+
+                if(FALSE);
+                else if(special == 'n')  ArrayAppend(escaped, '\n');
+                else if(special == 't')  ArrayAppend(escaped, '\t');
+                else if(special == '\\') ArrayAppend(escaped, '\\');
+                else if(special == '\"') ArrayAppend(escaped, '\"');
+                else ERROR_VA((Location){0}, "cannot escape \'%c\' in string literal", special);
+                i++;
+            } else {
+                Location loc = {0};
+                ERROR(loc, "The last character of a string cannot be a `\\`, cannot escape the closing `\"`");
+            }
+        } else {
+            ArrayAppend(escaped, c);
+        }
+    }
+
+    String result = {0};
+    result.str = arena_alloc(mem, escaped.size);
+    result.length = escaped.size;
+    memcpy(result.str, escaped.data, escaped.size);
+    free(escaped.data);
+    return result;
+}
+
 Array(Token) Tokenize(Arena* mem, String source, String filename) {
     UNUSED(mem);
     Array(Token) result = {0};
