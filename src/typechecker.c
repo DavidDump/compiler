@@ -395,16 +395,16 @@ EvaluateConstantResult evaluateConstant(Expression* expr, Arena* mem, Hashmap(St
     return result;
 }
 
-Expression ConstValueToExpression(Arena* mem, ConstValue value) {
-    Expression result = {0};
-    
+// same as `ConstValueToExpression` except it doesnt allocated memory for result, but uses the pointer provided by the caller
+TypecheckedExpression* ConstValueToExpressionInto(Arena* mem, ConstValue value, TypecheckedExpression* result) {
     switch(value.typeInfo->symbolType) {
         case TYPE_U8:
         case TYPE_U16:
         case TYPE_U32:
         case TYPE_U64: {
-            result.type = ExpressionType_INT_LIT;
-            result.expr.INT_LIT.value = StringFromU64(mem, value.as_u64);
+            result->type = ExpressionType_INT_LIT;
+            result->expr.INT_LIT.value = StringFromU64(mem, value.as_u64);
+            result->typeInfo = value.typeInfo;
         } break;
         case TYPE_S8:
         case TYPE_S16:
@@ -413,39 +413,46 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
             if(value.as_s64 < 0) {
                 // negative
                 s64 invertedNumber = -value.as_s64;
-                Expression* num = arena_alloc(mem, sizeof(Expression));
+                TypecheckedExpression* num = arena_alloc(mem, sizeof(TypecheckedExpression));
                 num->type = ExpressionType_INT_LIT;
                 num->expr.INT_LIT.value = StringFromS64(mem, invertedNumber);
+                num->typeInfo = value.typeInfo; // TODO: verify if this is correct, or should be `TypeInitSimple(mem, TypeDefaultInt());` instead
 
-                result.type = ExpressionType_UNARY_EXPRESSION;
-                result.expr.UNARY_EXPRESSION.operator = (Token){.value = StringFromCstrLit("-"), .type = TokenType_SUB};
-                result.expr.UNARY_EXPRESSION.expr = num;
+                result->type = ExpressionType_UNARY_EXPRESSION;
+                result->expr.UNARY_EXPRESSION.operator = (Token){.value = StringFromCstrLit("-"), .type = TokenType_SUB};
+                result->expr.UNARY_EXPRESSION.expr = num;
+                result->typeInfo = num->typeInfo;
             } else {
-                result.type = ExpressionType_INT_LIT;
-                result.expr.INT_LIT.value = StringFromS64(mem, value.as_s64);
+                result->type = ExpressionType_INT_LIT;
+                result->expr.INT_LIT.value = StringFromS64(mem, value.as_s64);
+                result->typeInfo = value.typeInfo;
             }
         } break;
         case TYPE_F32:
         case TYPE_F64: {
-            result.type = ExpressionType_FLOAT_LIT;
+            result->type = ExpressionType_FLOAT_LIT;
             f64 whole = 0.0f;
             f64 fract = modf(value.as_f64, &whole);
-            result.expr.FLOAT_LIT.wholePart = StringFromF64(mem, whole);
-            result.expr.FLOAT_LIT.fractPart = StringFromF64(mem, fract);
+            result->expr.FLOAT_LIT.wholePart = StringFromF64(mem, whole);
+            result->expr.FLOAT_LIT.fractPart = StringFromF64(mem, fract);
+            result->typeInfo = value.typeInfo;
         } break;
         case TYPE_STRING: {
-            result.type = ExpressionType_STRING_LIT;
-            result.expr.STRING_LIT.value = value.as_String;
+            result->type = ExpressionType_STRING_LIT;
+            result->expr.STRING_LIT.value = value.as_String;
+            result->typeInfo = value.typeInfo;
         } break;
         case TYPE_BOOL: {
-            result.type = ExpressionType_BOOL_LIT;
-            result.expr.BOOL_LIT.value = (value.as_bool ? StringFromCstrLit("true") : StringFromCstrLit("false"));
+            result->type = ExpressionType_BOOL_LIT;
+            result->expr.BOOL_LIT.value = (value.as_bool ? StringFromCstrLit("true") : StringFromCstrLit("false"));
+            result->typeInfo = value.typeInfo;
         } break;
         case TYPE_FUNCTION: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_FUNCTION");
-            result.type = ExpressionType_FUNCTION_LIT;
+            result->type = ExpressionType_FUNCTION_LIT;
 
-            result.expr.FUNCTION_LIT.typeInfo = value.typeInfo->functionInfo;
+            result->expr.FUNCTION_LIT.typeInfo = *value.typeInfo->functionInfo;
+            result->typeInfo = value.typeInfo;
             // result.expr.FUNCTION_LIT.scope = ;
         } break;
         case TYPE_TYPE: {
@@ -458,8 +465,9 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
         } break;
         case TYPE_STRUCT_LIT: {
             // NOTE: these two are the same struct, but defined in two separate places
-            STATIC_ASSERT(sizeof(value.as_structLit) == sizeof(result.expr.STRUCT_LIT));
-            memcpy(&result.expr.STRUCT_LIT, &value.as_structLit, sizeof(value.as_structLit));
+            STATIC_ASSERT(sizeof(value.as_structLit) == sizeof(result->expr.STRUCT_LIT));
+            memcpy(&result->expr.STRUCT_LIT, &value.as_structLit, sizeof(value.as_structLit));
+            result->typeInfo = value.typeInfo;
         } break;
         case TYPE_ARRAY: {
             UNIMPLEMENTED("ConstValueToExpression: TYPE_ARRAY");
@@ -472,6 +480,11 @@ Expression ConstValueToExpression(Arena* mem, ConstValue value) {
     }
 
     return result;
+}
+
+TypecheckedExpression* ConstValueToExpression(Arena* mem, ConstValue value) {
+    TypecheckedExpression* result = arena_alloc(mem, sizeof(TypecheckedExpression));
+    return ConstValueToExpressionInto(mem, value, result);
 }
 
 // scope is the scope that has to contain the struct definition in case the type is a struct, it also searches parents
@@ -565,9 +578,7 @@ TypecheckedExpression* typecheckExpression(Arena* mem, Expression* expr, Typeche
                 }
                 result->typeInfo = res2.typeInfo;
             } else {
-                Expression converted = ConstValueToExpression(mem, res1.value);
-                memcpy(result, &converted, sizeof(Expression));
-                result->typeInfo = res1.value.typeInfo;
+                ConstValueToExpressionInto(mem, res1.value, result);
             }
         } break;
         case ExpressionType_FUNCTION_CALL: {
